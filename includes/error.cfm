@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Error — #application.appName ?: "MediaBuy Pro"#</title>
+    <cfset _env = application.environment ?: "production">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
@@ -16,7 +17,7 @@
                 </div>
                 <div class="card-body">
                     <p class="lead">#encodeForHTML(errorDetail.message ?: "An unexpected error occurred.")#</p>
-                    <cfif application.environment EQ "dev" AND len(errorDetail.detail ?: "")>
+                    <cfif _env EQ "dev" AND len(errorDetail.detail ?: "")>
                         <hr>
                         <pre class="bg-light p-3 rounded small">#encodeForHTML(errorDetail.detail)#</pre>
                     </cfif>

@@ -18,7 +18,20 @@ component {
     // Application start
     // ----------------------------------------------------------------
     public boolean function onApplicationStart() {
-        // Load settings from DB into application scope
+        // Core app constants (defined here so they're always available,
+        // even if DB is unreachable during an early error)
+        application.appName     = "Media Buying Platform";
+        application.appVersion  = "1.0.0";
+        application.environment = "dev";   // change to "production" on live server
+        application.datasource  = this.datasource;
+        application.pageSize    = 25;
+        application.bcryptFactor = 12;
+        application.uploadPath  = expandPath("./uploads/bills/");
+        application.maxUploadMB = 20;
+        application.allowedExts = "pdf,jpg,jpeg,png,tif,tiff,csv,xlsx";
+        application.reloadPassword = "changeme";
+
+        // Load workflow settings from DB into application scope
         loadSettings();
         return true;
     }
