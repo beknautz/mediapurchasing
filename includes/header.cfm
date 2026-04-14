@@ -1,3 +1,4 @@
+<cfoutput>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,3 +36,4 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 </cfif>
+</cfoutput>

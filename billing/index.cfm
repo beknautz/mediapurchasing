@@ -5,6 +5,7 @@
 <cfset queue     = billSvc.getQueue(status=statusFilter)>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="page-title mb-0">Bill Queue</h1>
@@ -115,4 +116,5 @@
     </div>
 </cfif>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

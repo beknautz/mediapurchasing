@@ -52,6 +52,7 @@
 <cfset templates = crmSvc.getTemplates()>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <h1 class="page-title">Email / SMS Templates</h1>
 
@@ -179,4 +180,5 @@
 
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

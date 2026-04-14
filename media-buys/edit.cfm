@@ -58,6 +58,7 @@
 
 <cfset pageTitle = "Edit: #b.title#">
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -199,4 +200,5 @@
 </div>
 </form>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

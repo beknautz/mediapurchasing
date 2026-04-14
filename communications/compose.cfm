@@ -32,6 +32,7 @@
 </cfif>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -116,4 +117,5 @@ function loadTemplate(sel) {
 }
 </script>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

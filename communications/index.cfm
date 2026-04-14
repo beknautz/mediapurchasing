@@ -3,6 +3,7 @@
 <cfset history  = emailSvc.getHistory()>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="page-title mb-0">Communication Log</h1>
@@ -72,4 +73,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

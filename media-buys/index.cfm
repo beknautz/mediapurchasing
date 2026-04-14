@@ -6,6 +6,7 @@
 <cfset result    = buySvc.getMediaBuys(status=statusFilter, buyerId=buyerFilter, page=page)>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="page-title mb-0">Media Buys</h1>
@@ -105,4 +106,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

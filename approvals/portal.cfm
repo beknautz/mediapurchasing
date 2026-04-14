@@ -23,6 +23,7 @@
         <cfset data = approvalSvc.getApprovalByToken(url.token)>
     </cfif>
 </cfif>
+<cfoutput>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -217,3 +218,4 @@
 <script src="/assets/js/app.js"></script>
 </body>
 </html>
+</cfoutput>

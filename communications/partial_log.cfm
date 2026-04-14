@@ -1,4 +1,5 @@
 <!--- HTMX partial — communication log for a media buy --->
+<cfoutput>
 <cfset emailSvc  = new components.EmailService()>
 <cfset buyId     = val(url.media_buy_id ?: 0)>
 <cfset history   = emailSvc.getHistory(mediaBuyId=buyId)>
@@ -25,3 +26,4 @@
 <cfelse>
     <p class="text-muted small">No communications logged for this buy.</p>
 </cfif>
+</cfoutput>

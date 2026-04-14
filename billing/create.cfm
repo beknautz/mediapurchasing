@@ -38,6 +38,7 @@
 </cfif>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -128,4 +129,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

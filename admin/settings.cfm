@@ -37,6 +37,7 @@
 </cfloop>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <h1 class="page-title">Workflow Settings</h1>
 
@@ -88,4 +89,5 @@
     </div>
 </form>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

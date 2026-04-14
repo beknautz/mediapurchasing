@@ -31,6 +31,7 @@
 <cfset buyers  = authSvc.getUsers()>
 <cfset pageTitle = "Bill ##encodeForHTML(b.invoice_number ?: b.id)#">
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -163,4 +164,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

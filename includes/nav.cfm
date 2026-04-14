@@ -1,9 +1,10 @@
+<cfoutput>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
     <div class="container-fluid">
         <a class="navbar-brand fw-bold" href="/dashboard.cfm">
             <i class="bi bi-broadcast-pin me-2"></i>MediaBuy Pro
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="##mainNav">
             <span class="navbar-toggler-icon"></span>
         </button>
 
@@ -95,3 +96,4 @@
         </div>
     </div>
 </nav>
+</cfoutput>

@@ -37,6 +37,7 @@
 
 <cfset users = authSvc.getUsers()>
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <h1 class="page-title">User Management</h1>
 
@@ -138,4 +139,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

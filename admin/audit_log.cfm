@@ -22,6 +22,7 @@
 <cfset totalPages = ceiling(totalQ.cnt / pageSize)>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <h1 class="page-title">Audit Log</h1>
 
@@ -68,4 +69,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

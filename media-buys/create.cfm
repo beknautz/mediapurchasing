@@ -46,6 +46,7 @@
 
 <cfset pageTitle = "New Media Buy">
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -205,4 +206,5 @@
 </div>
 </form>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

@@ -35,6 +35,7 @@
 
 <cfset vendors = crmSvc.getVendors()>
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <h1 class="page-title">Vendors (Media Companies)</h1>
 
@@ -125,4 +126,5 @@
     </div>
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">

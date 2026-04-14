@@ -1,3 +1,4 @@
+<cfoutput>
 </main><!-- /main -->
 
 <footer class="bg-dark text-muted py-3 mt-5">
@@ -15,3 +16,4 @@
 <script src="/assets/js/app.js"></script>
 </body>
 </html>
+</cfoutput>

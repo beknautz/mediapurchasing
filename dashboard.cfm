@@ -13,6 +13,7 @@
 <cfset pendingApprovals = approvalSvc.getApprovals(status="pending")>
 
 <cfinclude template="/includes/header.cfm">
+<cfoutput>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="page-title mb-0">Dashboard</h1>
@@ -154,4 +155,5 @@
 
 </div>
 
+</cfoutput>
 <cfinclude template="/includes/footer.cfm">
