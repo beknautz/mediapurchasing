@@ -27,12 +27,10 @@ component extends="BaseService" {
             return { success: false, message: "Your account is inactive. Contact an administrator." };
         }
 
-        // BCrypt verify — uses ColdFusion 2021+ native function
-        if (!BCryptCheckPassword(arguments.password, u.password_hash)) {
+        if (!checkPassword(arguments.password, u.password_hash)) {
             return { success: false, message: "Invalid email or password." };
         }
 
-        // Update last login
         queryExecute(
             "UPDATE users SET last_login = NOW() WHERE id = :id",
             { id: { value: u.id, cfsqltype: "cf_sql_integer" } },
@@ -53,10 +51,47 @@ component extends="BaseService" {
     }
 
     // ----------------------------------------------------------------
-    // Hash a password — ColdFusion 2021+ native BCrypt
+    // Hash a password with PBKDF2-HMAC-SHA256
+    // Stored format:  pbkdf2sha256:<iterations>:<saltHex>:<hashHex>
+    // Uses only standard Java libraries — no external JARs required.
     // ----------------------------------------------------------------
     public string function hashPassword(required string plaintext) {
-        return GenerateBCryptHash(arguments.plaintext);
+        var iterations = 100000;
+        var keyLen     = 256;   // bits
+
+        // 16 random bytes for salt
+        var rng       = createObject("java", "java.security.SecureRandom").init();
+        var saltBytes = javaCast("byte[]", repeatString(chr(0), 16).getBytes("UTF-8"));
+        rng.nextBytes(saltBytes);
+
+        var hashHex = _pbkdf2(arguments.plaintext, saltBytes, iterations, keyLen);
+        var saltHex = lCase(binaryEncode(saltBytes, "hex"));
+
+        return "pbkdf2sha256:#iterations#:#saltHex#:#hashHex#";
+    }
+
+    // ----------------------------------------------------------------
+    // Verify a plaintext password against a stored hash
+    // ----------------------------------------------------------------
+    public boolean function checkPassword(
+        required string plaintext,
+        required string storedHash
+    ) {
+        // Format: pbkdf2sha256:<iterations>:<saltHex>:<hashHex>
+        if (left(arguments.storedHash, 10) NEQ "pbkdf2sha2") {
+            return false;
+        }
+
+        var parts = listToArray(arguments.storedHash, ":");
+        if (arrayLen(parts) NEQ 4) return false;
+
+        var iterations = val(parts[2]);
+        var saltBytes  = binaryDecode(parts[3], "hex");
+        var expected   = parts[4];
+        var actual     = _pbkdf2(arguments.plaintext, saltBytes, iterations, 256);
+
+        // Constant-time comparison to resist timing attacks
+        return _constantEquals(actual, expected);
     }
 
     // ----------------------------------------------------------------
@@ -83,7 +118,6 @@ component extends="BaseService" {
         var d = arguments.data;
 
         if (!structKeyExists(d, "id") || !d.id) {
-            // CREATE
             if (!structKeyExists(d, "password") || !len(d.password)) {
                 return { success: false, message: "Password is required for new users." };
             }
@@ -92,11 +126,11 @@ component extends="BaseService" {
                 "INSERT INTO users (name, email, password_hash, role, phone)
                  VALUES (:name, :email, :hash, :role, :phone)",
                 {
-                    name : { value: d.name,  cfsqltype: "cf_sql_varchar" },
-                    email: { value: d.email, cfsqltype: "cf_sql_varchar" },
-                    hash : { value: hash,    cfsqltype: "cf_sql_varchar" },
-                    role : { value: d.role,  cfsqltype: "cf_sql_varchar" },
-                    phone: { value: d.phone ?: "", cfsqltype: "cf_sql_varchar" }
+                    name : { value: d.name,        cfsqltype: "cf_sql_varchar" },
+                    email: { value: d.email,        cfsqltype: "cf_sql_varchar" },
+                    hash : { value: hash,           cfsqltype: "cf_sql_varchar" },
+                    role : { value: d.role,         cfsqltype: "cf_sql_varchar" },
+                    phone: { value: d.phone ?: "",  cfsqltype: "cf_sql_varchar" }
                 },
                 { datasource: variables.dsn }
             );
@@ -104,15 +138,14 @@ component extends="BaseService" {
             auditLog("create_user", "user", newId, "Created user #d.name#");
             return { success: true, id: newId };
         } else {
-            // UPDATE
             var setParts = "name=:name, email=:email, role=:role, phone=:phone, is_active=:isActive";
             var params = {
-                name    : { value: d.name,      cfsqltype: "cf_sql_varchar" },
-                email   : { value: d.email,     cfsqltype: "cf_sql_varchar" },
-                role    : { value: d.role,      cfsqltype: "cf_sql_varchar" },
-                phone   : { value: d.phone ?: "", cfsqltype: "cf_sql_varchar" },
-                isActive: { value: d.is_active ?: 1, cfsqltype: "cf_sql_tinyint" },
-                id      : { value: d.id,        cfsqltype: "cf_sql_integer" }
+                name    : { value: d.name,           cfsqltype: "cf_sql_varchar"  },
+                email   : { value: d.email,          cfsqltype: "cf_sql_varchar"  },
+                role    : { value: d.role,           cfsqltype: "cf_sql_varchar"  },
+                phone   : { value: d.phone ?: "",    cfsqltype: "cf_sql_varchar"  },
+                isActive: { value: d.is_active ?: 1, cfsqltype: "cf_sql_tinyint"  },
+                id      : { value: d.id,             cfsqltype: "cf_sql_integer"  }
             };
             if (structKeyExists(d, "password") && len(d.password)) {
                 setParts &= ", password_hash=:hash";
@@ -137,6 +170,44 @@ component extends="BaseService" {
             location(url="/dashboard.cfm?error=unauthorized", addtoken=false);
             abort;
         }
+    }
+
+    // ================================================================
+    // Private helpers
+    // ================================================================
+
+    // PBKDF2-HMAC-SHA256 using standard Java — returns lowercase hex
+    private string function _pbkdf2(
+        required string  password,
+        required any     saltBytes,
+        required numeric iterations,
+        required numeric keyBits
+    ) {
+        var spec = createObject("java", "javax.crypto.spec.PBEKeySpec").init(
+            javaCast("char[]", arguments.password.toCharArray()),
+            arguments.saltBytes,
+            javaCast("int",    arguments.iterations),
+            javaCast("int",    arguments.keyBits)
+        );
+        var factory   = createObject("java", "javax.crypto.SecretKeyFactory")
+                            .getInstance("PBKDF2WithHmacSHA256");
+        var hashBytes = factory.generateSecret(spec).getEncoded();
+        spec.clearPassword();   // wipe key material from memory
+        return lCase(binaryEncode(hashBytes, "hex"));
+    }
+
+    // Constant-time string comparison (prevents timing attacks)
+    private boolean function _constantEquals(
+        required string a,
+        required string b
+    ) {
+        if (len(arguments.a) NEQ len(arguments.b)) return false;
+        var result = 0;
+        var len    = len(arguments.a);
+        for (var i = 1; i <= len; i++) {
+            result = bitOr(result, bitXor(asc(mid(arguments.a, i, 1)), asc(mid(arguments.b, i, 1))));
+        }
+        return (result EQ 0);
     }
 
 }

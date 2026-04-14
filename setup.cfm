@@ -25,7 +25,8 @@
         <cfset errorMsg = "Passwords do not match.">
     <cfelse>
         <cftry>
-            <cfset newHash = GenerateBCryptHash(form.password)>
+            <cfset authSvc = new components.AuthService()>
+            <cfset newHash = authSvc.hashPassword(form.password)>
 
             <!--- Check if admin user exists already --->
             <cfset existing = queryExecute(
