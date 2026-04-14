@@ -59,10 +59,9 @@ component extends="BaseService" {
         var iterations = 100000;
         var keyLen     = 256;   // bits
 
-        // 16 random bytes for salt
+        // 16 random bytes for salt — generateSeed() returns a native Java byte[]
         var rng       = createObject("java", "java.security.SecureRandom").init();
-        var saltBytes = javaCast("byte[]", repeatString(chr(0), 16).getBytes("UTF-8"));
-        rng.nextBytes(saltBytes);
+        var saltBytes = rng.generateSeed(16);
 
         var hashHex = _pbkdf2(arguments.plaintext, saltBytes, iterations, keyLen);
         var saltHex = lCase(binaryEncode(saltBytes, "hex"));
