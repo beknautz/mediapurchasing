@@ -56,14 +56,13 @@ component extends="BaseService" {
     // Uses only standard Java libraries — no external JARs required.
     // ----------------------------------------------------------------
     public string function hashPassword(required string plaintext) {
-        var iterations = 100000;
-        var keyLen     = 256;   // bits
+        var iterations = 10000;
 
         // 16 random bytes for salt — generateSeed() returns a native Java byte[]
         var rng       = createObject("java", "java.security.SecureRandom").init();
         var saltBytes = rng.generateSeed(16);
 
-        var hashHex = _pbkdf2(arguments.plaintext, saltBytes, iterations, keyLen);
+        var hashHex = _pbkdf2(arguments.plaintext, saltBytes, iterations, 256);
         var saltHex = lCase(binaryEncode(saltBytes, "hex"));
 
         return "pbkdf2sha256:#iterations#:#saltHex#:#hashHex#";
@@ -175,24 +174,46 @@ component extends="BaseService" {
     // Private helpers
     // ================================================================
 
-    // PBKDF2-HMAC-SHA256 using standard Java — returns lowercase hex
+    // PBKDF2-HMAC-SHA256 implemented via javax.crypto.Mac.
+    // Avoids SecretKeyFactory / PBKDF2KeyImpl which are sealed in the java.base
+    // module and inaccessible to ColdFusion's reflection layer on JDK 17+.
+    // 256-bit key = exactly one 32-byte HMAC-SHA256 block, so no block loop needed.
     private string function _pbkdf2(
         required string  password,
         required any     saltBytes,
         required numeric iterations,
         required numeric keyBits
     ) {
-        var spec = createObject("java", "javax.crypto.spec.PBEKeySpec").init(
-            arguments.password.toCharArray(),
-            arguments.saltBytes,
-            javaCast("int",    arguments.iterations),
-            javaCast("int",    arguments.keyBits)
-        );
-        var factory   = createObject("java", "javax.crypto.SecretKeyFactory")
-                            .getInstance("PBKDF2WithHmacSHA256");
-        var hashBytes = factory.generateSecret(spec).getEncoded();
-        spec.clearPassword();   // wipe key material from memory
-        return lCase(binaryEncode(hashBytes, "hex"));
+        var SecretKeySpec = createObject("java", "javax.crypto.spec.SecretKeySpec");
+        var Mac           = createObject("java", "javax.crypto.Mac");
+        var ByteBuffer    = createObject("java", "java.nio.ByteBuffer");
+
+        // Initialise HMAC-SHA256 keyed with the UTF-8 password bytes
+        var keySpec = SecretKeySpec.init(arguments.password.getBytes("UTF-8"), "HmacSHA256");
+        var mac     = Mac.getInstance("HmacSHA256");
+        mac.init(keySpec);
+
+        // U1 = HMAC(P, S || INT(1))
+        mac.update(arguments.saltBytes);
+        mac.update(ByteBuffer.allocate(4).putInt(javaCast("int", 1)).array());
+        var u = mac.doFinal();  // Java byte[32]
+        var t = u;              // T = U1
+
+        // T = T XOR U2 XOR U3 ... XOR Uc
+        for (var j = 2; j <= arguments.iterations; j++) {
+            // Mac auto-resets after doFinal, so each call is a fresh HMAC(P, u)
+            u = mac.doFinal(u);
+            // XOR t and u as 8 × 32-bit words via ByteBuffer (avoids byte[] javaCast)
+            var tbuf = ByteBuffer.wrap(t);
+            var ubuf = ByteBuffer.wrap(u);
+            var rbuf = ByteBuffer.allocate(32);
+            for (var k = 1; k <= 8; k++) {
+                rbuf.putInt(javaCast("int", bitXor(tbuf.getInt(), ubuf.getInt())));
+            }
+            t = rbuf.array();
+        }
+
+        return lCase(binaryEncode(t, "hex"));
     }
 
     // Constant-time string comparison (prevents timing attacks)
