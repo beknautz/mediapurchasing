@@ -183,7 +183,7 @@ component extends="BaseService" {
         required numeric keyBits
     ) {
         var spec = createObject("java", "javax.crypto.spec.PBEKeySpec").init(
-            javaCast("char[]", arguments.password.toCharArray()),
+            arguments.password.toCharArray(),
             arguments.saltBytes,
             javaCast("int",    arguments.iterations),
             javaCast("int",    arguments.keyBits)
