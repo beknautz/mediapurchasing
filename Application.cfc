@@ -46,7 +46,8 @@ component {
             "/auth/reset_password.cfm",
             "/approvals/portal.cfm",      // client-facing approval portal
             "/api/sendgrid_inbound.cfm",  // webhook
-            "/api/twilio_sms.cfm"         // webhook
+            "/api/twilio_sms.cfm",        // webhook
+            "/setup.cfm"                  // first-time setup — delete after use
         ];
 
         var normalizedTarget = "/" & replace(arguments.targetPage, "\", "/", "all");

@@ -27,9 +27,8 @@ component extends="BaseService" {
             return { success: false, message: "Your account is inactive. Contact an administrator." };
         }
 
-        // BCrypt verify
-        var bcrypt = createObject("java", "org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder");
-        if (!bcrypt.matches(arguments.password, u.password_hash)) {
+        // BCrypt verify — uses ColdFusion 2021+ native function
+        if (!BCryptCheckPassword(arguments.password, u.password_hash)) {
             return { success: false, message: "Invalid email or password." };
         }
 
@@ -54,11 +53,10 @@ component extends="BaseService" {
     }
 
     // ----------------------------------------------------------------
-    // Hash a password
+    // Hash a password — ColdFusion 2021+ native BCrypt
     // ----------------------------------------------------------------
     public string function hashPassword(required string plaintext) {
-        var bcrypt = createObject("java", "org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder");
-        return bcrypt.encode(arguments.plaintext);
+        return GenerateBCryptHash(arguments.plaintext);
     }
 
     // ----------------------------------------------------------------
