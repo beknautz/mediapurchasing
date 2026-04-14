@@ -8,7 +8,7 @@ component extends="BaseService" {
     // ----------------------------------------------------------------
     // List media buys with filters
     // ----------------------------------------------------------------
-    public query function getMediaBuys(
+    public struct function getMediaBuys(
         numeric clientId = 0,
         numeric vendorId = 0,
         numeric buyerId  = 0,
