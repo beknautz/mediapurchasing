@@ -1,0 +1,104 @@
+/* ============================================================
+   MediaBuy Pro — Application Styles
+   ============================================================ */
+
+:root {
+    --mb-primary:   #0d6efd;
+    --mb-success:   #198754;
+    --mb-warning:   #ffc107;
+    --mb-danger:    #dc3545;
+    --mb-sidebar-w: 260px;
+}
+
+/* Layout */
+body { background: #f4f6f9; font-size: 0.9rem; }
+
+/* Page titles */
+.page-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+}
+
+/* Status badges */
+.status-badge { font-size: 0.75rem; letter-spacing: 0.03em; text-transform: uppercase; }
+.status-draft                    { background:#6c757d; color:#fff; }
+.status-sent_to_vendor           { background:#0dcaf0; color:#000; }
+.status-vendor_responded         { background:#6f42c1; color:#fff; }
+.status-under_evaluation         { background:#fd7e14; color:#fff; }
+.status-pending_client_approval  { background:#ffc107; color:#000; }
+.status-client_approved          { background:#198754; color:#fff; }
+.status-client_revision_requested{ background:#dc3545; color:#fff; }
+.status-negotiating              { background:#0d6efd; color:#fff; }
+.status-finalized                { background:#198754; color:#fff; }
+.status-cancelled                { background:#343a40; color:#fff; }
+
+/* Bill queue priority */
+.priority-urgent { border-left: 4px solid #dc3545 !important; }
+.priority-high   { border-left: 4px solid #fd7e14 !important; }
+.priority-normal { border-left: 4px solid #0d6efd !important; }
+.priority-low    { border-left: 4px solid #6c757d !important; }
+
+/* Cards */
+.card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.card-header { font-weight: 600; }
+
+/* Stat cards */
+.stat-card { text-align:center; padding: 1.25rem; }
+.stat-card .stat-number { font-size: 2rem; font-weight: 700; }
+.stat-card .stat-label  { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }
+
+/* Tables */
+.table-hover tbody tr:hover { background:#eef2ff; cursor:pointer; }
+.table th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; color:#6c757d; }
+
+/* Line item table in media buy form */
+.line-items-table input { font-size:0.85rem; }
+
+/* Communication log */
+.comm-item { border-left: 3px solid #dee2e6; padding-left: 1rem; margin-bottom: 1rem; }
+.comm-item.inbound  { border-color: var(--mb-primary); }
+.comm-item.outbound { border-color: var(--mb-success); }
+.comm-item .comm-meta { font-size:0.75rem; color:#6c757d; }
+
+/* Approval portal (public) */
+.approval-portal { max-width: 750px; margin: 0 auto; }
+.approval-portal .buy-detail-row { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
+
+/* HTMX loading indicator */
+.htmx-request .htmx-indicator { display:inline-block; }
+.htmx-indicator { display:none; }
+
+/* Navbar brand */
+.navbar-brand { font-size: 1.1rem; letter-spacing: -0.02em; }
+
+/* Breadcrumb */
+.breadcrumb { font-size: 0.82rem; }
+
+/* Form labels */
+.form-label { font-weight: 500; font-size: 0.85rem; }
+
+/* Action buttons row */
+.action-bar { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+
+/* Workflow status timeline */
+.status-timeline { display:flex; gap:0; list-style:none; padding:0; margin:1rem 0; overflow-x:auto; }
+.status-timeline li {
+    flex: 1; min-width: 90px; text-align:center;
+    padding: .4rem .25rem; font-size:.72rem;
+    background:#e9ecef; border-right:2px solid #fff;
+    text-transform:uppercase; letter-spacing:.03em;
+}
+.status-timeline li.active  { background:var(--mb-primary); color:#fff; }
+.status-timeline li.done    { background:var(--mb-success); color:#fff; }
+.status-timeline li.danger  { background:var(--mb-danger);  color:#fff; }
+.status-timeline li:last-child { border-right:none; }
+
+/* Bill queue card */
+.bill-queue-card { transition: box-shadow .15s; }
+.bill-queue-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+
+/* Template editor */
+.template-preview { background:#fff; border:1px solid #dee2e6; padding:1rem; min-height:200px; font-size:.85rem; }
