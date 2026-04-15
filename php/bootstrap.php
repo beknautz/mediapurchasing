@@ -1,0 +1,100 @@
+<?php
+/**
+ * bootstrap.php
+ * Media Buying Platform — autoloader, session, and global helpers
+ */
+
+// ---------------------------------------------------------------------------
+// Session — start only if not already active
+// ---------------------------------------------------------------------------
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ---------------------------------------------------------------------------
+// PSR-0-style class autoloader (no namespaces — ClassName → src/ClassName.php)
+// ---------------------------------------------------------------------------
+spl_autoload_register(function (string $className): void {
+    $file = __DIR__ . '/src/' . $className . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
+// ---------------------------------------------------------------------------
+// h() — XSS-safe output
+// ---------------------------------------------------------------------------
+if (!function_exists('h')) {
+    function h(mixed $value): string
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+}
+
+// ---------------------------------------------------------------------------
+// redirect() — send Location header and exit
+// ---------------------------------------------------------------------------
+if (!function_exists('redirect')) {
+    function redirect(string $url): never
+    {
+        header('Location: ' . $url);
+        exit;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// requireRole() — abort with 403 if the current user lacks the required role
+// ---------------------------------------------------------------------------
+if (!function_exists('requireRole')) {
+    /**
+     * @param string|string[] $roles  One role string or an array of allowed roles.
+     */
+    function requireRole(string|array $roles): void
+    {
+        $allowed = is_array($roles) ? $roles : [$roles];
+
+        // Must be logged in
+        if (empty($_SESSION['user'])) {
+            redirect('/login.php');
+        }
+
+        $userRole = $_SESSION['user']['role'] ?? '';
+
+        if (!in_array($userRole, $allowed, true)) {
+            http_response_code(403);
+            echo h('Access denied. Required role: ' . implode(' or ', $allowed));
+            exit;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// flash() — store or retrieve one-time flash messages via the session
+// ---------------------------------------------------------------------------
+if (!function_exists('flash')) {
+    /**
+     * When called with two arguments: stores a flash message.
+     *   flash('error', 'Something went wrong');
+     *
+     * When called with one argument: retrieves (and clears) the flash message
+     * for that type, returning '' if none exists.
+     *   $msg = flash('error');
+     *
+     * @param string      $type    Message type key, e.g. 'success', 'error', 'info'.
+     * @param string|null $message The message to store. Omit to retrieve.
+     * @return string              The stored message when retrieving, or '' when storing.
+     */
+    function flash(string $type, ?string $message = null): string
+    {
+        if ($message !== null) {
+            // Store mode
+            $_SESSION['_flash'][$type] = $message;
+            return '';
+        }
+
+        // Retrieve-and-clear mode
+        $msg = $_SESSION['_flash'][$type] ?? '';
+        unset($_SESSION['_flash'][$type]);
+        return $msg;
+    }
+}
