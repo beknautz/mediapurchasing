@@ -25,7 +25,7 @@ spl_autoload_register(function (string $className): void {
 // h() — XSS-safe output
 // ---------------------------------------------------------------------------
 if (!function_exists('h')) {
-    function h(mixed $value): string
+    function h($value): string
     {
         return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
@@ -35,7 +35,7 @@ if (!function_exists('h')) {
 // redirect() — send Location header and exit
 // ---------------------------------------------------------------------------
 if (!function_exists('redirect')) {
-    function redirect(string $url): never
+    function redirect(string $url): void
     {
         header('Location: ' . $url);
         exit;
@@ -49,7 +49,7 @@ if (!function_exists('requireRole')) {
     /**
      * @param string|string[] $roles  One role string or an array of allowed roles.
      */
-    function requireRole(string|array $roles): void
+    function requireRole($roles): void
     {
         $allowed = is_array($roles) ? $roles : [$roles];
 

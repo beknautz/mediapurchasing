@@ -7,10 +7,10 @@
 // ---------------------------------------------------------------------------
 // Database constants
 // ---------------------------------------------------------------------------
-define('DB_HOST',    $_ENV['DB_HOST']    ?? 'localhost');
-define('DB_NAME',    $_ENV['DB_NAME']    ?? 'mediabuy');
-define('DB_USER',    $_ENV['DB_USER']    ?? 'root');
-define('DB_PASS',    $_ENV['DB_PASS']    ?? '');
+define('DB_HOST',    $_ENV['DB_HOST']    ?? 'mysql2-p2.ezhostingserver.com');
+define('DB_NAME',    $_ENV['DB_NAME']    ?? 'mediapurchasing');
+define('DB_USER',    $_ENV['DB_USER']    ?? 'mediapurchasing');
+define('DB_PASS',    $_ENV['DB_PASS']    ?? 'Access$1');
 define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
 
 // ---------------------------------------------------------------------------
