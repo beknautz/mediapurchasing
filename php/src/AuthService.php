@@ -154,13 +154,20 @@ class AuthService extends BaseService
                 'INSERT INTO users (email, password_hash, name, role, is_active, created_at)
                  VALUES (:email, :hash, :name, :role, :is_active, NOW())'
             );
-            $stmt->execute([
-                ':email'     => $email,
-                ':hash'      => $hash,
-                ':name'      => $name,
-                ':role'      => $role,
-                ':is_active' => $isActive,
-            ]);
+            try {
+                $stmt->execute([
+                    ':email'     => $email,
+                    ':hash'      => $hash,
+                    ':name'      => $name,
+                    ':role'      => $role,
+                    ':is_active' => $isActive,
+                ]);
+            } catch (PDOException $e) {
+                if ($e->getCode() === '23000') {
+                    return ['success' => false, 'id' => 0, 'message' => 'An account with that email already exists.'];
+                }
+                throw $e;
+            }
 
             $newId = $this->lastInsertId();
             $this->auditLog('create_user', 'user', $newId, "Created user {$email}");

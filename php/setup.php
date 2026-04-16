@@ -4,6 +4,24 @@ require_once __DIR__ . '/bootstrap.php';
 // No auth required — this is the initial setup page.
 // After creating the admin account the operator must delete this file.
 
+// Block re-setup if an admin account already exists.
+try {
+    $__pdo = new PDO(
+        sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET),
+        DB_USER, DB_PASS,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+    );
+    $__adminCount = (int) $__pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
+    unset($__pdo);
+} catch (Throwable $__e) {
+    $__adminCount = 0;
+}
+
+if ($__adminCount > 0) {
+    // Setup already complete — redirect to login
+    redirect('/auth/login.php');
+}
+
 $success = false;
 $errors  = [];
 
@@ -28,15 +46,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $authService = new AuthService();
-        $authService->saveUser([
+        $result = $authService->saveUser([
             'name'      => $name,
             'email'     => $email,
             'password'  => $password,
             'role'      => 'admin',
-            'phone'     => '',
             'is_active' => 1,
         ]);
-        $success = true;
+        if ($result['success']) {
+            $success = true;
+        } else {
+            $errors[] = $result['message'];
+        }
     }
 }
 
