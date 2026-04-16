@@ -24,18 +24,6 @@ define('MAX_UPLOAD_MB',  20);
 define('ALLOWED_EXTS',   serialize(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg', 'gif']));
 
 // ---------------------------------------------------------------------------
-// Session — start only if none is active yet
-// ---------------------------------------------------------------------------
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// ---------------------------------------------------------------------------
-// Autoloader bootstrap
-// ---------------------------------------------------------------------------
-require_once __DIR__ . '/../bootstrap.php';
-
-// ---------------------------------------------------------------------------
 // Load workflow settings from DB into $GLOBALS['appSettings']
 // ---------------------------------------------------------------------------
 $GLOBALS['appSettings'] = [];
