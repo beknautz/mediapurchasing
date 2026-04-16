@@ -14,16 +14,17 @@ class AuthService extends BaseService
     // Returns:
     //   ['success' => bool, 'user' => array|null, 'message' => string]
     // -----------------------------------------------------------------------
-    public function login(string $email, string $password): array
+    // Returns the user row array on success, or false on failure.
+    public function login(string $email, string $password)
     {
         $email = trim(strtolower($email));
 
         if ($email === '' || $password === '') {
-            return ['success' => false, 'user' => null, 'message' => 'Email and password are required.'];
+            return false;
         }
 
         $stmt = $this->db->prepare(
-            'SELECT id, email, password_hash, role, first_name, last_name, is_active
+            'SELECT id, email, password_hash, role, name, phone, is_active
                FROM users
               WHERE email = :email
               LIMIT 1'
@@ -32,15 +33,15 @@ class AuthService extends BaseService
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
-            return ['success' => false, 'user' => null, 'message' => 'Invalid email or password.'];
+            return false;
         }
 
         if (!(bool) $user['is_active']) {
-            return ['success' => false, 'user' => null, 'message' => 'This account is disabled.'];
+            return false;
         }
 
         if (!$this->checkPassword($password, $user['password_hash'])) {
-            return ['success' => false, 'user' => null, 'message' => 'Invalid email or password.'];
+            return false;
         }
 
         // Update last_login timestamp
@@ -49,10 +50,9 @@ class AuthService extends BaseService
 
         $this->auditLog('login', 'user', (int) $user['id'], 'Successful login');
 
-        // Remove sensitive field before returning
         unset($user['password_hash']);
 
-        return ['success' => true, 'user' => $user, 'message' => 'Login successful.'];
+        return $user;
     }
 
     // -----------------------------------------------------------------------
@@ -106,7 +106,7 @@ class AuthService extends BaseService
     // -----------------------------------------------------------------------
     public function getUsers(string $role = '', int $page = 1): array
     {
-        $sql    = 'SELECT id, email, first_name, last_name, role, is_active, last_login, created_at
+        $sql    = 'SELECT id, email, name, role, is_active, last_login, created_at
                      FROM users';
         $params = [];
 
@@ -115,7 +115,7 @@ class AuthService extends BaseService
             $params[':role'] = $role;
         }
 
-        $sql .= ' ORDER BY last_name ASC, first_name ASC';
+        $sql .= ' ORDER BY name ASC';
 
         return $this->paginate($sql, $params, $page, PAGE_SIZE);
     }
@@ -132,15 +132,14 @@ class AuthService extends BaseService
     // -----------------------------------------------------------------------
     public function saveUser(array $data): array
     {
-        $id        = (int) ($data['id'] ?? 0);
-        $email     = trim(strtolower($data['email'] ?? ''));
-        $firstName = trim($data['first_name'] ?? '');
-        $lastName  = trim($data['last_name']  ?? '');
-        $role      = trim($data['role']       ?? 'buyer');
-        $isActive  = isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1;
+        $id       = (int) ($data['id'] ?? 0);
+        $email    = trim(strtolower($data['email'] ?? ''));
+        $name     = trim($data['name'] ?? '');
+        $role     = trim($data['role'] ?? 'buyer');
+        $isActive = isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1;
 
-        if ($email === '' || $firstName === '' || $lastName === '') {
-            return ['success' => false, 'id' => 0, 'message' => 'Email, first name, and last name are required.'];
+        if ($email === '' || $name === '') {
+            return ['success' => false, 'id' => 0, 'message' => 'Email and name are required.'];
         }
 
         if ($id === 0) {
@@ -152,16 +151,15 @@ class AuthService extends BaseService
             $hash = $this->hashPassword($data['password']);
 
             $stmt = $this->db->prepare(
-                'INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, created_at)
-                 VALUES (:email, :hash, :first_name, :last_name, :role, :is_active, NOW())'
+                'INSERT INTO users (email, password_hash, name, role, is_active, created_at)
+                 VALUES (:email, :hash, :name, :role, :is_active, NOW())'
             );
             $stmt->execute([
-                ':email'      => $email,
-                ':hash'       => $hash,
-                ':first_name' => $firstName,
-                ':last_name'  => $lastName,
-                ':role'       => $role,
-                ':is_active'  => $isActive,
+                ':email'     => $email,
+                ':hash'      => $hash,
+                ':name'      => $name,
+                ':role'      => $role,
+                ':is_active' => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -172,27 +170,25 @@ class AuthService extends BaseService
 
         // ---- UPDATE ----
         $params = [
-            ':email'      => $email,
-            ':first_name' => $firstName,
-            ':last_name'  => $lastName,
-            ':role'       => $role,
-            ':is_active'  => $isActive,
-            ':id'         => $id,
+            ':email'     => $email,
+            ':name'      => $name,
+            ':role'      => $role,
+            ':is_active' => $isActive,
+            ':id'        => $id,
         ];
 
         $passwordClause = '';
         if (!empty($data['password'])) {
-            $passwordClause     = ', password_hash = :hash';
-            $params[':hash']    = $this->hashPassword($data['password']);
+            $passwordClause  = ', password_hash = :hash';
+            $params[':hash'] = $this->hashPassword($data['password']);
         }
 
         $stmt = $this->db->prepare(
             'UPDATE users
-                SET email      = :email,
-                    first_name = :first_name,
-                    last_name  = :last_name,
-                    role       = :role,
-                    is_active  = :is_active'
+                SET email     = :email,
+                    name      = :name,
+                    role      = :role,
+                    is_active = :is_active'
             . $passwordClause .
             ' WHERE id = :id'
         );

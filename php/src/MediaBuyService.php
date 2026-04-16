@@ -30,7 +30,7 @@ class MediaBuyService extends BaseService
                        mb.updated_at,
                        c.company_name  AS client_name,
                        v.company_name  AS vendor_name,
-                       CONCAT(u.first_name, " ", u.last_name) AS buyer_name
+                       u.name                                 AS buyer_name
                   FROM media_buys mb
              LEFT JOIN clients  c ON c.id = mb.client_id
              LEFT JOIN vendors  v ON v.id = mb.vendor_id
@@ -84,7 +84,7 @@ class MediaBuyService extends BaseService
                     c.email         AS client_email,
                     v.company_name  AS vendor_name,
                     v.email         AS vendor_email,
-                    CONCAT(u.first_name, " ", u.last_name) AS buyer_name
+                    u.name                                 AS buyer_name
                FROM media_buys mb
           LEFT JOIN clients c ON c.id = mb.client_id
           LEFT JOIN vendors v ON v.id = mb.vendor_id
@@ -108,7 +108,7 @@ class MediaBuyService extends BaseService
 
         // Negotiations
         $negStmt = $this->db->prepare(
-            'SELECT n.*, CONCAT(u.first_name, " ", u.last_name) AS negotiator_name
+            'SELECT n.*, u.name AS negotiator_name
                FROM media_buy_negotiations n
           LEFT JOIN users u ON u.id = n.user_id
               WHERE n.media_buy_id = :id

@@ -19,17 +19,16 @@ class CRMService extends BaseService
     // -----------------------------------------------------------------------
     public function getClients(string $search = ''): array
     {
-        $sql    = 'SELECT id, company_name, contact_first_name, contact_last_name,
+        $sql    = 'SELECT id, company_name, contact_name,
                           email, phone, address, city, state, zip, country,
                           is_active, created_at, updated_at
                      FROM clients';
         $params = [];
 
         if ($search !== '') {
-            $sql .= ' WHERE (company_name LIKE :search
-                          OR contact_first_name LIKE :search
-                          OR contact_last_name  LIKE :search
-                          OR email              LIKE :search)';
+            $sql .= ' WHERE (company_name  LIKE :search
+                          OR contact_name  LIKE :search
+                          OR email         LIKE :search)';
             $params[':search'] = '%' . $search . '%';
         }
 
@@ -76,26 +75,24 @@ class CRMService extends BaseService
     // saveClient()
     // Inserts a new client or updates an existing one.
     //
-    // $data keys: id (0=insert), company_name, contact_first_name,
-    //             contact_last_name, email, phone, address, city, state,
-    //             zip, country, is_active
+    // $data keys: id (0=insert), company_name, contact_name,
+    //             email, phone, address, city, state, zip, country, is_active
     //
     // Returns: ['success'=>bool, 'id'=>int, 'message'=>string]
     // -----------------------------------------------------------------------
     public function saveClient(array $data): array
     {
-        $id           = (int) ($data['id']                  ?? 0);
-        $companyName  = trim($data['company_name']           ?? '');
-        $firstName    = trim($data['contact_first_name']     ?? '');
-        $lastName     = trim($data['contact_last_name']      ?? '');
-        $email        = trim(strtolower($data['email']       ?? ''));
-        $phone        = trim($data['phone']                  ?? '');
-        $address      = trim($data['address']                ?? '');
-        $city         = trim($data['city']                   ?? '');
-        $state        = trim($data['state']                  ?? '');
-        $zip          = trim($data['zip']                    ?? '');
-        $country      = trim($data['country']                ?? '');
-        $isActive     = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
+        $id          = (int) ($data['id']           ?? 0);
+        $companyName = trim($data['company_name']    ?? '');
+        $contactName = trim($data['contact_name']    ?? '');
+        $email       = trim(strtolower($data['email'] ?? ''));
+        $phone       = trim($data['phone']           ?? '');
+        $address     = trim($data['address']         ?? '');
+        $city        = trim($data['city']            ?? '');
+        $state       = trim($data['state']           ?? '');
+        $zip         = trim($data['zip']             ?? '');
+        $country     = trim($data['country']         ?? '');
+        $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
             return ['success' => false, 'id' => 0, 'message' => 'Company name is required.'];
@@ -104,16 +101,15 @@ class CRMService extends BaseService
         if ($id === 0) {
             $stmt = $this->db->prepare(
                 'INSERT INTO clients
-                     (company_name, contact_first_name, contact_last_name, email, phone,
+                     (company_name, contact_name, email, phone,
                       address, city, state, zip, country, is_active, created_at, updated_at)
                  VALUES
-                     (:company_name, :first_name, :last_name, :email, :phone,
+                     (:company_name, :contact_name, :email, :phone,
                       :address, :city, :state, :zip, :country, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name' => $companyName,
-                ':first_name'   => $firstName,
-                ':last_name'    => $lastName,
+                ':contact_name' => $contactName,
                 ':email'        => $email,
                 ':phone'        => $phone,
                 ':address'      => $address,
@@ -132,24 +128,22 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE clients
-                SET company_name        = :company_name,
-                    contact_first_name  = :first_name,
-                    contact_last_name   = :last_name,
-                    email               = :email,
-                    phone               = :phone,
-                    address             = :address,
-                    city                = :city,
-                    state               = :state,
-                    zip                 = :zip,
-                    country             = :country,
-                    is_active           = :is_active,
-                    updated_at          = NOW()
+                SET company_name = :company_name,
+                    contact_name = :contact_name,
+                    email        = :email,
+                    phone        = :phone,
+                    address      = :address,
+                    city         = :city,
+                    state        = :state,
+                    zip          = :zip,
+                    country      = :country,
+                    is_active    = :is_active,
+                    updated_at   = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
             ':company_name' => $companyName,
-            ':first_name'   => $firstName,
-            ':last_name'    => $lastName,
+            ':contact_name' => $contactName,
             ':email'        => $email,
             ':phone'        => $phone,
             ':address'      => $address,
@@ -178,17 +172,16 @@ class CRMService extends BaseService
     // -----------------------------------------------------------------------
     public function getVendors(string $search = ''): array
     {
-        $sql    = 'SELECT id, company_name, contact_first_name, contact_last_name,
+        $sql    = 'SELECT id, company_name, contact_name,
                           email, phone, address, city, state, zip, country,
                           is_active, created_at, updated_at
                      FROM vendors';
         $params = [];
 
         if ($search !== '') {
-            $sql .= ' WHERE (company_name        LIKE :search
-                          OR contact_first_name  LIKE :search
-                          OR contact_last_name   LIKE :search
-                          OR email               LIKE :search)';
+            $sql .= ' WHERE (company_name LIKE :search
+                          OR contact_name LIKE :search
+                          OR email        LIKE :search)';
             $params[':search'] = '%' . $search . '%';
         }
 
@@ -233,25 +226,23 @@ class CRMService extends BaseService
     // saveVendor()
     // Inserts a new vendor or updates an existing one.
     //
-    // $data keys: id (0=insert), company_name, contact_first_name,
-    //             contact_last_name, email, phone, address, city, state,
-    //             zip, country, is_active
+    // $data keys: id (0=insert), company_name, contact_name,
+    //             email, phone, address, city, state, zip, country, is_active
     //
     // Returns: ['success'=>bool, 'id'=>int, 'message'=>string]
     // -----------------------------------------------------------------------
     public function saveVendor(array $data): array
     {
-        $id          = (int) ($data['id']                  ?? 0);
-        $companyName = trim($data['company_name']           ?? '');
-        $firstName   = trim($data['contact_first_name']     ?? '');
-        $lastName    = trim($data['contact_last_name']      ?? '');
-        $email       = trim(strtolower($data['email']       ?? ''));
-        $phone       = trim($data['phone']                  ?? '');
-        $address     = trim($data['address']                ?? '');
-        $city        = trim($data['city']                   ?? '');
-        $state       = trim($data['state']                  ?? '');
-        $zip         = trim($data['zip']                    ?? '');
-        $country     = trim($data['country']                ?? '');
+        $id          = (int) ($data['id']           ?? 0);
+        $companyName = trim($data['company_name']    ?? '');
+        $contactName = trim($data['contact_name']    ?? '');
+        $email       = trim(strtolower($data['email'] ?? ''));
+        $phone       = trim($data['phone']           ?? '');
+        $address     = trim($data['address']         ?? '');
+        $city        = trim($data['city']            ?? '');
+        $state       = trim($data['state']           ?? '');
+        $zip         = trim($data['zip']             ?? '');
+        $country     = trim($data['country']         ?? '');
         $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -261,16 +252,15 @@ class CRMService extends BaseService
         if ($id === 0) {
             $stmt = $this->db->prepare(
                 'INSERT INTO vendors
-                     (company_name, contact_first_name, contact_last_name, email, phone,
+                     (company_name, contact_name, email, phone,
                       address, city, state, zip, country, is_active, created_at, updated_at)
                  VALUES
-                     (:company_name, :first_name, :last_name, :email, :phone,
+                     (:company_name, :contact_name, :email, :phone,
                       :address, :city, :state, :zip, :country, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name' => $companyName,
-                ':first_name'   => $firstName,
-                ':last_name'    => $lastName,
+                ':contact_name' => $contactName,
                 ':email'        => $email,
                 ':phone'        => $phone,
                 ':address'      => $address,
@@ -289,24 +279,22 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE vendors
-                SET company_name       = :company_name,
-                    contact_first_name = :first_name,
-                    contact_last_name  = :last_name,
-                    email              = :email,
-                    phone              = :phone,
-                    address            = :address,
-                    city               = :city,
-                    state              = :state,
-                    zip                = :zip,
-                    country            = :country,
-                    is_active          = :is_active,
-                    updated_at         = NOW()
+                SET company_name = :company_name,
+                    contact_name = :contact_name,
+                    email        = :email,
+                    phone        = :phone,
+                    address      = :address,
+                    city         = :city,
+                    state        = :state,
+                    zip          = :zip,
+                    country      = :country,
+                    is_active    = :is_active,
+                    updated_at   = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
             ':company_name' => $companyName,
-            ':first_name'   => $firstName,
-            ':last_name'    => $lastName,
+            ':contact_name' => $contactName,
             ':email'        => $email,
             ':phone'        => $phone,
             ':address'      => $address,

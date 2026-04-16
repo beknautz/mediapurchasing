@@ -17,7 +17,7 @@ class BillingService extends BaseService
     {
         $sql = 'SELECT bq.*,
                        v.company_name                              AS vendor_name,
-                       CONCAT(u.first_name, " ", u.last_name)     AS assigned_to_name,
+                       u.name                                      AS assigned_to_name,
                        mb.title                                    AS media_buy_title
                   FROM billing_queue bq
              LEFT JOIN vendors    v  ON v.id  = bq.vendor_id
@@ -48,7 +48,7 @@ class BillingService extends BaseService
             'SELECT bq.*,
                     v.company_name                          AS vendor_name,
                     v.email                                 AS vendor_email,
-                    CONCAT(u.first_name, " ", u.last_name) AS assigned_to_name,
+                    u.name                                 AS assigned_to_name,
                     mb.title                                AS media_buy_title,
                     mb.agreed_cost                          AS media_buy_agreed_cost
                FROM billing_queue bq
