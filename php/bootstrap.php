@@ -5,6 +5,13 @@
  */
 
 // ---------------------------------------------------------------------------
+// Temporary error display — remove after diagnosing the 500
+// ---------------------------------------------------------------------------
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
+// ---------------------------------------------------------------------------
 // Config — DB constants and app settings (must load before anything else)
 // ---------------------------------------------------------------------------
 require_once __DIR__ . '/config/config.php';
