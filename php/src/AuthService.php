@@ -205,4 +205,105 @@ class AuthService extends BaseService
 
         return ['success' => true, 'id' => $id, 'message' => 'User updated successfully.'];
     }
+
+    // -----------------------------------------------------------------------
+    // generatePasswordReset()
+    // Creates a one-hour reset token for the given email address.
+    // Returns the plaintext token to embed in the reset URL, or null if the
+    // email is not found or the account is inactive.
+    // -----------------------------------------------------------------------
+    public function generatePasswordReset(string $email): ?string
+    {
+        $email = trim(strtolower($email));
+
+        $stmt = $this->db->prepare(
+            'SELECT id FROM users WHERE email = :email AND is_active = 1 LIMIT 1'
+        );
+        $stmt->execute([':email' => $email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return null;
+        }
+
+        // Self-bootstrapping table — create only if absent
+        $this->db->exec(
+            'CREATE TABLE IF NOT EXISTS password_resets (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id    INT UNSIGNED NOT NULL,
+                token_hash VARCHAR(64)  NOT NULL,
+                expires_at DATETIME     NOT NULL,
+                created_at DATETIME     NOT NULL,
+                INDEX idx_token (token_hash),
+                INDEX idx_user  (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+
+        // Invalidate any existing tokens for this user
+        $this->db->prepare(
+            'DELETE FROM password_resets WHERE user_id = :uid'
+        )->execute([':uid' => $user['id']]);
+
+        // Generate 32-byte cryptographically secure token
+        $plaintoken = bin2hex(random_bytes(32));
+        $hash       = hash('sha256', $plaintoken);
+
+        $this->db->prepare(
+            'INSERT INTO password_resets (user_id, token_hash, expires_at, created_at)
+             VALUES (:uid, :hash, DATE_ADD(NOW(), INTERVAL 1 HOUR), NOW())'
+        )->execute([':uid' => $user['id'], ':hash' => $hash]);
+
+        return $plaintoken;
+    }
+
+    // -----------------------------------------------------------------------
+    // validateResetToken()
+    // Checks that the token exists and has not expired.
+    // Returns the user row (id, email, name) or null.
+    // -----------------------------------------------------------------------
+    public function validateResetToken(string $token): ?array
+    {
+        $hash = hash('sha256', $token);
+
+        $stmt = $this->db->prepare(
+            'SELECT u.id, u.email, u.name
+               FROM password_resets pr
+               JOIN users u ON u.id = pr.user_id
+              WHERE pr.token_hash = :hash
+                AND pr.expires_at > NOW()
+              LIMIT 1'
+        );
+        $stmt->execute([':hash' => $hash]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    // -----------------------------------------------------------------------
+    // consumeResetToken()
+    // Validates the token, sets the new password, and deletes the token row.
+    // Returns true on success, false if the token is invalid/expired.
+    // -----------------------------------------------------------------------
+    public function consumeResetToken(string $token, string $newPassword): bool
+    {
+        $user = $this->validateResetToken($token);
+
+        if (!$user) {
+            return false;
+        }
+
+        $hash = $this->hashPassword($newPassword);
+
+        $this->db->prepare(
+            'UPDATE users SET password_hash = :hash WHERE id = :id'
+        )->execute([':hash' => $hash, ':id' => $user['id']]);
+
+        $this->db->prepare(
+            'DELETE FROM password_resets WHERE user_id = :uid'
+        )->execute([':uid' => $user['id']]);
+
+        $this->auditLog('password_reset', 'user', (int) $user['id'], 'Password reset via email link');
+
+        return true;
+    }
 }

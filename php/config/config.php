@@ -14,6 +14,16 @@ define('DB_PASS',    $_ENV['DB_PASS']    ?? 'Access$1');
 define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
 
 // ---------------------------------------------------------------------------
+// SMTP (outbound mail for transactional/system emails)
+// ---------------------------------------------------------------------------
+define('SMTP_HOST',      $_ENV['SMTP_HOST']      ?? 'mail10.ezhostingserver.com');
+define('SMTP_PORT',      (int) ($_ENV['SMTP_PORT'] ?? 587));
+define('SMTP_USER',      $_ENV['SMTP_USER']      ?? 'noreply@enigmamarketing.com');
+define('SMTP_PASS',      $_ENV['SMTP_PASS']      ?? 'Access$1');
+define('SMTP_FROM',      $_ENV['SMTP_FROM']      ?? 'noreply@enigmamarketing.com');
+define('SMTP_FROM_NAME', $_ENV['SMTP_FROM_NAME'] ?? 'MediaBuy Platform');
+
+// ---------------------------------------------------------------------------
 // Application constants
 // ---------------------------------------------------------------------------
 define('APP_NAME',    'Media Buying Platform');

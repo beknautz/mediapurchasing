@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../bootstrap.php';
 
-// Already logged in — send to dashboard
 if (!empty($_SESSION['loggedIn'])) {
     redirect('/dashboard.php');
 }
@@ -17,7 +16,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
     } else {
-        // Stub — no actual email is sent. Always show the safe generic message.
+        $authService = new AuthService();
+        $token       = $authService->generatePasswordReset($email);
+
+        // Always show success to avoid disclosing whether the email exists
+        if ($token !== null) {
+            $resetUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+                      . '://' . $_SERVER['HTTP_HOST']
+                      . '/auth/reset_password.php?token=' . urlencode($token);
+
+            $appName = APP_NAME;
+
+            $bodyHtml = <<<HTML
+<p>Hi,</p>
+<p>We received a request to reset the password for your <strong>{$appName}</strong> account associated with this email address.</p>
+<p><a href="{$resetUrl}" style="display:inline-block;padding:10px 20px;background:#0d6efd;color:#fff;text-decoration:none;border-radius:4px;">Reset My Password</a></p>
+<p>Or copy this link into your browser:<br><a href="{$resetUrl}">{$resetUrl}</a></p>
+<p>This link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email.</p>
+<p>&mdash; The {$appName} Team</p>
+HTML;
+
+            $bodyText = "Hi,\n\nReset your {$appName} password by visiting:\n{$resetUrl}\n\n"
+                      . "This link expires in 1 hour. If you did not request this, ignore this email.\n";
+
+            $mailer = new SmtpMailer();
+            $mailer->send($email, '', "Reset your {$appName} password", $bodyHtml, $bodyText);
+        }
+
         $submitted = true;
     }
 }
@@ -55,7 +80,7 @@ $pageTitle = 'Forgot Password — MediaBuy';
                         <div class="alert alert-success text-center" role="alert">
                             <i class="bi bi-check-circle-fill me-2 fs-5"></i>
                             <strong>Check your inbox.</strong><br>
-                            If that email address exists in our system, a password reset link has been sent.
+                            If that email address exists in our system, a password reset link has been sent. The link expires in 1 hour.
                         </div>
                         <div class="d-grid mt-3">
                             <a href="/auth/login.php" class="btn btn-outline-primary">
