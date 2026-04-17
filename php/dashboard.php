@@ -19,8 +19,8 @@ $approvalService = new ApprovalService();
 $dashCounts    = $mediaBuyService->getDashboardCounts();
 $billingCounts = $billingService->getQueueCounts();
 
-// Buyer filter: buyers only see their own buys
-$buyerFilter = $isAdmin ? null : (int) $userId;
+// Buyer filter: buyers only see their own buys; 0 = no filter (admin sees all)
+$buyerFilter = $isAdmin ? 0 : (int) $userId;
 
 // Recent media buys (last 8)
 $recentBuys = $mediaBuyService->getMediaBuys(buyerId: $buyerFilter, pageSize: 8);
