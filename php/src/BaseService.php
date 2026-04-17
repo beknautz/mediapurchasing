@@ -91,22 +91,20 @@ class BaseService
         int    $entityId   = 0,
         string $details    = ''
     ): void {
-        $userId    = (int) ($_SESSION['user']['id'] ?? 0);
-        $userEmail = (string) ($_SESSION['user']['email'] ?? '');
-        $ip        = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        $userId = (int) ($_SESSION['user']['id'] ?? 0);
+        $ip     = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
         $sql = 'INSERT INTO audit_log
-                    (user_id, user_email, action, entity_type, entity_id, details, ip_address, created_at)
+                    (user_id, action, entity_type, entity_id, details, ip_address, created_at)
                 VALUES
-                    (:user_id, :user_email, :action, :entity_type, :entity_id, :details, :ip, NOW())';
+                    (:user_id, :action, :entity_type, :entity_id, :details, :ip, NOW())';
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
-            ':user_id'     => $userId,
-            ':user_email'  => $userEmail,
+            ':user_id'     => $userId > 0 ? $userId : null,
             ':action'      => $action,
             ':entity_type' => $entityType,
-            ':entity_id'   => $entityId,
+            ':entity_id'   => $entityId > 0 ? $entityId : null,
             ':details'     => $details,
             ':ip'          => $ip,
         ]);
