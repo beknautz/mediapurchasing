@@ -193,19 +193,16 @@ class EmailService extends BaseService
 
         $billStmt = $this->db->prepare(
             'INSERT INTO billing_queue
-                 (vendor_id, vendor_email, subject, body_text, body_html,
-                  status, source, communication_log_id, received_at, created_at)
+                 (vendor_id, vendor_email, notes,
+                  status, source, created_at, updated_at)
              VALUES
-                 (:vendor_id, :vendor_email, :subject, :body_text, :body_html,
-                  "pending", "email_inbound", :log_id, NOW(), NOW())'
+                 (:vendor_id, :vendor_email, :notes,
+                  "pending", "email_inbound", NOW(), NOW())'
         );
         $billStmt->execute([
-            ':vendor_id'    => $vendor['id']           ?? null,
+            ':vendor_id'    => $vendor['id'] ?? null,
             ':vendor_email' => $vendorEmail,
-            ':subject'      => $subject,
-            ':body_text'    => $bodyText,
-            ':body_html'    => $bodyHtml,
-            ':log_id'       => $logId,
+            ':notes'        => '[Inbound email] Subject: ' . $subject,
         ]);
 
         $billId = $this->lastInsertId();
@@ -217,42 +214,60 @@ class EmailService extends BaseService
 
     // -----------------------------------------------------------------------
     // getHistory()
-    // Returns communication log entries filtered by one or more entity IDs.
+    // Returns paginated communication log entries.
     //
-    // Returns: array of log rows
+    // $type      — 'email' | 'sms' | '' (all)
+    // $direction — 'inbound' | 'outbound' | '' (all)
+    // $mediaBuyId, $approvalId, $billId — entity ID filters (0 = no filter)
+    // $page, $pageSize — pagination
+    //
+    // Returns: ['data'=>[], 'total'=>int, 'page'=>int, 'pages'=>int]
+    // Each row includes virtual 'type' and 'direction' columns.
     // -----------------------------------------------------------------------
-    public function getHistory(int $mediaBuyId = 0, int $approvalId = 0, int $billId = 0): array
-    {
-        $sql    = 'SELECT * FROM communication_logs WHERE comm_type IN ("email", "email_inbound")';
+    public function getHistory(
+        string $type       = '',
+        string $direction  = '',
+        int    $mediaBuyId = 0,
+        int    $approvalId = 0,
+        int    $billId     = 0,
+        int    $page       = 1,
+        int    $pageSize   = PAGE_SIZE
+    ): array {
+        $sql = 'SELECT *,
+                       CASE WHEN comm_type = \'email_inbound\' THEN \'email\' ELSE comm_type END AS type,
+                       CASE WHEN comm_type = \'email_inbound\' THEN \'inbound\' ELSE \'outbound\' END AS direction
+                  FROM communication_logs
+                 WHERE 1=1';
         $params = [];
 
-        $clauses = [];
+        if ($type === 'email') {
+            $sql .= ' AND comm_type IN ("email", "email_inbound")';
+        } elseif ($type === 'sms') {
+            $sql .= ' AND comm_type = "sms"';
+        }
+
+        if ($direction === 'inbound') {
+            $sql .= ' AND comm_type = "email_inbound"';
+        } elseif ($direction === 'outbound') {
+            $sql .= ' AND comm_type NOT IN ("email_inbound")';
+        }
 
         if ($mediaBuyId > 0) {
-            $clauses[]                   = 'media_buy_id = :media_buy_id';
-            $params[':media_buy_id']     = $mediaBuyId;
+            $sql                     .= ' AND media_buy_id = :media_buy_id';
+            $params[':media_buy_id'] = $mediaBuyId;
         }
-
         if ($approvalId > 0) {
-            $clauses[]                   = 'approval_id = :approval_id';
-            $params[':approval_id']      = $approvalId;
+            $sql                     .= ' AND approval_id = :approval_id';
+            $params[':approval_id']  = $approvalId;
         }
-
         if ($billId > 0) {
-            $clauses[]              = 'bill_id = :bill_id';
-            $params[':bill_id']     = $billId;
-        }
-
-        if (!empty($clauses)) {
-            $sql .= ' AND (' . implode(' OR ', $clauses) . ')';
+            $sql                 .= ' AND bill_id = :bill_id';
+            $params[':bill_id']  = $billId;
         }
 
         $sql .= ' ORDER BY created_at DESC';
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $this->paginate($sql, $params, $page, $pageSize);
     }
 
     // -----------------------------------------------------------------------

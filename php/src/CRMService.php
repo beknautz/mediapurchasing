@@ -373,8 +373,6 @@ class CRMService extends BaseService
         $subject   = trim($data['subject']        ?? '');
         $bodyHtml  = $data['body_html']           ?? '';
         $bodyText  = $data['body_text']           ?? '';
-        $fromEmail = trim($data['from_email']     ?? '');
-        $fromName  = trim($data['from_name']      ?? '');
         $isActive  = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($slug === '' || $name === '' || $subject === '') {
@@ -385,21 +383,19 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO email_templates
                      (slug, name, category, subject, body_html, body_text,
-                      from_email, from_name, is_active, created_at, updated_at)
+                      is_active, created_at, updated_at)
                  VALUES
                      (:slug, :name, :category, :subject, :body_html, :body_text,
-                      :from_email, :from_name, :is_active, NOW(), NOW())'
+                      :is_active, NOW(), NOW())'
             );
             $stmt->execute([
-                ':slug'       => $slug,
-                ':name'       => $name,
-                ':category'   => $category,
-                ':subject'    => $subject,
-                ':body_html'  => $bodyHtml,
-                ':body_text'  => $bodyText,
-                ':from_email' => $fromEmail,
-                ':from_name'  => $fromName,
-                ':is_active'  => $isActive,
+                ':slug'      => $slug,
+                ':name'      => $name,
+                ':category'  => $category,
+                ':subject'   => $subject,
+                ':body_html' => $bodyHtml,
+                ':body_text' => $bodyText,
+                ':is_active' => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -410,29 +406,25 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE email_templates
-                SET slug       = :slug,
-                    name       = :name,
-                    category   = :category,
-                    subject    = :subject,
-                    body_html  = :body_html,
-                    body_text  = :body_text,
-                    from_email = :from_email,
-                    from_name  = :from_name,
-                    is_active  = :is_active,
+                SET slug      = :slug,
+                    name      = :name,
+                    category  = :category,
+                    subject   = :subject,
+                    body_html = :body_html,
+                    body_text = :body_text,
+                    is_active = :is_active,
                     updated_at = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':slug'       => $slug,
-            ':name'       => $name,
-            ':category'   => $category,
-            ':subject'    => $subject,
-            ':body_html'  => $bodyHtml,
-            ':body_text'  => $bodyText,
-            ':from_email' => $fromEmail,
-            ':from_name'  => $fromName,
-            ':is_active'  => $isActive,
-            ':id'         => $id,
+            ':slug'      => $slug,
+            ':name'      => $name,
+            ':category'  => $category,
+            ':subject'   => $subject,
+            ':body_html' => $bodyHtml,
+            ':body_text' => $bodyText,
+            ':is_active' => $isActive,
+            ':id'        => $id,
         ]);
 
         $this->auditLog('update_template', 'email_template', $id, "Updated: {$slug}");

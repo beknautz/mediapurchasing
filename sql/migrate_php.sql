@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS media_buy_approvals (
     media_buy_id    INT UNSIGNED  NOT NULL,
     client_id       INT UNSIGNED  NULL,
     token           VARCHAR(100)  NOT NULL UNIQUE,
-    status          ENUM('pending','approved','rejected','expired') NOT NULL DEFAULT 'pending',
+    status          ENUM('pending','approved','rejected','revision_requested','expired') NOT NULL DEFAULT 'pending',
     response_notes  TEXT          NULL,
     responded_at    DATETIME      NULL,
     responder_ip    VARCHAR(45)   NULL,
@@ -124,7 +124,14 @@ CREATE TABLE IF NOT EXISTS communication_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- 9. password_resets  (used by forgot-password flow)
+-- 9. media_buy_approvals — add revision_requested to status ENUM
+--    (ALTER is idempotent if the value is already present)
+-- ============================================================
+ALTER TABLE media_buy_approvals
+    MODIFY COLUMN status ENUM('pending','approved','rejected','revision_requested','expired') NOT NULL DEFAULT 'pending';
+
+-- ============================================================
+-- 10. password_resets  (used by forgot-password flow)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS password_resets (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

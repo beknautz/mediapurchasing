@@ -144,11 +144,11 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                     </tr>
-                    <?php if (!empty($appr['client_notes'])): ?>
+                    <?php if (!empty($appr['response_notes'])): ?>
                     <tr class="table-light">
                         <td colspan="7" class="ps-3 py-1 small text-muted">
                             <i class="bi bi-chat-text me-1"></i>
-                            <em><?= h($appr['client_notes']) ?></em>
+                            <em><?= h($appr['response_notes']) ?></em>
                         </td>
                     </tr>
                     <?php endif; ?>

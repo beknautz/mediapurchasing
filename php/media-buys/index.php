@@ -24,10 +24,10 @@ $page     = max(1, (int)($_GET['page'] ?? 1));
 $pageSize = 25;
 
 // Buyers can only see their own buys
-$buyerFilter = $isAdmin ? null : (int)$userId;
+$buyerFilter = $isAdmin ? 0 : (int)$userId;
 
 $result   = $mediaBuyService->getMediaBuys(
-    status:   $statusFilter ?: null,
+    status:   $statusFilter,
     buyerId:  $buyerFilter,
     page:     $page,
     pageSize: $pageSize

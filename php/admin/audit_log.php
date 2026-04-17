@@ -46,7 +46,7 @@ try {
     $params = [];
 
     if ($filterUser !== '') {
-        $where[]  = '(al.user_name LIKE :user OR al.user_id = :user_exact)';
+        $where[]  = '(u.name LIKE :user OR al.user_id = :user_exact)';
         $params[':user']       = '%' . $filterUser . '%';
         $params[':user_exact'] = $filterUser;
     }
@@ -66,7 +66,7 @@ try {
     $whereSQL = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
     // Total count for pagination
-    $countSql  = "SELECT COUNT(*) FROM audit_log al $whereSQL";
+    $countSql  = "SELECT COUNT(*) FROM audit_log al LEFT JOIN users u ON u.id = al.user_id $whereSQL";
     $countStmt = $db->prepare($countSql);
     $countStmt->execute($params);
     $totalRows   = (int)$countStmt->fetchColumn();
@@ -78,7 +78,7 @@ try {
         SELECT
             al.id,
             al.created_at,
-            COALESCE(al.user_name, CONCAT('User #', al.user_id)) AS user_label,
+            COALESCE(u.name, CONCAT('User #', al.user_id)) AS user_label,
             al.user_id,
             al.action,
             al.entity_type,
@@ -86,6 +86,7 @@ try {
             al.details,
             al.ip_address
         FROM audit_log al
+        LEFT JOIN users u ON u.id = al.user_id
         $whereSQL
         ORDER BY al.created_at DESC
         LIMIT :limit OFFSET :offset

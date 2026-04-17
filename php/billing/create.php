@@ -25,7 +25,7 @@ $vendors   = [];
 $mediaBuys = [];
 
 if ($pdo) {
-    $vendors   = $pdo->query("SELECT id, company_name FROM vendors WHERE active = 1 ORDER BY company_name")->fetchAll();
+    $vendors   = $pdo->query("SELECT id, company_name FROM vendors WHERE is_active = 1 ORDER BY company_name")->fetchAll();
     $mediaBuys = $pdo->query("SELECT id, title FROM media_buys WHERE status NOT IN ('cancelled') ORDER BY updated_at DESC LIMIT 200")->fetchAll();
 }
 

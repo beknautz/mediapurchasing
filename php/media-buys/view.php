@@ -21,6 +21,16 @@ $mediaBuyService = new MediaBuyService();
 $approvalService = new ApprovalService();
 $emailService    = new EmailService();
 
+// Load data first — needed by both POST handlers and display
+$detail = $mediaBuyService->getMediaBuy($id);
+
+if (empty($detail)) {
+    $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Media buy not found.'];
+    redirect('/media-buys/index.php');
+}
+
+$buy = $detail['buy'];
+
 // Handle POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? '');
@@ -28,26 +38,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($action) {
 
         case 'send_to_vendor':
-            $emailService->sendTemplate('media_buy_request_vendor', [
-                'media_buy_id' => $id,
-                'sent_by'      => $userId,
-            ]);
+            $emailService->sendTemplate(
+                'media_buy_request_vendor',
+                $buy['vendor_email'] ?? '',
+                $buy['vendor_name']  ?? '',
+                ['title' => $buy['title'] ?? '', 'media_buy_id' => $id],
+                $id
+            );
             $mediaBuyService->updateStatus($id, 'sent_to_vendor');
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Sent to vendor successfully.'];
             redirect('/media-buys/view.php?id=' . $id);
 
         case 'request_approval':
-            $approvalResult = $approvalService->createApproval([
-                'media_buy_id'  => $id,
-                'requested_by'  => $userId,
-                'expires_days'  => (int) ($_POST['expires_days'] ?? 7),
-            ]);
+            $approvalResult = $approvalService->createApproval($id, (int)($buy['client_id'] ?? 0));
             if (!empty($approvalResult['id'])) {
-                $emailService->sendTemplate('client_approval_request', [
-                    'media_buy_id' => $id,
-                    'approval_id'  => $approvalResult['id'],
-                    'token'        => $approvalResult['token'] ?? '',
-                ]);
+                $emailService->sendTemplate(
+                    'client_approval_request',
+                    $buy['client_email'] ?? '',
+                    $buy['client_name']  ?? '',
+                    ['title' => $buy['title'] ?? '', 'token' => $approvalResult['token'] ?? ''],
+                    $id,
+                    $approvalResult['id']
+                );
                 $mediaBuyService->updateStatus($id, 'pending_client_approval');
                 $_SESSION['flash'] = ['type' => 'success', 'message' => 'Approval request sent to client.'];
             } else {
@@ -65,11 +77,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'notes'            => $negNotes,
                 'negotiation_type' => 'counter_offer',
             ]);
-            $emailService->sendTemplate('negotiation_counter', [
-                'media_buy_id'  => $id,
-                'proposed_cost' => $proposedCost,
-                'notes'         => $negNotes,
-            ]);
+            $emailService->sendTemplate(
+                'negotiation_counter',
+                $buy['vendor_email'] ?? '',
+                $buy['vendor_name']  ?? '',
+                ['title' => $buy['title'] ?? '', 'proposed_cost' => $proposedCost, 'notes' => $negNotes],
+                $id
+            );
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Counter-offer submitted.'];
             redirect('/media-buys/view.php?id=' . $id);
 
@@ -95,15 +109,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Load data
-$detail = $mediaBuyService->getMediaBuy($id);
-
-if (empty($detail)) {
-    $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Media buy not found.'];
-    redirect('/media-buys/index.php');
-}
-
-$buy          = $detail['buy'];
 $items        = $detail['items']        ?? [];
 $negotiations = $detail['negotiations'] ?? [];
 $approvals    = $detail['approvals']    ?? [];
@@ -498,8 +503,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 Expires <?= h(date('M j, Y', strtotime($appr['expires_at']))) ?>
                             </div>
                             <?php endif; ?>
-                            <?php if (!empty($appr['client_notes'])): ?>
-                            <div class="mt-1 text-break"><?= h($appr['client_notes']) ?></div>
+                            <?php if (!empty($appr['response_notes'])): ?>
+                            <div class="mt-1 text-break"><?= h($appr['response_notes']) ?></div>
                             <?php endif; ?>
                         </div>
                         <?php if (!empty($appr['token'])): ?>

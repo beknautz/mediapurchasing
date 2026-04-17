@@ -34,7 +34,7 @@ $mediaBuys = [];
 
 if ($pdo) {
     $templates = $pdo->query(
-        "SELECT id, name, subject, body_html, body_text FROM email_templates WHERE active = 1 ORDER BY name"
+        "SELECT id, name, subject, body_html, body_text FROM email_templates WHERE is_active = 1 ORDER BY name"
     )->fetchAll();
 
     $mediaBuys = $pdo->query(

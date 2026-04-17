@@ -13,12 +13,12 @@ class BillingService extends BaseService
     //
     // Returns: ['data'=>[], 'total'=>int, 'page'=>int, 'pages'=>int]
     // -----------------------------------------------------------------------
-    public function getQueue(string $status = '', int $page = 1): array
+    public function getQueue(string $status = '', int $page = 1, string $priority = '', int $pageSize = PAGE_SIZE): array
     {
         $sql = 'SELECT bq.*,
-                       v.company_name                              AS vendor_name,
-                       u.name                                      AS assigned_to_name,
-                       mb.title                                    AS media_buy_title
+                       v.company_name  AS vendor_name,
+                       u.name          AS assigned_to_name,
+                       mb.title        AS media_buy_title
                   FROM billing_queue bq
              LEFT JOIN vendors    v  ON v.id  = bq.vendor_id
              LEFT JOIN users      u  ON u.id  = bq.assigned_to
@@ -27,13 +27,13 @@ class BillingService extends BaseService
         $params = [];
 
         if ($status !== '') {
-            $sql           .= ' WHERE bq.status = :status';
+            $sql               .= ' WHERE bq.status = :status';
             $params[':status'] = $status;
         }
 
         $sql .= ' ORDER BY bq.created_at DESC';
 
-        return $this->paginate($sql, $params, $page, PAGE_SIZE);
+        return $this->paginate($sql, $params, $page, $pageSize);
     }
 
     // -----------------------------------------------------------------------

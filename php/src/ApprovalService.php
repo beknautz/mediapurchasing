@@ -34,10 +34,10 @@ class ApprovalService extends BaseService
 
         $id = $this->lastInsertId();
 
-        // Move the parent media buy to pending_approval status
+        // Move the parent media buy to pending_client_approval status
         $this->db->prepare(
             "UPDATE media_buys
-                SET status     = 'pending_approval',
+                SET status     = 'pending_client_approval',
                     updated_at = NOW()
               WHERE id = :id"
         )->execute([':id' => $mediaBuyId]);
@@ -140,7 +140,7 @@ class ApprovalService extends BaseService
             return ['success' => false, 'message' => 'This approval link has expired.', 'approval' => $approval];
         }
 
-        $allowedResponses = ['approved', 'rejected'];
+        $allowedResponses = ['approved', 'rejected', 'revision_requested'];
         if (!in_array($response, $allowedResponses, true)) {
             return ['success' => false, 'message' => 'Invalid response value.', 'approval' => $approval];
         }
@@ -149,11 +149,11 @@ class ApprovalService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE media_buy_approvals
-                SET status       = :status,
+                SET status         = :status,
                     response_notes = :notes,
-                    responded_at  = NOW(),
-                    responder_ip  = :ip,
-                    updated_at    = NOW()
+                    responded_at   = NOW(),
+                    responder_ip   = :ip,
+                    updated_at     = NOW()
               WHERE token = :token'
         );
         $stmt->execute([
@@ -163,13 +163,19 @@ class ApprovalService extends BaseService
             ':token'  => $token,
         ]);
 
-        // Mirror status onto the media buy
+        // Mirror status onto the media buy using valid media_buys.status ENUM values
+        $mbStatus = match($response) {
+            'approved'           => 'client_approved',
+            'revision_requested' => 'negotiating',
+            'rejected'           => 'cancelled',
+            default              => 'pending_client_approval',
+        };
         $this->db->prepare(
             "UPDATE media_buys
                 SET status     = :status,
                     updated_at = NOW()
               WHERE id = :id"
-        )->execute([':status' => $response, ':id' => $approval['media_buy_id']]);
+        )->execute([':status' => $mbStatus, ':id' => $approval['media_buy_id']]);
 
         $this->auditLog(
             'approval_response',
@@ -198,10 +204,11 @@ class ApprovalService extends BaseService
     //
     // Returns: ['data'=>[], 'total'=>int, 'page'=>int, 'pages'=>int]
     // -----------------------------------------------------------------------
-    public function getApprovals(string $status = '', int $page = 1): array
+    public function getApprovals(string $status = '', int $page = 1, int $pageSize = PAGE_SIZE): array
     {
         $sql = 'SELECT a.*,
                        mb.title       AS buy_title,
+                       mb.title       AS campaign_title,
                        c.company_name AS client_name,
                        c.email        AS client_email
                   FROM media_buy_approvals a
@@ -211,12 +218,12 @@ class ApprovalService extends BaseService
         $params = [];
 
         if ($status !== '') {
-            $sql           .= ' WHERE a.status = :status';
+            $sql               .= ' WHERE a.status = :status';
             $params[':status'] = $status;
         }
 
         $sql .= ' ORDER BY a.created_at DESC';
 
-        return $this->paginate($sql, $params, $page, PAGE_SIZE);
+        return $this->paginate($sql, $params, $page, $pageSize);
     }
 }

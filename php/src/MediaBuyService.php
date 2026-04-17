@@ -23,6 +23,10 @@ class MediaBuyService extends BaseService
         $sql = 'SELECT mb.id,
                        mb.title,
                        mb.status,
+                       mb.media_type,
+                       mb.market,
+                       mb.flight_start,
+                       mb.flight_end,
                        mb.total_cost,
                        mb.agreed_cost,
                        mb.notes,
@@ -30,7 +34,7 @@ class MediaBuyService extends BaseService
                        mb.updated_at,
                        c.company_name  AS client_name,
                        v.company_name  AS vendor_name,
-                       u.name                                 AS buyer_name
+                       u.name          AS buyer_name
                   FROM media_buys mb
              LEFT JOIN clients  c ON c.id = mb.client_id
              LEFT JOIN vendors  v ON v.id = mb.vendor_id
@@ -147,14 +151,19 @@ class MediaBuyService extends BaseService
     // -----------------------------------------------------------------------
     public function saveMediaBuy(array $data): array
     {
-        $id       = (int) ($data['id']        ?? 0);
-        $title    = trim($data['title']        ?? '');
-        $clientId = (int) ($data['client_id']  ?? 0);
-        $vendorId = (int) ($data['vendor_id']  ?? 0);
-        $buyerId  = (int) ($data['buyer_id']   ?? 0);
-        $status   = trim($data['status']       ?? 'draft');
-        $notes    = trim($data['notes']        ?? '');
-        $items    = $data['items']             ?? [];
+        $id            = (int)   ($data['id']             ?? 0);
+        $title         = trim($data['title']             ?? '');
+        $clientId      = (int)   ($data['client_id']     ?? 0);
+        $vendorId      = (int)   ($data['vendor_id']     ?? 0);
+        $buyerId       = (int)   ($data['buyer_id']      ?? 0);
+        $status        = trim($data['status']            ?? 'draft');
+        $mediaType     = trim($data['media_type']        ?? '');
+        $flightStart   = $data['flight_start']           ?? null;
+        $flightEnd     = $data['flight_end']             ?? null;
+        $market        = trim($data['market']            ?? '');
+        $notes         = trim($data['notes']             ?? '');
+        $internalNotes = trim($data['internal_notes']    ?? '');
+        $items         = $data['items']                  ?? [];
 
         if ($title === '') {
             return ['success' => false, 'id' => 0, 'message' => 'Title is required.'];
@@ -168,17 +177,26 @@ class MediaBuyService extends BaseService
             // ---- INSERT ----
             $stmt = $this->db->prepare(
                 'INSERT INTO media_buys
-                     (title, client_id, vendor_id, buyer_id, status, notes, created_at, updated_at)
+                     (title, client_id, vendor_id, buyer_id, status,
+                      media_type, flight_start, flight_end, market,
+                      notes, internal_notes, created_at, updated_at)
                  VALUES
-                     (:title, :client_id, :vendor_id, :buyer_id, :status, :notes, NOW(), NOW())'
+                     (:title, :client_id, :vendor_id, :buyer_id, :status,
+                      :media_type, :flight_start, :flight_end, :market,
+                      :notes, :internal_notes, NOW(), NOW())'
             );
             $stmt->execute([
-                ':title'     => $title,
-                ':client_id' => $clientId,
-                ':vendor_id' => $vendorId,
-                ':buyer_id'  => $buyerId,
-                ':status'    => $status,
-                ':notes'     => $notes,
+                ':title'          => $title,
+                ':client_id'      => $clientId,
+                ':vendor_id'      => $vendorId,
+                ':buyer_id'       => $buyerId,
+                ':status'         => $status,
+                ':media_type'     => $mediaType,
+                ':flight_start'   => $flightStart ?: null,
+                ':flight_end'     => $flightEnd   ?: null,
+                ':market'         => $market,
+                ':notes'          => $notes,
+                ':internal_notes' => $internalNotes,
             ]);
 
             $newId = $this->lastInsertId();
@@ -195,23 +213,33 @@ class MediaBuyService extends BaseService
         // ---- UPDATE ----
         $stmt = $this->db->prepare(
             'UPDATE media_buys
-                SET title     = :title,
-                    client_id = :client_id,
-                    vendor_id = :vendor_id,
-                    buyer_id  = :buyer_id,
-                    status    = :status,
-                    notes     = :notes,
-                    updated_at = NOW()
+                SET title          = :title,
+                    client_id      = :client_id,
+                    vendor_id      = :vendor_id,
+                    buyer_id       = :buyer_id,
+                    status         = :status,
+                    media_type     = :media_type,
+                    flight_start   = :flight_start,
+                    flight_end     = :flight_end,
+                    market         = :market,
+                    notes          = :notes,
+                    internal_notes = :internal_notes,
+                    updated_at     = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':title'     => $title,
-            ':client_id' => $clientId,
-            ':vendor_id' => $vendorId,
-            ':buyer_id'  => $buyerId,
-            ':status'    => $status,
-            ':notes'     => $notes,
-            ':id'        => $id,
+            ':title'          => $title,
+            ':client_id'      => $clientId,
+            ':vendor_id'      => $vendorId,
+            ':buyer_id'       => $buyerId,
+            ':status'         => $status,
+            ':media_type'     => $mediaType,
+            ':flight_start'   => $flightStart ?: null,
+            ':flight_end'     => $flightEnd   ?: null,
+            ':market'         => $market,
+            ':notes'          => $notes,
+            ':internal_notes' => $internalNotes,
+            ':id'             => $id,
         ]);
 
         if (!empty($items)) {
@@ -333,11 +361,11 @@ class MediaBuyService extends BaseService
         }
 
         return [
-            'drafts'           => $map['draft']            ?? 0,
-            'pending_approval' => $map['pending_approval'] ?? 0,
-            'negotiating'      => $map['negotiating']      ?? 0,
-            'approved'         => $map['approved']         ?? 0,
-            'finalized'        => $map['finalized']        ?? 0,
+            'drafts'                  => $map['draft']                    ?? 0,
+            'pending_client_approval' => $map['pending_client_approval']  ?? 0,
+            'negotiating'             => $map['negotiating']              ?? 0,
+            'client_approved'         => $map['client_approved']          ?? 0,
+            'finalized'               => $map['finalized']                ?? 0,
         ];
     }
 

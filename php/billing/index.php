@@ -13,7 +13,7 @@ $priorityFilter = trim($_GET['priority'] ?? '');
 $page           = max(1, (int) ($_GET['page'] ?? 1));
 $pageSize       = 24; // 3-column card grid works well with multiples of 3
 
-$validStatuses = ['waiting', 'in_progress', 'on_hold', 'completed'];
+$validStatuses = ['pending', 'processing', 'paid', 'disputed', 'cancelled'];
 if ($statusFilter && !in_array($statusFilter, $validStatuses, true)) {
     $statusFilter = '';
 }
@@ -33,17 +33,19 @@ $counts = $billingService->getQueueCounts();
 
 $statusTabs = [
     ''           => 'All',
-    'waiting'    => 'Waiting',
-    'in_progress'=> 'In Progress',
-    'on_hold'    => 'On Hold',
-    'completed'  => 'Completed',
+    'pending'    => 'Pending',
+    'processing' => 'Processing',
+    'paid'       => 'Paid',
+    'disputed'   => 'Disputed',
+    'cancelled'  => 'Cancelled',
 ];
 
 $statusColors = [
-    'waiting'     => 'secondary',
-    'in_progress' => 'primary',
-    'on_hold'     => 'warning',
-    'completed'   => 'success',
+    'pending'    => 'warning',
+    'processing' => 'primary',
+    'paid'       => 'success',
+    'disputed'   => 'danger',
+    'cancelled'  => 'secondary',
 ];
 
 $priorityColors = [
@@ -97,24 +99,24 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Summary strip -->
 <div class="row g-2 mb-3">
     <div class="col-auto">
-        <span class="badge bg-danger fs-6 px-3 py-2">
-            <i class="bi bi-exclamation-triangle me-1"></i>
-            <?= (int)($counts['urgent'] ?? 0) ?> Urgent
-        </span>
-    </div>
-    <div class="col-auto">
         <span class="badge bg-warning text-dark fs-6 px-3 py-2">
-            <?= (int)($counts['high'] ?? 0) ?> High Priority
-        </span>
-    </div>
-    <div class="col-auto">
-        <span class="badge bg-secondary fs-6 px-3 py-2">
-            <?= (int)($counts['waiting'] ?? 0) ?> Waiting
+            <i class="bi bi-hourglass-split me-1"></i>
+            <?= (int)($counts['pending'] ?? 0) ?> Pending
         </span>
     </div>
     <div class="col-auto">
         <span class="badge bg-primary fs-6 px-3 py-2">
-            <?= (int)($counts['in_progress'] ?? 0) ?> In Progress
+            <?= (int)($counts['processing'] ?? 0) ?> Processing
+        </span>
+    </div>
+    <div class="col-auto">
+        <span class="badge bg-success fs-6 px-3 py-2">
+            <?= (int)($counts['paid'] ?? 0) ?> Paid
+        </span>
+    </div>
+    <div class="col-auto">
+        <span class="badge bg-danger fs-6 px-3 py-2">
+            <?= (int)($counts['disputed'] ?? 0) ?> Disputed
         </span>
     </div>
 </div>
@@ -167,13 +169,13 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="row g-3">
         <?php foreach ($bills as $bill):
             $priority     = $bill['priority'] ?? 'normal';
-            $bStatus      = $bill['status']   ?? 'waiting';
+            $bStatus      = $bill['status']   ?? 'pending';
             $badgeClass   = $priorityBadgeClass[$priority]   ?? 'bg-secondary text-white';
             $borderClass  = $priorityBorderClass[$priority]  ?? '';
             $statusColor  = $statusColors[$bStatus]          ?? 'secondary';
             $statusLabel  = ucwords(str_replace('_', ' ', $bStatus));
             $dueDate      = $bill['due_date'] ?? null;
-            $isDueOverdue = $dueDate && strtotime($dueDate) < time() && $bStatus !== 'completed';
+            $isDueOverdue = $dueDate && strtotime($dueDate) < time() && $bStatus !== 'paid';
         ?>
         <div class="col-md-6 col-xl-4">
             <div class="card h-100 shadow-sm border-0 <?= $borderClass ?>">
@@ -219,9 +221,9 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                     </div>
 
-                    <?php if (!empty($bill['assigned_user_name'])): ?>
+                    <?php if (!empty($bill['assigned_to_name'])): ?>
                     <div class="text-muted small mb-2">
-                        <i class="bi bi-person me-1"></i><?= h($bill['assigned_user_name']) ?>
+                        <i class="bi bi-person me-1"></i><?= h($bill['assigned_to_name']) ?>
                     </div>
                     <?php endif; ?>
 

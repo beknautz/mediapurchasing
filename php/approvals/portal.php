@@ -23,11 +23,14 @@ $isExpired   = false;
 if ($token === '') {
     $tokenError = true;
 } else {
-    $approval = $approvalService->getApprovalByToken($token);
+    $lookup = $approvalService->getApprovalByToken($token);
 
-    if (empty($approval)) {
+    if (!$lookup['found']) {
         $tokenError = true;
     } else {
+        $approval = $lookup['approval'];
+        $items    = $lookup['items'];
+
         // Check if already responded
         if (!empty($approval['status']) && $approval['status'] !== 'pending') {
             $alreadyDone = true;
@@ -61,15 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$tokenError && !$alreadyDone && !$
     }
 
     if (empty($formErrors)) {
-        $result = $approvalService->processResponse([
-            'token'        => $token,
-            'status'       => $response,
-            'client_notes' => $clientNotes,
-        ]);
+        $result = $approvalService->processResponse($token, $response, $clientNotes);
 
         if ($result['success'] ?? false) {
             $submitted = true;
-            $approval  = $approvalService->getApprovalByToken($token); // refresh
+            $refreshed = $approvalService->getApprovalByToken($token);
+            $approval  = $refreshed['approval'] ?? $approval;
         } else {
             $formErrors[] = $result['message'] ?? 'Failed to submit your response. Please try again.';
         }
@@ -160,10 +160,10 @@ $responseColors = [
             <span class="badge bg-<?= $doneColor ?> fs-6 px-3 py-2">
                 <?= h($doneLabel) ?>
             </span>
-            <?php if (!empty($approval['client_notes'])): ?>
+            <?php if (!empty($approval['response_notes'])): ?>
             <div class="mt-3 p-3 bg-light rounded text-start">
                 <div class="text-muted small mb-1">Your notes:</div>
-                <div><?= nl2br(h($approval['client_notes'])) ?></div>
+                <div><?= nl2br(h($approval['response_notes'])) ?></div>
             </div>
             <?php endif; ?>
         </div>
@@ -188,10 +188,10 @@ $responseColors = [
             <span class="badge bg-<?= $subColor ?> fs-6 px-3 py-2 mb-3 d-inline-block">
                 <?= h($subLabel) ?>
             </span>
-            <?php if (!empty($approval['client_notes'])): ?>
+            <?php if (!empty($approval['response_notes'])): ?>
             <div class="p-3 bg-light rounded text-start">
                 <div class="text-muted small mb-1">Your notes:</div>
-                <div><?= nl2br(h($approval['client_notes'])) ?></div>
+                <div><?= nl2br(h($approval['response_notes'])) ?></div>
             </div>
             <?php endif; ?>
         </div>

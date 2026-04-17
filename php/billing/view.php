@@ -26,9 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_status' && $isBuyer) {
         $newStatus   = trim($_POST['new_status']   ?? '');
         $statusNotes = trim($_POST['status_notes'] ?? '');
-        $validStatuses = ['waiting', 'in_progress', 'on_hold', 'completed'];
+        $validStatuses = ['pending', 'processing', 'paid', 'disputed', 'cancelled'];
         if (in_array($newStatus, $validStatuses, true)) {
-            $billingService->updateStatus($id, $newStatus, $statusNotes);
+            $billingService->updateBillStatus($id, $newStatus, $statusNotes);
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Status updated.'];
         } else {
             $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Invalid status.'];
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'assign' && $isAdmin) {
         $assignedUserId = (int) ($_POST['assigned_user_id'] ?? 0);
-        $billingService->assign($id, $assignedUserId);
+        $billingService->assignBill($id, $assignedUserId);
         $_SESSION['flash'] = ['type' => 'success', 'message' => 'Invoice assigned.'];
         redirect('/billing/view.php?id=' . $id);
     }
@@ -65,21 +65,23 @@ if ($isAdmin) {
         } catch (PDOException $e) { return null; }
     })();
     if ($pdo) {
-        $users = $pdo->query("SELECT id, CONCAT(first_name,' ',last_name) AS name FROM users WHERE active = 1 ORDER BY first_name")->fetchAll();
+        $users = $pdo->query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")->fetchAll();
     }
 }
 
 $statusColors = [
-    'waiting'     => 'secondary',
-    'in_progress' => 'primary',
-    'on_hold'     => 'warning',
-    'completed'   => 'success',
+    'pending'    => 'warning',
+    'processing' => 'primary',
+    'paid'       => 'success',
+    'disputed'   => 'danger',
+    'cancelled'  => 'secondary',
 ];
 $statusLabels = [
-    'waiting'     => 'Waiting',
-    'in_progress' => 'In Progress',
-    'on_hold'     => 'On Hold',
-    'completed'   => 'Completed',
+    'pending'    => 'Pending',
+    'processing' => 'Processing',
+    'paid'       => 'Paid',
+    'disputed'   => 'Disputed',
+    'cancelled'  => 'Cancelled',
 ];
 
 $priorityBadgeClass = [
@@ -89,14 +91,14 @@ $priorityBadgeClass = [
     'low'    => 'bg-secondary text-white',
 ];
 
-$bStatus    = $bill['status']   ?? 'waiting';
+$bStatus    = $bill['status']   ?? 'pending';
 $priority   = $bill['priority'] ?? 'normal';
 $statusColor= $statusColors[$bStatus] ?? 'secondary';
 $statusLabel= $statusLabels[$bStatus] ?? ucfirst($bStatus);
 $priBadge   = $priorityBadgeClass[$priority] ?? 'bg-secondary text-white';
 
 $dueDate    = $bill['due_date'] ?? null;
-$isOverdue  = $dueDate && strtotime($dueDate) < time() && $bStatus !== 'completed';
+$isOverdue  = $dueDate && strtotime($dueDate) < time() && $bStatus !== 'paid';
 
 $pageTitle = 'Invoice #' . h($bill['invoice_number'] ?? $id);
 require_once __DIR__ . '/../includes/header.php';
@@ -184,7 +186,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="col-sm-6">
                         <div class="text-muted small">Assigned To</div>
-                        <div class="fw-semibold"><?= h($bill['assigned_user_name'] ?? '—') ?></div>
+                        <div class="fw-semibold"><?= h($bill['assigned_to_name'] ?? '—') ?></div>
                     </div>
                     <?php if (!empty($bill['media_buy_id'])): ?>
                     <div class="col-sm-12">
@@ -291,7 +293,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <option value="">— Unassigned —</option>
                             <?php foreach ($users as $u): ?>
                                 <option value="<?= (int)$u['id'] ?>"
-                                    <?= (int)($bill['assigned_user_id'] ?? 0) === (int)$u['id'] ? 'selected' : '' ?>>
+                                    <?= (int)($bill['assigned_to'] ?? 0) === (int)$u['id'] ? 'selected' : '' ?>>
                                     <?= h($u['name']) ?>
                                 </option>
                             <?php endforeach; ?>

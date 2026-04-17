@@ -48,10 +48,10 @@ $vendors = [];
 $buyers  = [];
 
 if ($pdo) {
-    $clients = $pdo->query("SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name")->fetchAll();
-    $vendors = $pdo->query("SELECT id, company_name FROM vendors WHERE active = 1 ORDER BY company_name")->fetchAll();
+    $clients = $pdo->query("SELECT id, company_name FROM clients WHERE is_active = 1 ORDER BY company_name")->fetchAll();
+    $vendors = $pdo->query("SELECT id, company_name FROM vendors WHERE is_active = 1 ORDER BY company_name")->fetchAll();
     if ($isAdmin) {
-        $buyers = $pdo->query("SELECT id, CONCAT(first_name,' ',last_name) AS name FROM users WHERE role IN ('admin','buyer') AND active = 1 ORDER BY first_name")->fetchAll();
+        $buyers = $pdo->query("SELECT id, name FROM users WHERE role IN ('admin','buyer') AND is_active = 1 ORDER BY name")->fetchAll();
     }
 }
 
