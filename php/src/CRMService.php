@@ -92,6 +92,7 @@ class CRMService extends BaseService
         $state       = trim($data['state']           ?? '');
         $zip         = trim($data['zip']             ?? '');
         $country     = trim($data['country']         ?? '');
+        $notes       = trim($data['notes']            ?? '');
         $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -102,10 +103,10 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO clients
                      (company_name, contact_name, email, phone,
-                      address, city, state, zip, country, is_active, created_at, updated_at)
+                      address, city, state, zip, country, notes, is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :city, :state, :zip, :country, :is_active, NOW(), NOW())'
+                      :address, :city, :state, :zip, :country, :notes, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name' => $companyName,
@@ -117,6 +118,7 @@ class CRMService extends BaseService
                 ':state'        => $state,
                 ':zip'          => $zip,
                 ':country'      => $country,
+                ':notes'        => $notes,
                 ':is_active'    => $isActive,
             ]);
 
@@ -137,6 +139,7 @@ class CRMService extends BaseService
                     state        = :state,
                     zip          = :zip,
                     country      = :country,
+                    notes        = :notes,
                     is_active    = :is_active,
                     updated_at   = NOW()
               WHERE id = :id'
@@ -151,6 +154,7 @@ class CRMService extends BaseService
             ':state'        => $state,
             ':zip'          => $zip,
             ':country'      => $country,
+            ':notes'        => $notes,
             ':is_active'    => $isActive,
             ':id'           => $id,
         ]);
