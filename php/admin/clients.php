@@ -122,7 +122,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 </td>
                                 <td><?= h($client['phone'] ?? '—') ?></td>
                                 <td class="text-muted small" style="max-width:200px;">
-                                    <?= !empty($client['notes'] ?? null) ? h(mb_strimwidth($client['notes'], 0, 60, '…')) : '—' ?>
+                                    <?= !empty($client['notes'] ?? '') ? h(mb_strimwidth($client['notes'] ?? '', 0, 60, '…')) : '—' ?>
                                 </td>
                                 <td class="text-end">
                                     <button type="button" class="btn btn-sm btn-outline-secondary"
