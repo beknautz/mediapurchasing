@@ -21,7 +21,7 @@ class CRMService extends BaseService
     {
         $sql    = 'SELECT id, company_name, contact_name,
                           email, phone, address, city, state, zip, country,
-                          is_active, created_at, updated_at
+                          notes, is_active, created_at, updated_at
                      FROM clients';
         $params = [];
 

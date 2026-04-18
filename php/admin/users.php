@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 }
 
-$users = $authService->getUsers();
+$users = $authService->getUsers()['data'] ?? [];
 
 $pageTitle = 'User Management — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
