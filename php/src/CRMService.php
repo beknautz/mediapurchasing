@@ -20,8 +20,8 @@ class CRMService extends BaseService
     public function getClients(string $search = ''): array
     {
         $sql    = 'SELECT id, company_name, contact_name,
-                          email, phone, address, city, state, zip, country,
-                          notes, is_active, created_at, updated_at
+                          email, phone, address, notes, is_active,
+                          created_at, updated_at
                      FROM clients';
         $params = [];
 
@@ -88,10 +88,6 @@ class CRMService extends BaseService
         $email       = trim(strtolower($data['email'] ?? ''));
         $phone       = trim($data['phone']           ?? '');
         $address     = trim($data['address']         ?? '');
-        $city        = trim($data['city']            ?? '');
-        $state       = trim($data['state']           ?? '');
-        $zip         = trim($data['zip']             ?? '');
-        $country     = trim($data['country']         ?? '');
         $notes       = trim($data['notes']            ?? '');
         $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
@@ -103,10 +99,10 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO clients
                      (company_name, contact_name, email, phone,
-                      address, city, state, zip, country, notes, is_active, created_at, updated_at)
+                      address, notes, is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :city, :state, :zip, :country, :notes, :is_active, NOW(), NOW())'
+                      :address, :notes, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name' => $companyName,
@@ -114,10 +110,6 @@ class CRMService extends BaseService
                 ':email'        => $email,
                 ':phone'        => $phone,
                 ':address'      => $address,
-                ':city'         => $city,
-                ':state'        => $state,
-                ':zip'          => $zip,
-                ':country'      => $country,
                 ':notes'        => $notes,
                 ':is_active'    => $isActive,
             ]);
@@ -135,10 +127,6 @@ class CRMService extends BaseService
                     email        = :email,
                     phone        = :phone,
                     address      = :address,
-                    city         = :city,
-                    state        = :state,
-                    zip          = :zip,
-                    country      = :country,
                     notes        = :notes,
                     is_active    = :is_active,
                     updated_at   = NOW()
@@ -150,10 +138,6 @@ class CRMService extends BaseService
             ':email'        => $email,
             ':phone'        => $phone,
             ':address'      => $address,
-            ':city'         => $city,
-            ':state'        => $state,
-            ':zip'          => $zip,
-            ':country'      => $country,
             ':notes'        => $notes,
             ':is_active'    => $isActive,
             ':id'           => $id,
@@ -177,8 +161,8 @@ class CRMService extends BaseService
     public function getVendors(string $search = ''): array
     {
         $sql    = 'SELECT id, company_name, contact_name,
-                          email, phone, address, city, state, zip, country,
-                          is_active, created_at, updated_at
+                          email, phone, address, is_active,
+                          created_at, updated_at
                      FROM vendors';
         $params = [];
 
@@ -243,10 +227,6 @@ class CRMService extends BaseService
         $email       = trim(strtolower($data['email'] ?? ''));
         $phone       = trim($data['phone']           ?? '');
         $address     = trim($data['address']         ?? '');
-        $city        = trim($data['city']            ?? '');
-        $state       = trim($data['state']           ?? '');
-        $zip         = trim($data['zip']             ?? '');
-        $country     = trim($data['country']         ?? '');
         $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -257,10 +237,10 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO vendors
                      (company_name, contact_name, email, phone,
-                      address, city, state, zip, country, is_active, created_at, updated_at)
+                      address, is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :city, :state, :zip, :country, :is_active, NOW(), NOW())'
+                      :address, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name' => $companyName,
@@ -268,10 +248,6 @@ class CRMService extends BaseService
                 ':email'        => $email,
                 ':phone'        => $phone,
                 ':address'      => $address,
-                ':city'         => $city,
-                ':state'        => $state,
-                ':zip'          => $zip,
-                ':country'      => $country,
                 ':is_active'    => $isActive,
             ]);
 
@@ -288,10 +264,6 @@ class CRMService extends BaseService
                     email        = :email,
                     phone        = :phone,
                     address      = :address,
-                    city         = :city,
-                    state        = :state,
-                    zip          = :zip,
-                    country      = :country,
                     is_active    = :is_active,
                     updated_at   = NOW()
               WHERE id = :id'
@@ -302,10 +274,6 @@ class CRMService extends BaseService
             ':email'        => $email,
             ':phone'        => $phone,
             ':address'      => $address,
-            ':city'         => $city,
-            ':state'        => $state,
-            ':zip'          => $zip,
-            ':country'      => $country,
             ':is_active'    => $isActive,
             ':id'           => $id,
         ]);
