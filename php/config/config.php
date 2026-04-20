@@ -7,31 +7,31 @@
 // ---------------------------------------------------------------------------
 // Database constants
 // ---------------------------------------------------------------------------
-define('DB_HOST',    $_ENV['DB_HOST']    ?? 'mysql2-p2.ezhostingserver.com');
-define('DB_NAME',    $_ENV['DB_NAME']    ?? 'mediapurchasing');
-define('DB_USER',    $_ENV['DB_USER']    ?? 'mediapurchasing');
-define('DB_PASS',    $_ENV['DB_PASS']    ?? 'Access$1');
-define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
+defined('DB_HOST')    || define('DB_HOST',    $_ENV['DB_HOST']    ?? 'mysql2-p2.ezhostingserver.com');
+defined('DB_NAME')    || define('DB_NAME',    $_ENV['DB_NAME']    ?? 'mediapurchasing');
+defined('DB_USER')    || define('DB_USER',    $_ENV['DB_USER']    ?? 'mediapurchasing');
+defined('DB_PASS')    || define('DB_PASS',    $_ENV['DB_PASS']    ?? 'Access$1');
+defined('DB_CHARSET') || define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
 
 // ---------------------------------------------------------------------------
 // SMTP (outbound mail for transactional/system emails)
 // ---------------------------------------------------------------------------
-define('SMTP_HOST',      $_ENV['SMTP_HOST']      ?? 'mail10.ezhostingserver.com');
-define('SMTP_PORT',      (int) ($_ENV['SMTP_PORT'] ?? 587));
-define('SMTP_USER',      $_ENV['SMTP_USER']      ?? 'noreply@enigmamarketing.com');
-define('SMTP_PASS',      $_ENV['SMTP_PASS']      ?? 'Access$1');
-define('SMTP_FROM',      $_ENV['SMTP_FROM']      ?? 'noreply@enigmamarketing.com');
-define('SMTP_FROM_NAME', $_ENV['SMTP_FROM_NAME'] ?? 'MediaBuy Platform');
+defined('SMTP_HOST')      || define('SMTP_HOST',      $_ENV['SMTP_HOST']      ?? 'mail10.ezhostingserver.com');
+defined('SMTP_PORT')      || define('SMTP_PORT',      (int) ($_ENV['SMTP_PORT'] ?? 587));
+defined('SMTP_USER')      || define('SMTP_USER',      $_ENV['SMTP_USER']      ?? 'noreply@enigmamarketing.com');
+defined('SMTP_PASS')      || define('SMTP_PASS',      $_ENV['SMTP_PASS']      ?? 'Access$1');
+defined('SMTP_FROM')      || define('SMTP_FROM',      $_ENV['SMTP_FROM']      ?? 'noreply@enigmamarketing.com');
+defined('SMTP_FROM_NAME') || define('SMTP_FROM_NAME', $_ENV['SMTP_FROM_NAME'] ?? 'MediaBuy Platform');
 
 // ---------------------------------------------------------------------------
 // Application constants
 // ---------------------------------------------------------------------------
-define('APP_NAME',    'Media Buying Platform');
-define('APP_VERSION', '1.0.0');
+defined('APP_NAME')    || define('APP_NAME',    'Media Buying Platform');
+defined('APP_VERSION') || define('APP_VERSION', '1.0.0');
 
-define('PAGE_SIZE',      25);
-define('MAX_UPLOAD_MB',  20);
-define('ALLOWED_EXTS',   serialize(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg', 'gif']));
+defined('PAGE_SIZE')    || define('PAGE_SIZE',    25);
+defined('MAX_UPLOAD_MB')|| define('MAX_UPLOAD_MB', 20);
+defined('ALLOWED_EXTS') || define('ALLOWED_EXTS', serialize(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg', 'gif']));
 
 // ---------------------------------------------------------------------------
 // Load workflow settings from DB into $GLOBALS['appSettings']
