@@ -42,7 +42,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'media_buy_request_vendor',
                 $buy['vendor_email'] ?? '',
                 $buy['vendor_name']  ?? '',
-                ['title' => $buy['title'] ?? '', 'media_buy_id' => $id],
+                [
+                    'buy_title'      => $buy['title']       ?? '',
+                    'vendor_contact' => $buy['vendor_name']  ?? '',
+                    'media_type'     => $buy['media_type']   ?? '',
+                    'flight_start'   => $buy['flight_start'] ?? '',
+                    'flight_end'     => $buy['flight_end']   ?? '',
+                    'market'         => $buy['market']       ?? '',
+                    'original_cost'  => number_format((float)($buy['original_cost'] ?? 0), 2),
+                    'description'    => $buy['description']  ?? '',
+                    'buyer_name'     => $buy['buyer_name']   ?? '',
+                    'agency_name'    => APP_NAME,
+                ],
                 $id
             );
             $mediaBuyService->updateStatus($id, 'sent_to_vendor');
@@ -52,11 +63,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'request_approval':
             $approvalResult = $approvalService->createApproval($id, (int)($buy['client_id'] ?? 0));
             if (!empty($approvalResult['id'])) {
+                $approvalLink = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+                              . '://' . $_SERVER['HTTP_HOST']
+                              . '/approvals/portal.php?token=' . urlencode($approvalResult['token'] ?? '');
                 $emailService->sendTemplate(
                     'client_approval_request',
                     $buy['client_email'] ?? '',
                     $buy['client_name']  ?? '',
-                    ['title' => $buy['title'] ?? '', 'token' => $approvalResult['token'] ?? ''],
+                    [
+                        'buy_title'      => $buy['title']       ?? '',
+                        'client_contact' => $buy['client_name']  ?? '',
+                        'vendor_name'    => $buy['vendor_name']  ?? '',
+                        'media_type'     => $buy['media_type']   ?? '',
+                        'flight_start'   => $buy['flight_start'] ?? '',
+                        'flight_end'     => $buy['flight_end']   ?? '',
+                        'total_cost'     => number_format((float)($buy['total_cost'] ?? $buy['original_cost'] ?? 0), 2),
+                        'approval_link'  => $approvalLink,
+                        'expires_at'     => $approvalResult['expiresAt'] ?? '',
+                    ],
                     $id,
                     $approvalResult['id']
                 );
@@ -81,10 +105,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'negotiation_counter',
                 $buy['vendor_email'] ?? '',
                 $buy['vendor_name']  ?? '',
-                ['title' => $buy['title'] ?? '', 'proposed_cost' => $proposedCost, 'notes' => $negNotes],
+                [
+                    'buy_title'      => $buy['title']      ?? '',
+                    'vendor_contact' => $buy['vendor_name'] ?? '',
+                    'vendor_rate'    => number_format((float)($buy['total_cost'] ?? $buy['original_cost'] ?? 0), 2),
+                    'proposed_rate'  => number_format($proposedCost, 2),
+                    'buyer_notes'    => $negNotes,
+                    'buyer_name'     => $buy['buyer_name']  ?? '',
+                ],
                 $id
             );
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Counter-offer submitted.'];
+            redirect('/media-buys/view.php?id=' . $id);
+
+        case 'resend_vendor_email':
+            $emailService->sendTemplate(
+                'media_buy_request_vendor',
+                $buy['vendor_email'] ?? '',
+                $buy['vendor_name']  ?? '',
+                [
+                    'buy_title'      => $buy['title']       ?? '',
+                    'vendor_contact' => $buy['vendor_name']  ?? '',
+                    'media_type'     => $buy['media_type']   ?? '',
+                    'flight_start'   => $buy['flight_start'] ?? '',
+                    'flight_end'     => $buy['flight_end']   ?? '',
+                    'market'         => $buy['market']       ?? '',
+                    'original_cost'  => number_format((float)($buy['original_cost'] ?? 0), 2),
+                    'description'    => $buy['description']  ?? '',
+                    'buyer_name'     => $buy['buyer_name']   ?? '',
+                    'agency_name'    => APP_NAME,
+                ],
+                $id
+            );
+            $_SESSION['flash'] = ['type' => 'success', 'message' => 'Vendor email resent.'];
             redirect('/media-buys/view.php?id=' . $id);
 
         case 'finalize':
@@ -424,6 +477,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="action" value="send_to_vendor">
                     <button type="submit" class="btn btn-info w-100">
                         <i class="bi bi-send me-1"></i>Send to Vendor
+                    </button>
+                </form>
+                <?php endif; ?>
+
+                <?php if ($currentStatus !== 'draft' && !empty($buy['vendor_email']) && ($isAdmin || $isOwner)): ?>
+                <form method="POST" onsubmit="return confirm('Resend the vendor request email?')">
+                    <input type="hidden" name="action" value="resend_vendor_email">
+                    <button type="submit" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-arrow-repeat me-1"></i>Resend Vendor Email
                     </button>
                 </form>
                 <?php endif; ?>

@@ -25,8 +25,8 @@ class EmailService extends BaseService
         int    $billId       = 0
     ): array {
         $apiKey    = $this->getSetting('sendgrid_api_key', '');
-        $fromEmail = $fromEmail !== '' ? $fromEmail : $this->getSetting('from_email', 'noreply@example.com');
-        $fromName  = $fromName  !== '' ? $fromName  : $this->getSetting('from_name',  'Media Buying Platform');
+        $fromEmail = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
+        $fromName  = $fromName  !== '' ? $fromName  : $this->getSetting('sendgrid_from_name',  'Media Buying Platform');
         $bodyText  = $bodyText  !== '' ? $bodyText  : $this->stripTags($bodyHtml);
 
         $payload = [
