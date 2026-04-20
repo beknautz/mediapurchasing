@@ -24,10 +24,11 @@ class EmailService extends BaseService
         int    $approvalId   = 0,
         int    $billId       = 0
     ): array {
-        $apiKey    = $this->getSetting('sendgrid_api_key', '');
-        $fromEmail = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
-        $fromName  = $fromName  !== '' ? $fromName  : $this->getSetting('sendgrid_from_name',  'Media Buying Platform');
-        $bodyText  = $bodyText  !== '' ? $bodyText  : $this->stripTags($bodyHtml);
+        $apiKey      = $this->getSetting('sendgrid_api_key', '');
+        $fromEmail   = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
+        $fromName    = $fromName  !== '' ? $fromName  : $this->getSetting('sendgrid_from_name',  'Media Buying Platform');
+        $bodyText    = $bodyText  !== '' ? $bodyText  : $this->stripTags($bodyHtml);
+        $inboundDomain = $this->getSetting('inbound_email_domain', '');
 
         $payload = [
             'personalizations' => [
@@ -42,6 +43,10 @@ class EmailService extends BaseService
                 ['type' => 'text/html',  'value' => $bodyHtml],
             ],
         ];
+
+        if ($inboundDomain !== '') {
+            $payload['reply_to'] = ['email' => 'reply@' . $inboundDomain, 'name' => $fromName];
+        }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
