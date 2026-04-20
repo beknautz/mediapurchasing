@@ -39,8 +39,8 @@ HTML;
             $bodyText = "Hi,\n\nReset your {$appName} password by visiting:\n{$resetUrl}\n\n"
                       . "This link expires in 1 hour. If you did not request this, ignore this email.\n";
 
-            $mailer = new SmtpMailer();
-            $mailer->send($email, '', "Reset your {$appName} password", $bodyHtml, $bodyText);
+            $emailService = new EmailService();
+            $emailService->send($email, '', "Reset your {$appName} password", $bodyHtml, $bodyText);
         }
 
         $submitted = true;
