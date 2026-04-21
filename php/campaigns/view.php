@@ -281,7 +281,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php foreach ($channels as $ch): ?>
                         <?php
                             $chStatusInfo = $channelStatuses[$ch['status']] ?? ['label' => $ch['status'], 'class' => 'secondary'];
-                            $canRfp = $ch['status'] === 'pending' && !empty($ch['vendor_email']);
+                            $canRfp    = $ch['status'] === 'pending' && !empty($ch['vendor_email']);
+                            $canResend = $ch['status'] !== 'pending' && !empty($ch['vendor_email']);
                             $canDelete = $ch['status'] === 'pending';
                         ?>
                         <tr>
@@ -320,17 +321,17 @@ require_once __DIR__ . '/../includes/header.php';
                                           onsubmit="return confirm('Send RFP to <?= h(addslashes($ch['vendor_name'] ?? 'vendor')) ?>?')">
                                         <input type="hidden" name="action"     value="send_rfp">
                                         <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
-                                        <button type="submit" class="btn btn-info btn-sm text-dark" title="Send RFP">
-                                            <i class="bi bi-send"></i>
+                                        <button type="submit" class="btn btn-info btn-sm text-dark">
+                                            <i class="bi bi-send me-1"></i>Send RFP
                                         </button>
                                     </form>
-                                    <?php elseif ($ch['status'] === 'rfp_sent'): ?>
+                                    <?php elseif ($canResend): ?>
                                     <form method="post" class="d-inline"
                                           onsubmit="return confirm('Resend RFP to <?= h(addslashes($ch['vendor_name'] ?? 'vendor')) ?>?')">
                                         <input type="hidden" name="action"     value="send_rfp">
                                         <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
-                                        <button type="submit" class="btn btn-outline-info btn-sm" title="Resend RFP">
-                                            <i class="bi bi-arrow-clockwise"></i>
+                                        <button type="submit" class="btn btn-outline-info btn-sm">
+                                            <i class="bi bi-arrow-clockwise me-1"></i>Resend RFP
                                         </button>
                                     </form>
                                     <?php endif; ?>
