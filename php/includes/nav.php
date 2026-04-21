@@ -30,7 +30,13 @@ function navActive(string $path): string {
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link <?= navActive('/media_buys') ?>" href="/media_buys/index.php">
+                    <a class="nav-link <?= navActive('/campaigns') ?>" href="/campaigns/index.php">
+                        <i class="bi bi-collection-play-fill me-1"></i>Campaigns
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/media-buys') ?>" href="/media-buys/index.php">
                         <i class="bi bi-collection-play me-1"></i>Media Buys
                     </a>
                 </li>

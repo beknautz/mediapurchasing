@@ -22,7 +22,9 @@ class EmailService extends BaseService
         string $fromName     = '',
         int    $mediaBuyId   = 0,
         int    $approvalId   = 0,
-        int    $billId       = 0
+        int    $billId       = 0,
+        int    $campaignId   = 0,
+        int    $channelId    = 0
     ): array {
         $apiKey      = $this->getSetting('sendgrid_api_key', '');
         $fromEmail   = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
@@ -45,7 +47,13 @@ class EmailService extends BaseService
         ];
 
         if ($inboundDomain !== '') {
-            $tag = $mediaBuyId > 0 ? 'reply+mb' . $mediaBuyId : 'reply';
+            if ($channelId > 0) {
+                $tag = 'reply+cc' . $channelId;
+            } elseif ($mediaBuyId > 0) {
+                $tag = 'reply+mb' . $mediaBuyId;
+            } else {
+                $tag = 'reply';
+            }
             $payload['reply_to'] = ['email' => $tag . '@' . $inboundDomain, 'name' => $fromName];
         }
 
@@ -89,7 +97,9 @@ class EmailService extends BaseService
             $message,
             $mediaBuyId,
             $approvalId,
-            $billId
+            $billId,
+            $campaignId,
+            $channelId
         );
 
         return ['success' => $success, 'message' => $message, 'logId' => $logId];
@@ -144,7 +154,7 @@ class EmailService extends BaseService
     // Handles SendGrid Inbound Parse webhook POST data. Logs the message and,
     // when invoice-related keywords are detected, auto-creates a billing record.
     //
-    // Returns: ['success'=>bool, 'action'=>string, 'billId'=>int]
+    // Returns: ['success'=>bool, 'action'=>string, 'billId'=>int, 'logId'=>int]
     // -----------------------------------------------------------------------
     public function processInbound(array $postData): array
     {
@@ -154,9 +164,22 @@ class EmailService extends BaseService
         $bodyText = $postData['text']    ?? '';
         $bodyHtml = $postData['html']    ?? '';
 
-        // Parse media buy ID from tagged reply-to address: reply+mb{N}@domain
+        // Parse IDs from tagged reply-to addresses
         $mediaBuyId = 0;
-        if (preg_match('/reply\+mb(\d+)@/i', $to, $m)) {
+        $campaignId = 0;
+        $channelId  = 0;
+
+        if (preg_match('/reply\+cc(\d+)@/i', $to, $m)) {
+            // Campaign channel reply: reply+cc{channelId}@domain
+            $channelId = (int) $m[1];
+            $chRow = $this->db->prepare('SELECT campaign_id FROM campaign_channels WHERE id = :id LIMIT 1');
+            $chRow->execute([':id' => $channelId]);
+            $chData = $chRow->fetch(PDO::FETCH_ASSOC);
+            if ($chData) {
+                $campaignId = (int) $chData['campaign_id'];
+            }
+        } elseif (preg_match('/reply\+mb(\d+)@/i', $to, $m)) {
+            // Legacy media buy reply: reply+mb{mediaBuyId}@domain
             $mediaBuyId = (int) $m[1];
         }
 
@@ -174,7 +197,9 @@ class EmailService extends BaseService
             '',
             $mediaBuyId,
             0,
-            0
+            0,
+            $campaignId,
+            $channelId
         );
 
         // Save attachments from SendGrid Inbound Parse ($_FILES keys: attachment1, attachment2, …)
@@ -217,6 +242,29 @@ class EmailService extends BaseService
             $this->db->prepare(
                 'UPDATE communication_logs SET attachments = :a WHERE id = :id'
             )->execute([':a' => json_encode($savedFiles), ':id' => $logId]);
+        }
+
+        // Update campaign channel status when a reply is received
+        if ($channelId > 0) {
+            $this->db->prepare(
+                "UPDATE campaign_channels
+                    SET status = 'response_received', updated_at = NOW()
+                  WHERE id = :id AND status = 'rfp_sent'"
+            )->execute([':id' => $channelId]);
+
+            // If all channels for the campaign have responded, update campaign status
+            $pendingStmt = $this->db->prepare(
+                "SELECT COUNT(*) FROM campaign_channels
+                  WHERE campaign_id = :cid
+                    AND status = 'rfp_sent'"
+            );
+            $pendingStmt->execute([':cid' => $campaignId]);
+            if ((int) $pendingStmt->fetchColumn() === 0) {
+                $this->db->prepare(
+                    "UPDATE campaigns SET status = 'responses_in', updated_at = NOW()
+                      WHERE id = :id AND status = 'rfp_sent'"
+                )->execute([':id' => $campaignId]);
+            }
         }
 
         // Check for invoice keywords to auto-create a billing record
@@ -269,11 +317,10 @@ class EmailService extends BaseService
     //
     // $type      — 'email' | 'sms' | '' (all)
     // $direction — 'inbound' | 'outbound' | '' (all)
-    // $mediaBuyId, $approvalId, $billId — entity ID filters (0 = no filter)
+    // $mediaBuyId, $approvalId, $billId, $campaignId, $channelId — entity filters
     // $page, $pageSize — pagination
     //
     // Returns: ['data'=>[], 'total'=>int, 'page'=>int, 'pages'=>int]
-    // Each row includes virtual 'type' and 'direction' columns.
     // -----------------------------------------------------------------------
     public function getHistory(
         string $type       = '',
@@ -282,7 +329,9 @@ class EmailService extends BaseService
         int    $approvalId = 0,
         int    $billId     = 0,
         int    $page       = 1,
-        int    $pageSize   = PAGE_SIZE
+        int    $pageSize   = PAGE_SIZE,
+        int    $campaignId = 0,
+        int    $channelId  = 0
     ): array {
         $sql = 'SELECT *,
                        CASE WHEN comm_type = \'email_inbound\' THEN \'email\' ELSE comm_type END AS type,
@@ -314,6 +363,14 @@ class EmailService extends BaseService
         if ($billId > 0) {
             $sql                 .= ' AND bill_id = :bill_id';
             $params[':bill_id']  = $billId;
+        }
+        if ($campaignId > 0) {
+            $sql                   .= ' AND campaign_id = :campaign_id';
+            $params[':campaign_id'] = $campaignId;
+        }
+        if ($channelId > 0) {
+            $sql                  .= ' AND channel_id = :channel_id';
+            $params[':channel_id'] = $channelId;
         }
 
         $sql .= ' ORDER BY created_at DESC';
@@ -395,7 +452,9 @@ class EmailService extends BaseService
         string $errorMessage,
         int    $mediaBuyId,
         int    $approvalId,
-        int    $billId
+        int    $billId,
+        int    $campaignId  = 0,
+        int    $channelId   = 0
     ): int {
         $userId = (int) ($_SESSION['user']['id'] ?? 0);
 
@@ -403,11 +462,11 @@ class EmailService extends BaseService
             'INSERT INTO communication_logs
                  (comm_type, to_email, to_name, from_email, from_name, subject,
                   body_html, body_text, status, error_message,
-                  media_buy_id, approval_id, bill_id, sent_by, created_at)
+                  media_buy_id, approval_id, bill_id, campaign_id, channel_id, sent_by, created_at)
              VALUES
                  (:comm_type, :to_email, :to_name, :from_email, :from_name, :subject,
                   :body_html, :body_text, :status, :error_message,
-                  :media_buy_id, :approval_id, :bill_id, :sent_by, NOW())'
+                  :media_buy_id, :approval_id, :bill_id, :campaign_id, :channel_id, :sent_by, NOW())'
         );
         $stmt->execute([
             ':comm_type'     => $commType,
@@ -423,6 +482,8 @@ class EmailService extends BaseService
             ':media_buy_id'  => $mediaBuyId  > 0 ? $mediaBuyId  : null,
             ':approval_id'   => $approvalId  > 0 ? $approvalId  : null,
             ':bill_id'       => $billId      > 0 ? $billId      : null,
+            ':campaign_id'   => $campaignId  > 0 ? $campaignId  : null,
+            ':channel_id'    => $channelId   > 0 ? $channelId   : null,
             ':sent_by'       => $userId      > 0 ? $userId      : null,
         ]);
 

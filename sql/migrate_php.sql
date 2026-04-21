@@ -155,3 +155,57 @@ ALTER TABLE communication_logs
 -- ============================================================
 ALTER TABLE vendors
     ADD COLUMN IF NOT EXISTS media_category VARCHAR(100) NULL AFTER media_types;
+
+-- ============================================================
+-- 13. campaigns — top-level campaign entity
+-- ============================================================
+CREATE TABLE IF NOT EXISTS campaigns (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title        VARCHAR(255)  NOT NULL,
+    client_id    INT UNSIGNED  NULL,
+    language     ENUM('english','spanish','both') NOT NULL DEFAULT 'both',
+    status       ENUM('draft','rfp_sent','responses_in','proposal_ready','sent_to_client','approved','active','completed','cancelled') NOT NULL DEFAULT 'draft',
+    total_budget DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    flight_start DATE          NULL,
+    flight_end   DATE          NULL,
+    market       VARCHAR(100)  NULL,
+    notes        TEXT          NULL,
+    created_by   INT UNSIGNED  NULL,
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id)  REFERENCES clients(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id)   ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 14. campaign_channels — one row per vendor/media channel in a campaign
+-- ============================================================
+CREATE TABLE IF NOT EXISTS campaign_channels (
+    id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    campaign_id      INT UNSIGNED  NOT NULL,
+    vendor_id        INT UNSIGNED  NULL,
+    media_category   VARCHAR(100)  NOT NULL,
+    budget_allocated DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    status           ENUM('pending','rfp_sent','response_received','no_response','approved','rejected') NOT NULL DEFAULT 'pending',
+    rfp_sent_at      DATETIME      NULL,
+    rfp_log_id       INT UNSIGNED  NULL,
+    notes            TEXT          NULL,
+    created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (vendor_id)   REFERENCES vendors(id)   ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 15. media_buys — add campaign/channel FK columns
+-- ============================================================
+ALTER TABLE media_buys
+    ADD COLUMN IF NOT EXISTS campaign_id INT UNSIGNED NULL AFTER id,
+    ADD COLUMN IF NOT EXISTS channel_id  INT UNSIGNED NULL AFTER campaign_id;
+
+-- ============================================================
+-- 16. communication_logs — add campaign/channel tracking columns
+-- ============================================================
+ALTER TABLE communication_logs
+    ADD COLUMN IF NOT EXISTS campaign_id INT UNSIGNED NULL AFTER media_buy_id,
+    ADD COLUMN IF NOT EXISTS channel_id  INT UNSIGNED NULL AFTER campaign_id;

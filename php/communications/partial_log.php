@@ -17,16 +17,23 @@ if (empty($_SESSION['loggedIn'])) {
 }
 
 $mediaBuyId = (int) ($_GET['media_buy_id'] ?? 0);
+$campaignId = (int) ($_GET['campaign_id'] ?? 0);
+$channelId  = (int) ($_GET['channel_id']  ?? 0);
 
-if ($mediaBuyId <= 0) {
-    echo '<div class="text-center text-muted py-3 small">No media buy specified.</div>';
+if ($mediaBuyId <= 0 && $campaignId <= 0 && $channelId <= 0) {
+    echo '<div class="text-center text-muted py-3 small">No entity specified.</div>';
     exit;
 }
 
 $emailService = new EmailService();
 
-$result = $emailService->getHistory(mediaBuyId: $mediaBuyId, pageSize: 50);
-$comms  = $result['data'] ?? [];
+$result = $emailService->getHistory(
+    mediaBuyId: $mediaBuyId,
+    pageSize:   50,
+    campaignId: $campaignId,
+    channelId:  $channelId
+);
+$comms = $result['data'] ?? [];
 
 $typeBadges = [
     'email' => ['class' => 'bg-primary', 'icon' => 'envelope'],
@@ -45,12 +52,19 @@ $statusColors = [
     'received'  => 'text-info',
 ];
 
-if (empty($comms)):
+<?php
+$composeLink = '/communications/compose.php?';
+if ($campaignId > 0) {
+    $composeLink .= 'campaign_id=' . $campaignId;
+} elseif ($mediaBuyId > 0) {
+    $composeLink .= 'media_buy_id=' . $mediaBuyId;
+}
 ?>
+<?php if (empty($comms)): ?>
 <div class="text-center text-muted py-4">
     <i class="bi bi-chat-square-dots fs-3 d-block mb-2 opacity-50"></i>
-    <div class="small">No communications logged for this media buy.</div>
-    <a href="/communications/compose.php?media_buy_id=<?= $mediaBuyId ?>" class="btn btn-sm btn-outline-primary mt-2">
+    <div class="small">No communications logged yet.</div>
+    <a href="<?= h($composeLink) ?>" class="btn btn-sm btn-outline-primary mt-2">
         <i class="bi bi-send me-1"></i>Send First Message
     </a>
 </div>
@@ -157,7 +171,12 @@ if (empty($comms)):
 <?php if (($result['total'] ?? 0) > 50): ?>
 <div class="text-center py-2 small text-muted border-top">
     Showing 50 of <?= number_format($result['total']) ?> messages.
-    <a href="/communications/index.php?media_buy_id=<?= $mediaBuyId ?>">View all</a>
+    <?php
+    $viewAllLink = '/communications/index.php?';
+    if ($campaignId > 0)  { $viewAllLink .= 'campaign_id=' . $campaignId; }
+    elseif ($mediaBuyId > 0) { $viewAllLink .= 'media_buy_id=' . $mediaBuyId; }
+    ?>
+    <a href="<?= h($viewAllLink) ?>">View all</a>
 </div>
 <?php endif; ?>
 
