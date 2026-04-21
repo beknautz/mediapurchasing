@@ -45,7 +45,8 @@ class EmailService extends BaseService
         ];
 
         if ($inboundDomain !== '') {
-            $payload['reply_to'] = ['email' => 'reply@' . $inboundDomain, 'name' => $fromName];
+            $tag = $mediaBuyId > 0 ? 'reply+mb' . $mediaBuyId : 'reply';
+            $payload['reply_to'] = ['email' => $tag . '@' . $inboundDomain, 'name' => $fromName];
         }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -153,6 +154,12 @@ class EmailService extends BaseService
         $bodyText = $postData['text']    ?? '';
         $bodyHtml = $postData['html']    ?? '';
 
+        // Parse media buy ID from tagged reply-to address: reply+mb{N}@domain
+        $mediaBuyId = 0;
+        if (preg_match('/reply\+mb(\d+)@/i', $to, $m)) {
+            $mediaBuyId = (int) $m[1];
+        }
+
         // Log the inbound communication
         $logId = $this->logCommunication(
             'email_inbound',
@@ -165,12 +172,54 @@ class EmailService extends BaseService
             $bodyText,
             'received',
             '',
-            0,
+            $mediaBuyId,
             0,
             0
         );
 
-        // Check for invoice keywords
+        // Save attachments from SendGrid Inbound Parse ($_FILES keys: attachment1, attachment2, …)
+        $allowedExts  = ['pdf', 'doc', 'docx', 'xls', 'xlsx'];
+        $savedFiles   = [];
+        $attachCount  = (int) ($postData['attachments'] ?? 0);
+
+        for ($i = 1; $i <= max($attachCount, count($_FILES)); $i++) {
+            $key = 'attachment' . $i;
+            if (empty($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) {
+                continue;
+            }
+
+            $origName = basename($_FILES[$key]['name'] ?? '');
+            $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+
+            if (!in_array($ext, $allowedExts, true)) {
+                continue;
+            }
+
+            $dir = __DIR__ . '/../uploads/inbound/' . $logId . '/';
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $origName);
+            $destPath = $dir . $safeName;
+
+            if (move_uploaded_file($_FILES[$key]['tmp_name'], $destPath)) {
+                $savedFiles[] = [
+                    'name' => $origName,
+                    'path' => 'uploads/inbound/' . $logId . '/' . $safeName,
+                    'size' => $_FILES[$key]['size'],
+                    'ext'  => $ext,
+                ];
+            }
+        }
+
+        if (!empty($savedFiles)) {
+            $this->db->prepare(
+                'UPDATE communication_logs SET attachments = :a WHERE id = :id'
+            )->execute([':a' => json_encode($savedFiles), ':id' => $logId]);
+        }
+
+        // Check for invoice keywords to auto-create a billing record
         $invoiceKeywords = ['invoice', 'bill', 'payment due', 'amount due', 'remittance'];
         $combined        = strtolower($subject . ' ' . $bodyText);
         $isInvoice       = false;
@@ -183,38 +232,35 @@ class EmailService extends BaseService
         }
 
         if (!$isInvoice) {
-            return ['success' => true, 'action' => 'logged', 'billId' => 0];
+            return ['success' => true, 'action' => 'logged', 'billId' => 0, 'logId' => $logId];
         }
 
-        // Auto-create a billing record in the queue
-        $vendorEmail = $from;
-
-        // Try to find matching vendor
+        // Auto-create a billing record
         $vendorStmt = $this->db->prepare(
-            'SELECT id, company_name FROM vendors WHERE email = :email LIMIT 1'
+            'SELECT id FROM vendors WHERE email = :email OR billing_email = :email LIMIT 1'
         );
-        $vendorStmt->execute([':email' => $vendorEmail]);
+        $vendorStmt->execute([':email' => $from]);
         $vendor = $vendorStmt->fetch(PDO::FETCH_ASSOC);
 
         $billStmt = $this->db->prepare(
             'INSERT INTO billing_queue
-                 (vendor_id, vendor_email, notes,
+                 (vendor_id, vendor_email, media_buy_id, notes,
                   status, source, created_at, updated_at)
              VALUES
-                 (:vendor_id, :vendor_email, :notes,
+                 (:vendor_id, :vendor_email, :media_buy_id, :notes,
                   "pending", "email_inbound", NOW(), NOW())'
         );
         $billStmt->execute([
             ':vendor_id'    => $vendor['id'] ?? null,
-            ':vendor_email' => $vendorEmail,
+            ':vendor_email' => $from,
+            ':media_buy_id' => $mediaBuyId > 0 ? $mediaBuyId : null,
             ':notes'        => '[Inbound email] Subject: ' . $subject,
         ]);
 
         $billId = $this->lastInsertId();
-
         $this->auditLog('inbound_invoice_detected', 'billing', $billId, "From: {$from} | Subject: {$subject}");
 
-        return ['success' => true, 'action' => 'bill_created', 'billId' => $billId];
+        return ['success' => true, 'action' => 'bill_created', 'billId' => $billId, 'logId' => $logId];
     }
 
     // -----------------------------------------------------------------------

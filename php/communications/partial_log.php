@@ -129,6 +129,25 @@ if (empty($comms)):
                 <?= h($bodyPreview) ?>
             </div>
             <?php endif; ?>
+
+            <!-- Attachments -->
+            <?php
+            $attachments = !empty($comm['attachments']) ? json_decode($comm['attachments'], true) : [];
+            if (!empty($attachments)):
+            ?>
+            <div class="mt-2 d-flex flex-wrap gap-2">
+                <?php foreach ($attachments as $att):
+                    $iconMap = ['pdf'=>'file-earmark-pdf','doc'=>'file-earmark-word','docx'=>'file-earmark-word','xls'=>'file-earmark-excel','xlsx'=>'file-earmark-excel'];
+                    $icon = $iconMap[$att['ext'] ?? ''] ?? 'file-earmark';
+                    $dlUrl = '/api/download_attachment.php?log_id=' . (int)$comm['id'] . '&file=' . urlencode(basename($att['path']));
+                ?>
+                <a href="<?= h($dlUrl) ?>" class="btn btn-sm btn-outline-secondary" download>
+                    <i class="bi bi-<?= h($icon) ?> me-1"></i><?= h($att['name']) ?>
+                    <span class="text-muted ms-1" style="font-size:.7rem;"><?= number_format($att['size'] / 1024, 0) ?>KB</span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

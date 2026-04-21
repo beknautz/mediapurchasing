@@ -143,3 +143,9 @@ CREATE TABLE IF NOT EXISTS password_resets (
     INDEX idx_user  (user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 11. communication_logs — add attachments column for inbound files
+-- ============================================================
+ALTER TABLE communication_logs
+    ADD COLUMN IF NOT EXISTS attachments TEXT NULL AFTER body_text;
