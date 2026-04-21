@@ -19,6 +19,66 @@ class PressReleaseService extends BaseService
     const ALLOWED_EXTS = ['pdf', 'doc', 'docx', 'mp4', 'mov', 'avi', 'wmv', 'mkv'];
 
     // -----------------------------------------------------------------------
+    // Template methods
+    // -----------------------------------------------------------------------
+
+    public function getTemplates(): array
+    {
+        return $this->db->query(
+            'SELECT t.*, u.name AS created_by_name
+               FROM press_release_templates t
+          LEFT JOIN users u ON u.id = t.created_by
+           ORDER BY t.name ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getTemplate(int $id): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM press_release_templates WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute([':id' => $id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function saveTemplate(array $data): int
+    {
+        $userId = (int) ($_SESSION['user']['id'] ?? 0);
+        $id     = (int) ($data['id'] ?? 0);
+
+        if ($id > 0) {
+            $this->db->prepare(
+                'UPDATE press_release_templates
+                    SET name = :name, subject = :subject, body_text = :body_text, updated_at = NOW()
+                  WHERE id = :id'
+            )->execute([
+                ':name'      => $data['name'],
+                ':subject'   => $data['subject'],
+                ':body_text' => $data['body_text'],
+                ':id'        => $id,
+            ]);
+            return $id;
+        }
+
+        $this->db->prepare(
+            'INSERT INTO press_release_templates (name, subject, body_text, created_by, created_at, updated_at)
+             VALUES (:name, :subject, :body_text, :created_by, NOW(), NOW())'
+        )->execute([
+            ':name'       => $data['name'],
+            ':subject'    => $data['subject'],
+            ':body_text'  => $data['body_text'],
+            ':created_by' => $userId ?: null,
+        ]);
+        return (int) $this->db->lastInsertId();
+    }
+
+    public function deleteTemplate(int $id): void
+    {
+        $this->db->prepare('DELETE FROM press_release_templates WHERE id = :id')
+                 ->execute([':id' => $id]);
+    }
+
+    // -----------------------------------------------------------------------
 
     public function getPressReleases(int $page = 1, int $pageSize = 25): array
     {

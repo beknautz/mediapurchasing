@@ -5,8 +5,9 @@ requireRole(['admin', 'buyer']);
 $prService    = new PressReleaseService();
 $emailService = new EmailService();
 
-$errors      = [];
+$errors       = [];
 $vendorGroups = $prService->getVendorsByCategory();
+$templates    = $prService->getTemplates();
 $UPLOAD_DIR   = __DIR__ . '/../uploads/press-releases/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -104,6 +105,9 @@ require_once __DIR__ . '/../includes/header.php';
             </ol>
         </nav>
     </div>
+    <a href="/press-releases/templates.php" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-file-earmark-text me-1"></i>Manage Templates
+    </a>
 </div>
 
 <?php if (!empty($errors)): ?>
@@ -120,6 +124,31 @@ require_once __DIR__ . '/../includes/header.php';
 
     <!-- Left: Compose -->
     <div class="col-lg-7">
+
+        <?php if (!empty($templates)): ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-file-earmark-text me-2 text-primary"></i>Load Template</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-2 align-items-end">
+                    <div class="flex-grow-1">
+                        <label for="templatePicker" class="form-label small fw-semibold mb-1">Choose a boilerplate to pre-fill the message</label>
+                        <select class="form-select" id="templatePicker">
+                            <option value="">— Select a template —</option>
+                            <?php foreach ($templates as $t): ?>
+                            <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary" onclick="loadTemplate()">
+                        <i class="bi bi-arrow-down-circle me-1"></i>Load
+                    </button>
+                </div>
+                <div class="form-text">Loading a template will replace the current subject and body.</div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white py-3">
@@ -234,6 +263,22 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
+const TEMPLATES = <?= json_encode(
+    array_column(
+        array_map(fn($t) => ['id' => (int)$t['id'], 'subject' => $t['subject'], 'body_text' => $t['body_text']], $templates),
+        null, 'id'
+    )
+) ?>;
+
+function loadTemplate() {
+    const id = parseInt(document.getElementById('templatePicker').value, 10);
+    if (!id || !TEMPLATES[id]) return;
+    const t = TEMPLATES[id];
+    document.getElementById('subject').value    = t.subject;
+    document.getElementById('body_text').value  = t.body_text;
+    document.getElementById('subject').focus();
+}
+
 function updateCount() {
     const n = document.querySelectorAll('.vendor-cb:checked').length;
     document.getElementById('selectedCount').textContent = n + ' selected';

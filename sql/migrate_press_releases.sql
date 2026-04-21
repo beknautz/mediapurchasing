@@ -1,4 +1,4 @@
--- Press Releases feature
+-- Press Releases + Templates feature
 -- Run once on the production database
 
 CREATE TABLE IF NOT EXISTS press_releases (
@@ -30,4 +30,15 @@ CREATE TABLE IF NOT EXISTS press_release_recipients (
     INDEX idx_status (status),
     FOREIGN KEY (press_release_id) REFERENCES press_releases(id)  ON DELETE CASCADE,
     FOREIGN KEY (vendor_id)        REFERENCES vendors(id)          ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS press_release_templates (
+    id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(255)  NOT NULL,
+    subject     VARCHAR(500)  NOT NULL,
+    body_text   MEDIUMTEXT,
+    created_by  INT UNSIGNED  NULL,
+    created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

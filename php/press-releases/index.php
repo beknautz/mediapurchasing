@@ -25,9 +25,14 @@ require_once __DIR__ . '/../includes/header.php';
             </ol>
         </nav>
     </div>
-    <a href="/press-releases/compose.php" class="btn btn-primary">
-        <i class="bi bi-send me-1"></i>New Press Release
-    </a>
+    <div class="d-flex gap-2">
+        <a href="/press-releases/templates.php" class="btn btn-outline-secondary">
+            <i class="bi bi-file-earmark-text me-1"></i>Templates
+        </a>
+        <a href="/press-releases/compose.php" class="btn btn-primary">
+            <i class="bi bi-send me-1"></i>New Press Release
+        </a>
+    </div>
 </div>
 
 <?php $flash = flash('success'); if ($flash): ?>
