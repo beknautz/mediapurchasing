@@ -1,15 +1,13 @@
 <?php
 /**
  * communications/partial_log.php
- * HTMX partial — outputs communication log items for a given media buy.
- * No header/footer — consumed via hx-get from media-buys/view.php.
+ * Partial — outputs communication log items for a media buy, campaign, or channel.
+ * No header/footer — loaded via fetch() from campaign/media-buy view pages.
  */
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/config.php';
 
-// This partial can be requested without a full session for HTMX calls,
-// but session auth is still enforced.
 if (empty($_SESSION['loggedIn'])) {
     http_response_code(403);
     echo '<div class="text-center text-danger py-3 small"><i class="bi bi-lock me-1"></i>Unauthorized</div>';
@@ -17,24 +15,96 @@ if (empty($_SESSION['loggedIn'])) {
 }
 
 $mediaBuyId = (int) ($_GET['media_buy_id'] ?? 0);
-$campaignId = (int) ($_GET['campaign_id'] ?? 0);
-$channelId  = (int) ($_GET['channel_id']  ?? 0);
+$campaignId = (int) ($_GET['campaign_id']  ?? 0);
+$channelId  = (int) ($_GET['channel_id']   ?? 0);
 
 if ($mediaBuyId <= 0 && $campaignId <= 0 && $channelId <= 0) {
     echo '<div class="text-center text-muted py-3 small">No entity specified.</div>';
     exit;
 }
 
-$emailService = new EmailService();
+// ---------------------------------------------------------------------------
+// Fetch communications
+// For channel_id we use a direct DB query keyed on rfp_log_id + vendor email
+// so it works regardless of whether the channel_id migration column exists.
+// ---------------------------------------------------------------------------
+$comms  = [];
+$total  = 0;
 
-$result = $emailService->getHistory(
-    mediaBuyId: $mediaBuyId,
-    pageSize:   50,
-    campaignId: $campaignId,
-    channelId:  $channelId
-);
-$comms = $result['data'] ?? [];
+if ($channelId > 0) {
+    $db = new PDO(
+        sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET),
+        DB_USER, DB_PASS,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+    );
 
+    // Get channel details: outbound RFP log id + vendor email
+    $chStmt = $db->prepare(
+        'SELECT cc.rfp_log_id, cc.campaign_id,
+                v.email AS vendor_email, v.billing_email AS vendor_billing_email
+           FROM campaign_channels cc
+      LEFT JOIN vendors v ON v.id = cc.vendor_id
+          WHERE cc.id = :id LIMIT 1'
+    );
+    $chStmt->execute([':id' => $channelId]);
+    $chInfo = $chStmt->fetch();
+
+    if ($chInfo) {
+        $orClauses = [];
+        $params    = [];
+
+        // The outbound RFP email (identified by the log id stored on the channel)
+        if (!empty($chInfo['rfp_log_id'])) {
+            $orClauses[]       = 'cl.id = :rfp_id';
+            $params[':rfp_id'] = (int) $chInfo['rfp_log_id'];
+        }
+
+        // Inbound replies from the vendor's email address
+        $vendorEmail = $chInfo['vendor_email'] ?: $chInfo['vendor_billing_email'];
+        if ($vendorEmail) {
+            $orClauses[]        = "(cl.from_email = :v_email AND cl.comm_type = 'email_inbound')";
+            $params[':v_email'] = $vendorEmail;
+        }
+
+        if ($orClauses) {
+            $stmt = $db->prepare(
+                'SELECT cl.*,
+                        CASE WHEN cl.comm_type = "email_inbound" THEN "email" ELSE cl.comm_type END AS type,
+                        CASE WHEN cl.comm_type = "email_inbound" THEN "inbound" ELSE "outbound" END AS direction
+                   FROM communication_logs cl
+                  WHERE ' . implode(' OR ', $orClauses) . '
+                  ORDER BY cl.created_at ASC
+                  LIMIT 50'
+            );
+            $stmt->execute($params);
+            $comms = $stmt->fetchAll();
+            $total = count($comms);
+        }
+    }
+} else {
+    $emailService = new EmailService();
+    $result = $emailService->getHistory(
+        mediaBuyId: $mediaBuyId,
+        pageSize:   50,
+        campaignId: $campaignId
+    );
+    $comms = $result['data'] ?? [];
+    $total = $result['total'] ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Compose link (for empty-state button)
+// ---------------------------------------------------------------------------
+$composeLink = '/communications/compose.php?';
+if ($campaignId > 0 || $channelId > 0) {
+    $composeLink .= 'campaign_id=' . ($campaignId ?: ($chInfo['campaign_id'] ?? 0));
+} elseif ($mediaBuyId > 0) {
+    $composeLink .= 'media_buy_id=' . $mediaBuyId;
+}
+
+// ---------------------------------------------------------------------------
+// Badge maps
+// ---------------------------------------------------------------------------
 $typeBadges = [
     'email' => ['class' => 'bg-primary', 'icon' => 'envelope'],
     'sms'   => ['class' => 'bg-success', 'icon' => 'chat-dots'],
@@ -51,15 +121,8 @@ $statusColors = [
     'pending'   => 'text-warning',
     'received'  => 'text-info',
 ];
-
-<?php
-$composeLink = '/communications/compose.php?';
-if ($campaignId > 0) {
-    $composeLink .= 'campaign_id=' . $campaignId;
-} elseif ($mediaBuyId > 0) {
-    $composeLink .= 'media_buy_id=' . $mediaBuyId;
-}
 ?>
+
 <?php if (empty($comms)): ?>
 <div class="text-center text-muted py-4">
     <i class="bi bi-chat-square-dots fs-3 d-block mb-2 opacity-50"></i>
@@ -91,12 +154,9 @@ if ($campaignId > 0) {
 ?>
 <div class="comm-item border-bottom px-3 py-3 <?= $isInbound ? 'bg-light' : '' ?>">
     <div class="d-flex align-items-start gap-2">
-        <!-- Icon -->
         <div class="flex-shrink-0 mt-1">
             <i class="bi bi-<?= $typeBadge['icon'] ?> text-<?= $isInbound ? 'info' : 'primary' ?> fs-5"></i>
         </div>
-
-        <!-- Body -->
         <div class="flex-grow-1 min-w-0">
             <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
                 <span class="badge <?= $typeBadge['class'] ?> small">
@@ -116,9 +176,7 @@ if ($campaignId > 0) {
                 </span>
             </div>
 
-            <!-- From → To -->
             <div class="small text-muted mb-1">
-                <i class="bi bi-arrow-right me-1"></i>
                 <strong><?= h($comm['from_email'] ?? $comm['from_number'] ?? 'System') ?></strong>
                 <?php if (!empty($comm['from_name'])): ?>
                     (<?= h($comm['from_name']) ?>)
@@ -130,21 +188,14 @@ if ($campaignId > 0) {
                 <?php endif; ?>
             </div>
 
-            <!-- Subject -->
             <?php if (!empty($comm['subject'])): ?>
-            <div class="fw-semibold small mb-1">
-                <?= h($comm['subject']) ?>
-            </div>
+            <div class="fw-semibold small mb-1"><?= h($comm['subject']) ?></div>
             <?php endif; ?>
 
-            <!-- Body preview -->
             <?php if ($bodyPreview !== ''): ?>
-            <div class="small text-muted">
-                <?= h($bodyPreview) ?>
-            </div>
+            <div class="small text-muted"><?= h($bodyPreview) ?></div>
             <?php endif; ?>
 
-            <!-- Attachments -->
             <?php
             $attachments = !empty($comm['attachments']) ? json_decode($comm['attachments'], true) : [];
             if (!empty($attachments)):
@@ -152,8 +203,8 @@ if ($campaignId > 0) {
             <div class="mt-2 d-flex flex-wrap gap-2">
                 <?php foreach ($attachments as $att):
                     $iconMap = ['pdf'=>'file-earmark-pdf','doc'=>'file-earmark-word','docx'=>'file-earmark-word','xls'=>'file-earmark-excel','xlsx'=>'file-earmark-excel'];
-                    $icon = $iconMap[$att['ext'] ?? ''] ?? 'file-earmark';
-                    $dlUrl = '/api/download_attachment.php?log_id=' . (int)$comm['id'] . '&file=' . urlencode(basename($att['path']));
+                    $icon    = $iconMap[$att['ext'] ?? ''] ?? 'file-earmark';
+                    $dlUrl   = '/api/download_attachment.php?log_id=' . (int)$comm['id'] . '&file=' . urlencode(basename($att['path']));
                 ?>
                 <a href="<?= h($dlUrl) ?>" class="btn btn-sm btn-outline-secondary" download>
                     <i class="bi bi-<?= h($icon) ?> me-1"></i><?= h($att['name']) ?>
@@ -168,15 +219,10 @@ if ($campaignId > 0) {
 <?php endforeach; ?>
 </div>
 
-<?php if (($result['total'] ?? 0) > 50): ?>
+<?php if ($total > 50): ?>
 <div class="text-center py-2 small text-muted border-top">
-    Showing 50 of <?= number_format($result['total']) ?> messages.
-    <?php
-    $viewAllLink = '/communications/index.php?';
-    if ($campaignId > 0)  { $viewAllLink .= 'campaign_id=' . $campaignId; }
-    elseif ($mediaBuyId > 0) { $viewAllLink .= 'media_buy_id=' . $mediaBuyId; }
-    ?>
-    <a href="<?= h($viewAllLink) ?>">View all</a>
+    Showing 50 of <?= number_format($total) ?> messages.
+    <a href="/communications/index.php?<?= $mediaBuyId > 0 ? 'media_buy_id='.$mediaBuyId : 'campaign_id='.($campaignId ?: ($chInfo['campaign_id'] ?? 0)) ?>">View all</a>
 </div>
 <?php endif; ?>
 
