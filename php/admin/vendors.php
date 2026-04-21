@@ -13,9 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $contact_name  = trim($_POST['contact_name'] ?? '');
     $email         = trim($_POST['email'] ?? '');
     $phone         = trim($_POST['phone'] ?? '');
-    $billing_email = trim($_POST['billing_email'] ?? '');
-    $media_types   = trim($_POST['media_types'] ?? '');
-    $address       = trim($_POST['address'] ?? '');
+    $billing_email  = trim($_POST['billing_email']  ?? '');
+    $media_category = trim($_POST['media_category'] ?? '');
+    $address        = trim($_POST['address'] ?? '');
     $notes         = trim($_POST['notes'] ?? '');
 
     if ($company_name === '') {
@@ -30,14 +30,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $data = [
-            'company_name'  => $company_name,
-            'contact_name'  => $contact_name,
-            'email'         => $email,
-            'phone'         => $phone,
-            'billing_email' => $billing_email,
-            'media_types'   => $media_types,
-            'address'       => $address,
-            'notes'         => $notes,
+            'company_name'   => $company_name,
+            'contact_name'   => $contact_name,
+            'email'          => $email,
+            'phone'          => $phone,
+            'billing_email'  => $billing_email,
+            'media_category' => $media_category,
+            'address'        => $address,
+            'notes'          => $notes,
         ];
         if ($id !== null) {
             $data['id'] = $id;
@@ -48,21 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/vendors.php');
     }
 
-    $editVendor = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'billing_email', 'media_types', 'address', 'notes');
+    $editVendor = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'billing_email', 'media_category', 'address', 'notes');
 }
 
 $vendors = $crmService->getVendors();
 
-// Build a distinct list of media type badges for display
-function mediaTypeBadges(string $types): string {
-    if (trim($types) === '') {
+const MEDIA_CATEGORIES = [
+    'TV - Spanish',
+    'TV - English',
+    'Radio - Spanish',
+    'Radio - English',
+    'Digital/Social',
+    'Newsprint',
+    'Production',
+    'Other',
+];
+
+$categoryColors = [
+    'TV - Spanish'    => 'bg-danger',
+    'TV - English'    => 'bg-primary',
+    'Radio - Spanish' => 'bg-warning text-dark',
+    'Radio - English' => 'bg-info text-dark',
+    'Digital/Social'  => 'bg-success',
+    'Newsprint'       => 'bg-secondary',
+    'Production'      => 'bg-dark',
+    'Other'           => 'bg-light text-dark border',
+];
+
+function mediaCategoryBadge(string $cat, array $colors): string {
+    if ($cat === '') {
         return '<span class="text-muted">—</span>';
     }
-    $out = '';
-    foreach (array_filter(array_map('trim', explode(',', $types))) as $type) {
-        $out .= '<span class="badge bg-info text-dark me-1">' . h($type) . '</span>';
-    }
-    return $out;
+    $class = $colors[$cat] ?? 'bg-secondary';
+    return '<span class="badge ' . $class . '">' . h($cat) . '</span>';
 }
 
 $pageTitle = 'Vendors — MediaBuy';
@@ -110,7 +128,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th scope="col">Contact</th>
                         <th scope="col">Email</th>
                         <th scope="col">Billing Email</th>
-                        <th scope="col">Media Types</th>
+                        <th scope="col">Category</th>
                         <th scope="col" class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -148,7 +166,7 @@ require_once __DIR__ . '/../includes/header.php';
                                         <span class="text-muted">—</span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= mediaTypeBadges($vendor['media_types'] ?? '') ?></td>
+                                <td><?= mediaCategoryBadge($vendor['media_category'] ?? '', $categoryColors) ?></td>
                                 <td class="text-end">
                                     <button type="button" class="btn btn-sm btn-outline-secondary"
                                             data-bs-toggle="modal" data-bs-target="#vendorModal"
@@ -219,11 +237,16 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
 
                         <div class="col-md-6">
-                            <label for="vendorMediaTypes" class="form-label fw-semibold">Media Types</label>
-                            <input type="text" id="vendorMediaTypes" name="media_types" class="form-control"
-                                   placeholder="TV, Radio, Digital, Print"
-                                   value="<?= h($editVendor['media_types'] ?? '') ?>">
-                            <div class="form-text">Comma-separated list of media types offered.</div>
+                            <label for="vendorMediaCategory" class="form-label fw-semibold">Media Category</label>
+                            <select id="vendorMediaCategory" name="media_category" class="form-select">
+                                <option value="">— Select category —</option>
+                                <?php foreach (MEDIA_CATEGORIES as $cat): ?>
+                                <option value="<?= h($cat) ?>"
+                                    <?= ($editVendor['media_category'] ?? '') === $cat ? 'selected' : '' ?>>
+                                    <?= h($cat) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="col-12">
@@ -262,14 +285,14 @@ function resetVendorForm() {
 
 function editVendor(id, data) {
     document.getElementById('vendorId').value            = id;
-    document.getElementById('vendorCompanyName').value   = data.company_name  || '';
-    document.getElementById('vendorContactName').value   = data.contact_name  || '';
-    document.getElementById('vendorEmail').value         = data.email         || '';
-    document.getElementById('vendorPhone').value         = data.phone         || '';
-    document.getElementById('vendorBillingEmail').value  = data.billing_email || '';
-    document.getElementById('vendorMediaTypes').value    = data.media_types   || '';
-    document.getElementById('vendorAddress').value       = data.address       || '';
-    document.getElementById('vendorNotes').value         = data.notes         || '';
+    document.getElementById('vendorCompanyName').value   = data.company_name   || '';
+    document.getElementById('vendorContactName').value   = data.contact_name   || '';
+    document.getElementById('vendorEmail').value         = data.email          || '';
+    document.getElementById('vendorPhone').value         = data.phone          || '';
+    document.getElementById('vendorBillingEmail').value  = data.billing_email  || '';
+    document.getElementById('vendorMediaCategory').value = data.media_category || '';
+    document.getElementById('vendorAddress').value       = data.address        || '';
+    document.getElementById('vendorNotes').value         = data.notes          || '';
     document.getElementById('vendorModalTitleText').textContent = 'Edit Vendor: ' + (data.company_name || '');
 }
 
@@ -292,9 +315,9 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('vendorContactName').value  = <?= json_encode($editVendor['contact_name']) ?>;
     document.getElementById('vendorEmail').value        = <?= json_encode($editVendor['email']) ?>;
     document.getElementById('vendorPhone').value        = <?= json_encode($editVendor['phone']) ?>;
-    document.getElementById('vendorBillingEmail').value = <?= json_encode($editVendor['billing_email']) ?>;
-    document.getElementById('vendorMediaTypes').value   = <?= json_encode($editVendor['media_types']) ?>;
-    document.getElementById('vendorAddress').value      = <?= json_encode($editVendor['address']) ?>;
+    document.getElementById('vendorBillingEmail').value  = <?= json_encode($editVendor['billing_email']) ?>;
+    document.getElementById('vendorMediaCategory').value = <?= json_encode($editVendor['media_category']) ?>;
+    document.getElementById('vendorAddress').value       = <?= json_encode($editVendor['address']) ?>;
     document.getElementById('vendorNotes').value        = <?= json_encode($editVendor['notes']) ?>;
     <?php endif; ?>
     modal.show();

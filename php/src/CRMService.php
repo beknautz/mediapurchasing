@@ -161,7 +161,7 @@ class CRMService extends BaseService
     public function getVendors(string $search = ''): array
     {
         $sql    = 'SELECT id, company_name, contact_name,
-                          email, phone, address, billing_email, media_types,
+                          email, phone, address, billing_email, media_category,
                           is_active, created_at, updated_at
                      FROM vendors';
         $params = [];
@@ -227,8 +227,8 @@ class CRMService extends BaseService
         $email       = trim(strtolower($data['email'] ?? ''));
         $phone         = trim($data['phone']           ?? '');
         $address       = trim($data['address']         ?? '');
-        $billingEmail  = trim(strtolower($data['billing_email'] ?? ''));
-        $mediaTypes    = trim($data['media_types']     ?? '');
+        $billingEmail  = trim(strtolower($data['billing_email']  ?? ''));
+        $mediaCategory = trim($data['media_category'] ?? '');
         $isActive      = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -239,20 +239,20 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO vendors
                      (company_name, contact_name, email, phone,
-                      address, billing_email, media_types, is_active, created_at, updated_at)
+                      address, billing_email, media_category, is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :billing_email, :media_types, :is_active, NOW(), NOW())'
+                      :address, :billing_email, :media_category, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
-                ':company_name'  => $companyName,
-                ':contact_name'  => $contactName,
-                ':email'         => $email,
-                ':phone'         => $phone,
-                ':address'       => $address,
-                ':billing_email' => $billingEmail,
-                ':media_types'   => $mediaTypes,
-                ':is_active'     => $isActive,
+                ':company_name'   => $companyName,
+                ':contact_name'   => $contactName,
+                ':email'          => $email,
+                ':phone'          => $phone,
+                ':address'        => $address,
+                ':billing_email'  => $billingEmail,
+                ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
+                ':is_active'      => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -263,27 +263,27 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE vendors
-                SET company_name  = :company_name,
-                    contact_name  = :contact_name,
-                    email         = :email,
-                    phone         = :phone,
-                    address       = :address,
-                    billing_email = :billing_email,
-                    media_types   = :media_types,
-                    is_active     = :is_active,
-                    updated_at    = NOW()
+                SET company_name   = :company_name,
+                    contact_name   = :contact_name,
+                    email          = :email,
+                    phone          = :phone,
+                    address        = :address,
+                    billing_email  = :billing_email,
+                    media_category = :media_category,
+                    is_active      = :is_active,
+                    updated_at     = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':company_name'  => $companyName,
-            ':contact_name'  => $contactName,
-            ':email'         => $email,
-            ':phone'         => $phone,
-            ':address'       => $address,
-            ':billing_email' => $billingEmail,
-            ':media_types'   => $mediaTypes,
-            ':is_active'     => $isActive,
-            ':id'            => $id,
+            ':company_name'   => $companyName,
+            ':contact_name'   => $contactName,
+            ':email'          => $email,
+            ':phone'          => $phone,
+            ':address'        => $address,
+            ':billing_email'  => $billingEmail,
+            ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
+            ':is_active'      => $isActive,
+            ':id'             => $id,
         ]);
 
         $this->auditLog('update_vendor', 'vendor', $id, "Updated: {$companyName}");

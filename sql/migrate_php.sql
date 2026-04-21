@@ -149,3 +149,9 @@ CREATE TABLE IF NOT EXISTS password_resets (
 -- ============================================================
 ALTER TABLE communication_logs
     ADD COLUMN IF NOT EXISTS attachments TEXT NULL AFTER body_text;
+
+-- ============================================================
+-- 12. vendors — add media_category dropdown column
+-- ============================================================
+ALTER TABLE vendors
+    ADD COLUMN IF NOT EXISTS media_category VARCHAR(100) NULL AFTER media_types;
