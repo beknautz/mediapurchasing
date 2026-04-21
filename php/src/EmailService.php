@@ -158,11 +158,14 @@ class EmailService extends BaseService
     // -----------------------------------------------------------------------
     public function processInbound(array $postData): array
     {
-        $from     = $postData['from']    ?? '';
+        $fromRaw  = $postData['from']    ?? '';
         $to       = $postData['to']      ?? '';
         $subject  = $postData['subject'] ?? '';
         $bodyText = $postData['text']    ?? '';
         $bodyHtml = $postData['html']    ?? '';
+
+        // Extract plain email from "Display Name <email@domain>" format
+        $from = preg_match('/<([^>@\s]+@[^>]+)>/', $fromRaw, $em) ? trim($em[1]) : trim($fromRaw);
 
         // Parse IDs from tagged reply-to addresses
         $mediaBuyId = 0;

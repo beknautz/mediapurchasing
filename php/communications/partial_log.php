@@ -59,11 +59,12 @@ if ($channelId > 0) {
             $params[':rfp_id'] = (int) $chInfo['rfp_log_id'];
         }
 
-        // Inbound replies from the vendor's email address
+        // Inbound replies from the vendor's email address.
+        // Use LIKE so rows stored with "Name <email>" format (pre-normalization) also match.
         $vendorEmail = $chInfo['vendor_email'] ?: $chInfo['vendor_billing_email'];
         if ($vendorEmail) {
-            $orClauses[]        = "(cl.from_email = :v_email AND cl.comm_type = 'email_inbound')";
-            $params[':v_email'] = $vendorEmail;
+            $orClauses[]             = "(cl.from_email LIKE :v_email AND cl.comm_type = 'email_inbound')";
+            $params[':v_email']      = '%' . $vendorEmail . '%';
         }
 
         if ($orClauses) {
