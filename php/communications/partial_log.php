@@ -196,6 +196,30 @@ $statusColors = [
             <div class="small text-muted"><?= h($bodyPreview) ?></div>
             <?php endif; ?>
 
+            <?php if (!empty($comm['body_html']) || !empty($comm['body_text'])): ?>
+            <div class="mt-2">
+                <button class="btn btn-link btn-sm p-0 text-decoration-none small"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#commBody<?= (int)$comm['id'] ?>"
+                        aria-expanded="false">
+                    <i class="bi bi-chevron-down me-1"></i>View Full Message
+                </button>
+                <div class="collapse mt-2" id="commBody<?= (int)$comm['id'] ?>">
+                    <?php if (!empty($comm['body_html'])): ?>
+                    <iframe srcdoc="<?= htmlspecialchars($comm['body_html'], ENT_QUOTES, 'UTF-8') ?>"
+                            sandbox
+                            class="w-100 border rounded bg-white"
+                            style="min-height:150px;max-height:500px;display:block;"
+                            onload="this.style.height=Math.min(this.contentDocument.documentElement.scrollHeight+20,500)+'px'">
+                    </iframe>
+                    <?php else: ?>
+                    <pre class="small bg-light p-2 rounded mb-0" style="white-space:pre-wrap;max-height:400px;overflow-y:auto;"><?= h($comm['body_text']) ?></pre>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <?php
             $attachments = !empty($comm['attachments']) ? json_decode($comm['attachments'], true) : [];
             if (!empty($attachments)):
