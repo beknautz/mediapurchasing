@@ -284,6 +284,7 @@ require_once __DIR__ . '/../includes/header.php';
                             $canRfp    = $ch['status'] === 'pending' && !empty($ch['vendor_email']);
                             $canResend = $ch['status'] !== 'pending' && !empty($ch['vendor_email']);
                             $canDelete = $ch['status'] === 'pending';
+                            $hasComms  = !empty($ch['rfp_sent_at']);
                         ?>
                         <tr>
                             <td>
@@ -310,6 +311,15 @@ require_once __DIR__ . '/../includes/header.php';
                             </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
+                                    <?php if ($hasComms): ?>
+                                    <button type="button" class="btn btn-outline-primary"
+                                            onclick="openChannelComms(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch['media_category'] . ' — ' . ($ch['vendor_name'] ?? 'Vendor')), ENT_QUOTES) ?>)">
+                                        <i class="bi bi-chat-text me-1"></i>Messages
+                                        <?php if ($ch['status'] === 'response_received'): ?>
+                                            <span class="badge bg-success ms-1">New</span>
+                                        <?php endif; ?>
+                                    </button>
+                                    <?php endif; ?>
                                     <button type="button" class="btn btn-outline-secondary"
                                             onclick="editChannel(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch), ENT_QUOTES) ?>)"
                                             data-bs-toggle="modal" data-bs-target="#channelModal"
@@ -540,6 +550,29 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- ===== Channel Communications Modal ===== -->
+<div class="modal fade" id="channelCommsModal" tabindex="-1" aria-labelledby="channelCommsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="channelCommsModalLabel">
+                    <i class="bi bi-chat-text me-2 text-primary"></i>
+                    <span id="channelCommsTitle">Channel Messages</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="channelCommsBody">
+                <div class="text-center py-4 text-muted small">
+                    <i class="bi bi-hourglass-split me-1"></i>Loading…
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
 <script>
 function resetChannelForm() {
@@ -564,6 +597,21 @@ function editChannel(id, data) {
 document.getElementById('tab-comms').addEventListener('shown.bs.tab', function () {
     htmx.trigger(this, 'htmx:load');
 });
+
+// Open channel comms modal and load messages for the given channel
+function openChannelComms(channelId, label) {
+    document.getElementById('channelCommsTitle').textContent = label;
+    document.getElementById('channelCommsBody').innerHTML =
+        '<div class="text-center py-4 text-muted small"><i class="bi bi-hourglass-split me-1"></i>Loading…</div>';
+
+    var modal = new bootstrap.Modal(document.getElementById('channelCommsModal'));
+    modal.show();
+
+    htmx.ajax('GET',
+        '/communications/partial_log.php?channel_id=' + encodeURIComponent(channelId),
+        { target: '#channelCommsBody', swap: 'innerHTML' }
+    );
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
