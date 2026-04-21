@@ -229,10 +229,7 @@ require_once __DIR__ . '/../includes/header.php';
     </li>
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="tab-comms" data-bs-toggle="tab" data-bs-target="#pane-comms"
-                type="button" role="tab"
-                hx-get="/communications/partial_log.php?campaign_id=<?= $id ?>"
-                hx-target="#comms-log-container"
-                hx-trigger="once">
+                type="button" role="tab">
             <i class="bi bi-chat-dots me-1"></i>Communications
         </button>
     </li>
@@ -570,7 +567,6 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
 <script>
 function resetChannelForm() {
     document.getElementById('channelId').value              = '';
@@ -590,24 +586,32 @@ function editChannel(id, data) {
     document.getElementById('channelModalTitle').textContent = 'Edit Channel: ' + (data.media_category || '');
 }
 
-// Auto-load comms when the tab is shown via Bootstrap tab click
+function loadHtml(url, targetId) {
+    var el = document.getElementById(targetId);
+    el.innerHTML = '<div class="text-center py-4 text-muted small"><i class="bi bi-hourglass-split me-1"></i>Loading…</div>';
+    fetch(url, { credentials: 'same-origin' })
+        .then(function(r) { return r.text(); })
+        .then(function(html) { el.innerHTML = html; })
+        .catch(function() {
+            el.innerHTML = '<div class="text-center text-danger py-4 small"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load messages.</div>';
+        });
+}
+
+// Load campaign-level comms when the Communications tab is first shown
+var commsTabLoaded = false;
 document.getElementById('tab-comms').addEventListener('shown.bs.tab', function () {
-    htmx.trigger(this, 'htmx:load');
+    if (!commsTabLoaded) {
+        commsTabLoaded = true;
+        loadHtml('/communications/partial_log.php?campaign_id=<?= $id ?>', 'comms-log-container');
+    }
 });
 
 // Open channel comms modal and load messages for the given channel
 function openChannelComms(channelId, label) {
     document.getElementById('channelCommsTitle').textContent = label;
-    document.getElementById('channelCommsBody').innerHTML =
-        '<div class="text-center py-4 text-muted small"><i class="bi bi-hourglass-split me-1"></i>Loading…</div>';
-
     var modal = new bootstrap.Modal(document.getElementById('channelCommsModal'));
     modal.show();
-
-    htmx.ajax('GET',
-        '/communications/partial_log.php?channel_id=' + encodeURIComponent(channelId),
-        { target: '#channelCommsBody', swap: 'innerHTML' }
-    );
+    loadHtml('/communications/partial_log.php?channel_id=' + encodeURIComponent(channelId), 'channelCommsBody');
 }
 </script>
 
