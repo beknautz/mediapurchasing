@@ -24,7 +24,8 @@ class EmailService extends BaseService
         int    $approvalId   = 0,
         int    $billId       = 0,
         int    $campaignId   = 0,
-        int    $channelId    = 0
+        int    $channelId    = 0,
+        array  $attachments  = []   // [['name'=>'file.pdf','path'=>'/abs/path','type'=>'application/pdf'], ...]
     ): array {
         $apiKey      = $this->getSetting('sendgrid_api_key', '');
         $fromEmail   = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
@@ -55,6 +56,20 @@ class EmailService extends BaseService
                 $tag = 'reply';
             }
             $payload['reply_to'] = ['email' => $tag . '@' . $inboundDomain, 'name' => $fromName];
+        }
+
+        if (!empty($attachments)) {
+            $payload['attachments'] = [];
+            foreach ($attachments as $att) {
+                $fileContent = @file_get_contents($att['path']);
+                if ($fileContent === false) continue;
+                $payload['attachments'][] = [
+                    'content'     => base64_encode($fileContent),
+                    'type'        => $att['type'],
+                    'filename'    => $att['name'],
+                    'disposition' => 'attachment',
+                ];
+            }
         }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

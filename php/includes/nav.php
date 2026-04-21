@@ -59,6 +59,12 @@ function navActive(string $path): string {
                     </a>
                 </li>
 
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/press-releases') ?>" href="/press-releases/index.php">
+                        <i class="bi bi-newspaper me-1"></i>Press Releases
+                    </a>
+                </li>
+
                 <?php if ($isBuyer): ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle <?= navActive('/admin/client') || navActive('/admin/vendor') ? 'active' : '' ?>"
