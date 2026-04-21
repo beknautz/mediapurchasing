@@ -284,7 +284,6 @@ require_once __DIR__ . '/../includes/header.php';
                             $canRfp    = $ch['status'] === 'pending' && !empty($ch['vendor_email']);
                             $canResend = $ch['status'] !== 'pending' && !empty($ch['vendor_email']);
                             $canDelete = $ch['status'] === 'pending';
-                            $hasComms  = !empty($ch['rfp_sent_at']);
                         ?>
                         <tr>
                             <td>
@@ -311,7 +310,6 @@ require_once __DIR__ . '/../includes/header.php';
                             </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
-                                    <?php if ($hasComms): ?>
                                     <button type="button" class="btn btn-outline-primary"
                                             onclick="openChannelComms(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch['media_category'] . ' — ' . ($ch['vendor_name'] ?? 'Vendor')), ENT_QUOTES) ?>)">
                                         <i class="bi bi-chat-text me-1"></i>Messages
@@ -319,7 +317,6 @@ require_once __DIR__ . '/../includes/header.php';
                                             <span class="badge bg-success ms-1">New</span>
                                         <?php endif; ?>
                                     </button>
-                                    <?php endif; ?>
                                     <button type="button" class="btn btn-outline-secondary"
                                             onclick="editChannel(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch), ENT_QUOTES) ?>)"
                                             data-bs-toggle="modal" data-bs-target="#channelModal"
