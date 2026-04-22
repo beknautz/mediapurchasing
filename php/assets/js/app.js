@@ -5,16 +5,6 @@
 'use strict';
 
 // ----------------------------------------------------------------
-// HTMX global config
-// ----------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', function () {
-    htmx.config.defaultSwapStyle    = 'outerHTML';
-    htmx.config.defaultSwapDelay    = 0;
-    htmx.config.defaultSettleDelay  = 20;
-    htmx.config.historyCacheSize    = 0;    // disable history cache for data app
-});
-
-// ----------------------------------------------------------------
 // Auto-dismiss alerts after 5 seconds
 // ----------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', function () {
@@ -22,16 +12,6 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(function () {
             var bsAlert = bootstrap.Alert.getOrCreateInstance(el);
             bsAlert.close();
-        }, 5000);
-    });
-});
-
-// Re-run after HTMX swaps
-document.addEventListener('htmx:afterSwap', function () {
-    document.querySelectorAll('.alert-dismissible').forEach(function (el) {
-        setTimeout(function () {
-            var bsAlert = bootstrap.Alert.getOrCreateInstance(el);
-            if (bsAlert) bsAlert.close();
         }, 5000);
     });
 });
