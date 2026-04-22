@@ -212,7 +212,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="input-group">
                         <span class="input-group-text">$</span>
                         <input type="number" class="form-control" id="budget_good" name="budget_good"
-                               value="<?= h($formData['budget_good']) ?>" min="1" step="500"
+                               value="<?= h($formData['budget_good']) ?>" min="0" step="any"
                                placeholder="50000">
                     </div>
                     <div class="form-text">Entry-level budget option</div>
@@ -222,7 +222,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="input-group">
                         <span class="input-group-text">$</span>
                         <input type="number" class="form-control" id="budget_better" name="budget_better"
-                               value="<?= h($formData['budget_better']) ?>" min="1" step="500"
+                               value="<?= h($formData['budget_better']) ?>" min="0" step="any"
                                placeholder="75000">
                     </div>
                     <div class="form-text">Mid-range budget option</div>
@@ -232,7 +232,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="input-group">
                         <span class="input-group-text">$</span>
                         <input type="number" class="form-control" id="budget_best" name="budget_best"
-                               value="<?= h($formData['budget_best']) ?>" min="1" step="500"
+                               value="<?= h($formData['budget_best']) ?>" min="0" step="any"
                                placeholder="100000">
                     </div>
                     <div class="form-text">Premium budget option</div>
