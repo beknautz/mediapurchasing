@@ -21,19 +21,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($body === '')    $errors[] = 'Body is required.';
 
         if (empty($errors)) {
-            $prService->saveTemplate(['id' => $id, 'name' => $name, 'subject' => $subject, 'body_text' => $body]);
-            flash('success', $id > 0 ? 'Template updated.' : 'Template created.');
-            redirect('/press-releases/templates.php');
+            try {
+                $prService->saveTemplate(['id' => $id, 'name' => $name, 'subject' => $subject, 'body_text' => $body]);
+                flash('success', $id > 0 ? 'Template updated.' : 'Template created.');
+                redirect('/press-releases/templates.php');
+            } catch (Exception $e) {
+                $errors[] = 'Database error: ' . $e->getMessage();
+            }
         }
     } elseif ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
-        if ($id > 0) $prService->deleteTemplate($id);
-        flash('success', 'Template deleted.');
-        redirect('/press-releases/templates.php');
+        if ($id > 0) {
+            try {
+                $prService->deleteTemplate($id);
+                flash('success', 'Template deleted.');
+            } catch (Exception $e) {
+                flash('success', ''); // clear any stale flash
+                $errors[] = 'Database error: ' . $e->getMessage();
+            }
+        }
+        if (empty($errors)) redirect('/press-releases/templates.php');
     }
 }
 
-$templates = $prService->getTemplates();
+try {
+    $templates = $prService->getTemplates();
+} catch (Exception $e) {
+    $templates = [];
+    $errors[]  = 'Could not load templates — the database table may not exist yet. '
+               . 'Please run the press_release_templates CREATE TABLE statement from sql/migrate_press_releases.sql. '
+               . '(' . $e->getMessage() . ')';
+}
 $flashMsg  = flash('success');
 
 $pageTitle = 'Press Release Templates — MediaBuy';
@@ -126,15 +144,22 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Create / Edit Modal -->
+<?php
+$postId      = (int)   ($_POST['id']       ?? 0);
+$postName    = (string)($_POST['name']     ?? '');
+$postSubject = (string)($_POST['subject']  ?? '');
+$postBody    = (string)($_POST['body_text']?? '');
+$reopenModal = ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save' && !empty($errors));
+?>
 <div class="modal fade" id="templateModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="">
                 <input type="hidden" name="action" value="save">
-                <input type="hidden" name="id" id="tmplId" value="0">
+                <input type="hidden" name="id" id="tmplId" value="<?= $postId ?>">
                 <div class="modal-header">
                     <h5 class="modal-title fw-semibold" id="templateModalTitle">
-                        <i class="bi bi-file-earmark-text me-2 text-primary"></i>New Template
+                        <i class="bi bi-file-earmark-text me-2 text-primary"></i><?= $postId > 0 ? 'Edit' : 'New' ?> Template
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -142,11 +167,13 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label for="tmplName" class="form-label fw-semibold">Template Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="tmplName" name="name" required
+                               value="<?= h($postName) ?>"
                                placeholder="e.g. Event Announcement Boilerplate">
                     </div>
                     <div class="mb-3">
                         <label for="tmplSubject" class="form-label fw-semibold">Default Subject <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="tmplSubject" name="subject" required
+                               value="<?= h($postSubject) ?>"
                                placeholder="e.g. [EVENT NAME] — Media Kit {{year}}">
                         <div class="form-text">You can edit the subject when composing.</div>
                     </div>
@@ -154,7 +181,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <label for="tmplBody" class="form-label fw-semibold">Message Body <span class="text-danger">*</span></label>
                         <textarea class="form-control" id="tmplBody" name="body_text"
                                   rows="14" required
-                                  placeholder="Write the boilerplate text here. Use placeholders like {{event_name}}, {{date}}, etc."></textarea>
+                                  placeholder="Write the boilerplate text here. Use placeholders like {{event_name}}, {{date}}, etc."><?= h($postBody) ?></textarea>
                         <div class="form-text">Plain text. Use {{placeholders}} for parts you'll fill in when composing.</div>
                     </div>
                 </div>
@@ -221,6 +248,11 @@ function confirmDelete(id, name) {
     document.getElementById('deleteName').textContent = name;
     deleteModal.show();
 }
+
+<?php if ($reopenModal): ?>
+// Reopen modal with previously entered data after a validation/DB error
+document.addEventListener('DOMContentLoaded', function () { templateModal.show(); });
+<?php endif; ?>
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
