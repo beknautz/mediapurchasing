@@ -304,10 +304,12 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
 
                 <!-- AI extraction notice (shown after parse) -->
-                <!-- No data-bs-dismiss — Bootstrap removes the element from DOM on close, breaking subsequent drops -->
-                <div id="aiNotice" class="alert alert-info small py-2 mb-3 d-flex align-items-center justify-content-between" style="display:none !important;">
-                    <span><i class="bi bi-robot me-1"></i><strong>AI extracted these fields.</strong> Please verify each value before saving.</span>
-                    <button type="button" class="btn-close ms-3" onclick="document.getElementById('aiNotice').style.display='none'"></button>
+                <!-- Uses d-none class toggle — NOT data-bs-dismiss (Bootstrap removes element from DOM on close) -->
+                <div id="aiNotice" class="alert alert-info small py-2 mb-3 d-none">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span><i class="bi bi-robot me-1"></i><strong>AI extracted these fields.</strong> Please verify each value before saving.</span>
+                        <button type="button" class="btn-close ms-2" onclick="closeAiNotice()"></button>
+                    </div>
                 </div>
 
                 <!-- Hidden real file input -->
@@ -351,6 +353,11 @@ require_once __DIR__ . '/../includes/header.php';
 function elShow(id) { const e = document.getElementById(id); if (e) e.style.display = ''; }
 function elHide(id) { const e = document.getElementById(id); if (e) e.style.display = 'none'; }
 function elText(id, t) { const e = document.getElementById(id); if (e) e.textContent = t; }
+
+function closeAiNotice() {
+    const el = document.getElementById('aiNotice');
+    if (el) el.classList.add('d-none');
+}
 
 // ── vendor lookup map for fuzzy-matching extracted vendor name ─────────────────
 const VENDORS = <?= json_encode(array_map(fn($v) => ['id' => (int)$v['id'], 'name' => strtolower($v['company_name'])], $vendors)) ?>;
@@ -399,7 +406,8 @@ function handleFileSelect(file) {
             }
             elText('dropFileName', file.name);
             elShow('dropDone');
-            elShow('aiNotice');
+            const notice = document.getElementById('aiNotice');
+            if (notice) notice.classList.remove('d-none');
             fillForm(resp.data);
         })
         .catch(err => {
@@ -448,7 +456,7 @@ function highlight(el) {
 function resetDrop() {
     elHide('dropDone');
     elShow('dropIdle');
-    elHide('aiNotice');
+    closeAiNotice();
     const fi = document.getElementById('invoice_file');
     if (fi) fi.value = '';
 }

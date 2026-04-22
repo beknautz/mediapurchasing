@@ -10,6 +10,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.alert-dismissible').forEach(function (el) {
         setTimeout(function () {
+            if (!el.isConnected) return;
             var bsAlert = bootstrap.Alert.getOrCreateInstance(el);
             bsAlert.close();
         }, 5000);
