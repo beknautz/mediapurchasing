@@ -220,9 +220,6 @@ $reopenModal = ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
 </div>
 
 <script>
-const templateModal = new bootstrap.Modal(document.getElementById('templateModal'));
-const deleteModal   = new bootstrap.Modal(document.getElementById('deleteModal'));
-
 function openTemplateModal() {
     document.getElementById('templateModalTitle').innerHTML =
         '<i class="bi bi-file-earmark-text me-2 text-primary"></i>New Template';
@@ -230,7 +227,7 @@ function openTemplateModal() {
     document.getElementById('tmplName').value    = '';
     document.getElementById('tmplSubject').value = '';
     document.getElementById('tmplBody').value    = '';
-    templateModal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
 }
 
 function editTemplate(t) {
@@ -240,18 +237,19 @@ function editTemplate(t) {
     document.getElementById('tmplName').value    = t.name;
     document.getElementById('tmplSubject').value = t.subject;
     document.getElementById('tmplBody').value    = t.body_text;
-    templateModal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
 }
 
 function confirmDelete(id, name) {
     document.getElementById('deleteId').value = id;
     document.getElementById('deleteName').textContent = name;
-    deleteModal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
 }
 
 <?php if ($reopenModal): ?>
-// Reopen modal with previously entered data after a validation/DB error
-document.addEventListener('DOMContentLoaded', function () { templateModal.show(); });
+window.addEventListener('load', function () {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
+});
 <?php endif; ?>
 </script>
 
