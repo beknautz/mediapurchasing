@@ -385,13 +385,22 @@ function handleFileSelect(file) {
     fd.append('invoice_file', file);
 
     fetch('/billing/extract-invoice.php', { method: 'POST', body: fd })
-        .then(r => r.json())
+        .then(r => {
+            // Capture raw text first so we can show it if JSON parsing fails
+            return r.text().then(txt => {
+                try {
+                    return JSON.parse(txt);
+                } catch (e) {
+                    throw new Error('Server returned non-JSON:\n\n' + txt.substring(0, 400));
+                }
+            });
+        })
         .then(resp => {
             document.getElementById('dropProcessing').style.display = 'none';
 
             if (!resp.success) {
                 document.getElementById('dropIdle').style.display = '';
-                alert('AI extraction failed: ' + (resp.error || 'Unknown error'));
+                alert('AI extraction failed:\n\n' + (resp.error || 'Unknown error'));
                 return;
             }
 
@@ -400,10 +409,10 @@ function handleFileSelect(file) {
             document.getElementById('aiNotice').style.display   = '';
             fillForm(resp.data);
         })
-        .catch(() => {
+        .catch(err => {
             document.getElementById('dropProcessing').style.display = 'none';
             document.getElementById('dropIdle').style.display       = '';
-            alert('Network error — could not reach the extraction service.');
+            alert(err.message || 'Unexpected error contacting the extraction service.');
         });
 }
 
