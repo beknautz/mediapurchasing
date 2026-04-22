@@ -11,17 +11,18 @@ $templates    = $prService->getTemplates();
 $UPLOAD_DIR   = __DIR__ . '/../uploads/press-releases/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $subject   = trim($_POST['subject']    ?? '');
-    $bodyText  = trim($_POST['body_text']  ?? '');
+    $subject   = trim($_POST['subject']   ?? '');
+    $bodyHtml  = trim($_POST['body_html'] ?? '');   // Summernote posts HTML
     $vendorIds = array_map('intval', (array) ($_POST['vendor_ids'] ?? []));
 
     if ($subject === '') $errors[] = 'Subject is required.';
-    if ($bodyText === '') $errors[] = 'Message body is required.';
+    if (trim(strip_tags($bodyHtml)) === '') $errors[] = 'Message body is required.';
     if (empty($vendorIds)) $errors[] = 'Select at least one vendor.';
 
     if (empty($errors)) {
+        $bodyText = strip_tags($bodyHtml);
         $bodyHtml = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;">'
-                  . nl2br(h($bodyText))
+                  . $bodyHtml
                   . '</div>';
 
         // Save the press release record first (files saved into its folder)
@@ -67,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 toName:      $vendor['company_name'],
                 subject:     $subject,
                 bodyHtml:    $bodyHtml,
-                bodyText:    $bodyText,
+                bodyText:    $bodyText ?? strip_tags($bodyHtml),
                 attachments: $emailAttachments
             );
 
@@ -88,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$extraHead = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.css">';
 $pageTitle = 'New Press Release — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -162,11 +164,8 @@ require_once __DIR__ . '/../includes/header.php';
                            placeholder="e.g. SFP Boat Race — Media Kit 2026">
                 </div>
                 <div class="mb-3">
-                    <label for="body_text" class="form-label fw-semibold">Message Body <span class="text-danger">*</span></label>
-                    <textarea class="form-control" id="body_text" name="body_text"
-                              rows="12" required
-                              placeholder="Write your press release message here. Line breaks will be preserved."><?= h($_POST['body_text'] ?? '') ?></textarea>
-                    <div class="form-text">Plain text — line breaks are preserved in the email.</div>
+                    <label class="form-label fw-semibold">Message Body <span class="text-danger">*</span></label>
+                    <textarea id="body_html_editor" name="body_html"><?= $_POST['body_html'] ?? '' ?></textarea>
                 </div>
             </div>
         </div>
@@ -263,22 +262,6 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
-const TEMPLATES = <?= json_encode(
-    array_column(
-        array_map(fn($t) => ['id' => (int)$t['id'], 'subject' => $t['subject'], 'body_text' => $t['body_text']], $templates),
-        null, 'id'
-    )
-) ?>;
-
-function loadTemplate() {
-    const id = parseInt(document.getElementById('templatePicker').value, 10);
-    if (!id || !TEMPLATES[id]) return;
-    const t = TEMPLATES[id];
-    document.getElementById('subject').value    = t.subject;
-    document.getElementById('body_text').value  = t.body_text;
-    document.getElementById('subject').focus();
-}
-
 function updateCount() {
     const n = document.querySelectorAll('.vendor-cb:checked').length;
     document.getElementById('selectedCount').textContent = n + ' selected';
@@ -291,15 +274,14 @@ function toggleAll(checked) {
 }
 
 function toggleCategory(catId, btn) {
-    const group    = document.getElementById(catId);
-    const cbs      = group.querySelectorAll('.vendor-cb:not([disabled])');
-    const allOn    = [...cbs].every(cb => cb.checked);
+    const group = document.getElementById(catId);
+    const cbs   = group.querySelectorAll('.vendor-cb:not([disabled])');
+    const allOn = [...cbs].every(cb => cb.checked);
     cbs.forEach(cb => cb.checked = !allOn);
     btn.textContent = allOn ? 'Select all' : 'Deselect all';
     updateCount();
 }
 
-// File list preview
 document.getElementById('attachments').addEventListener('change', function () {
     const list = document.getElementById('fileList');
     list.innerHTML = '';
@@ -324,4 +306,47 @@ document.getElementById('attachments').addEventListener('change', function () {
 updateCount();
 </script>
 
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php
+$extraScripts = '
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.js"></script>
+<script>
+const TEMPLATES = ' . json_encode(
+    array_column(
+        array_map(fn($t) => ['id' => (int)$t['id'], 'subject' => $t['subject'], 'body_text' => $t['body_text']], $templates),
+        null, 'id'
+    )
+) . ';
+
+$(function () {
+    $("#body_html_editor").summernote({
+        height: 380,
+        placeholder: "Write your press release message here...",
+        toolbar: [
+            ["style",  ["bold", "italic", "underline", "strikethrough", "clear"]],
+            ["font",   ["fontsize"]],
+            ["color",  ["color"]],
+            ["para",   ["ul", "ol", "paragraph"]],
+            ["table",  ["table"]],
+            ["insert", ["link", "hr"]],
+            ["view",   ["fullscreen", "codeview"]],
+        ],
+    });
+});
+
+function loadTemplate() {
+    const id = parseInt(document.getElementById("templatePicker").value, 10);
+    if (!id || !TEMPLATES[id]) return;
+    const t = TEMPLATES[id];
+    document.getElementById("subject").value = t.subject;
+    // Convert plain-text newlines to HTML paragraphs for the editor
+    const html = t.body_text
+        .split(/\n\n+/)
+        .map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>")
+        .join("");
+    $("#body_html_editor").summernote("code", html);
+    document.getElementById("subject").focus();
+}
+</script>';
+
+require_once __DIR__ . '/../includes/footer.php';
