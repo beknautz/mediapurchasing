@@ -66,6 +66,14 @@ function navActive(string $path): string {
                 </li>
 
                 <?php if ($isBuyer): ?>
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
+                        <i class="bi bi-robot me-1"></i>Budget Planner
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <?php if ($isBuyer): ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle <?= navActive('/admin/client') || navActive('/admin/vendor') ? 'active' : '' ?>"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">

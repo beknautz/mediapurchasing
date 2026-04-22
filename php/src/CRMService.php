@@ -162,6 +162,7 @@ class CRMService extends BaseService
     {
         $sql    = 'SELECT id, company_name, contact_name,
                           email, phone, address, billing_email, media_category,
+                          demographics, media_kit,
                           is_active, created_at, updated_at
                      FROM vendors';
         $params = [];
@@ -221,14 +222,16 @@ class CRMService extends BaseService
     // -----------------------------------------------------------------------
     public function saveVendor(array $data): array
     {
-        $id          = (int) ($data['id']           ?? 0);
-        $companyName = trim($data['company_name']    ?? '');
-        $contactName = trim($data['contact_name']    ?? '');
-        $email       = trim(strtolower($data['email'] ?? ''));
-        $phone         = trim($data['phone']           ?? '');
-        $address       = trim($data['address']         ?? '');
+        $id            = (int) ($data['id']            ?? 0);
+        $companyName   = trim($data['company_name']    ?? '');
+        $contactName   = trim($data['contact_name']    ?? '');
+        $email         = trim(strtolower($data['email'] ?? ''));
+        $phone         = trim($data['phone']            ?? '');
+        $address       = trim($data['address']          ?? '');
         $billingEmail  = trim(strtolower($data['billing_email']  ?? ''));
-        $mediaCategory = trim($data['media_category'] ?? '');
+        $mediaCategory = trim($data['media_category']   ?? '');
+        $demographics  = trim($data['demographics']     ?? '');
+        $mediaKit      = trim($data['media_kit']        ?? '');
         $isActive      = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -239,10 +242,12 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO vendors
                      (company_name, contact_name, email, phone,
-                      address, billing_email, media_category, is_active, created_at, updated_at)
+                      address, billing_email, media_category, demographics, media_kit,
+                      is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :billing_email, :media_category, :is_active, NOW(), NOW())'
+                      :address, :billing_email, :media_category, :demographics, :media_kit,
+                      :is_active, NOW(), NOW())'
             );
             $stmt->execute([
                 ':company_name'   => $companyName,
@@ -252,6 +257,8 @@ class CRMService extends BaseService
                 ':address'        => $address,
                 ':billing_email'  => $billingEmail,
                 ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
+                ':demographics'   => $demographics !== '' ? $demographics : null,
+                ':media_kit'      => $mediaKit !== '' ? $mediaKit : null,
                 ':is_active'      => $isActive,
             ]);
 
@@ -270,6 +277,8 @@ class CRMService extends BaseService
                     address        = :address,
                     billing_email  = :billing_email,
                     media_category = :media_category,
+                    demographics   = :demographics,
+                    media_kit      = :media_kit,
                     is_active      = :is_active,
                     updated_at     = NOW()
               WHERE id = :id'
@@ -282,6 +291,8 @@ class CRMService extends BaseService
             ':address'        => $address,
             ':billing_email'  => $billingEmail,
             ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
+            ':demographics'   => $demographics !== '' ? $demographics : null,
+            ':media_kit'      => $mediaKit !== '' ? $mediaKit : null,
             ':is_active'      => $isActive,
             ':id'             => $id,
         ]);

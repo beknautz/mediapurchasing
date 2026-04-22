@@ -8,15 +8,17 @@ $editVendor = null;
 
 // Handle POST — add or edit vendor
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id            = !empty($_POST['id']) ? (int)$_POST['id'] : null;
-    $company_name  = trim($_POST['company_name'] ?? '');
-    $contact_name  = trim($_POST['contact_name'] ?? '');
-    $email         = trim($_POST['email'] ?? '');
-    $phone         = trim($_POST['phone'] ?? '');
+    $id             = !empty($_POST['id']) ? (int)$_POST['id'] : null;
+    $company_name   = trim($_POST['company_name']   ?? '');
+    $contact_name   = trim($_POST['contact_name']   ?? '');
+    $email          = trim($_POST['email']           ?? '');
+    $phone          = trim($_POST['phone']           ?? '');
     $billing_email  = trim($_POST['billing_email']  ?? '');
     $media_category = trim($_POST['media_category'] ?? '');
-    $address        = trim($_POST['address'] ?? '');
-    $notes         = trim($_POST['notes'] ?? '');
+    $address        = trim($_POST['address']         ?? '');
+    $notes          = trim($_POST['notes']           ?? '');
+    $demographics   = trim($_POST['demographics']   ?? '');
+    $media_kit      = trim($_POST['media_kit']       ?? '');
 
     if ($company_name === '') {
         $errors[] = 'Company name is required.';
@@ -38,6 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'media_category' => $media_category,
             'address'        => $address,
             'notes'          => $notes,
+            'demographics'   => $demographics,
+            'media_kit'      => $media_kit,
         ];
         if ($id !== null) {
             $data['id'] = $id;
@@ -48,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/vendors.php');
     }
 
-    $editVendor = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'billing_email', 'media_category', 'address', 'notes');
+    $editVendor = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'billing_email', 'media_category', 'address', 'notes', 'demographics', 'media_kit');
 }
 
 $vendors = $crmService->getVendors();
@@ -185,7 +189,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <!-- Add / Edit Vendor Modal -->
 <div class="modal fade" id="vendorModal" tabindex="-1" aria-labelledby="vendorModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content shadow">
             <form method="post" action="/admin/vendors.php" novalidate id="vendorForm">
                 <input type="hidden" name="id" id="vendorId">
@@ -258,8 +262,26 @@ require_once __DIR__ . '/../includes/header.php';
 
                         <div class="col-12">
                             <label for="vendorNotes" class="form-label fw-semibold">Notes</label>
-                            <textarea id="vendorNotes" name="notes" class="form-control" rows="3"
+                            <textarea id="vendorNotes" name="notes" class="form-control" rows="2"
                                       placeholder="Contract terms, rate card details, preferred contact times..."><?= h($editVendor['notes'] ?? '') ?></textarea>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="vendorDemographics" class="form-label fw-semibold">
+                                <i class="bi bi-people me-1 text-primary"></i>Demographics
+                            </label>
+                            <textarea id="vendorDemographics" name="demographics" class="form-control" rows="5"
+                                      placeholder="Describe the audience this vendor reaches — age range, income level, geography, language, ethnicity, interests..."><?= h($editVendor['demographics'] ?? '') ?></textarea>
+                            <div class="form-text">Used by the AI Budget Planner to match vendors to events.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="vendorMediaKit" class="form-label fw-semibold">
+                                <i class="bi bi-file-earmark-bar-graph me-1 text-primary"></i>Media Kit
+                            </label>
+                            <textarea id="vendorMediaKit" name="media_kit" class="form-control" rows="5"
+                                      placeholder="Reach, ratings, circulation, impressions, formats offered, market coverage, key stats from media kit..."><?= h($editVendor['media_kit'] ?? '') ?></textarea>
+                            <div class="form-text">Key stats and capabilities used by the AI Budget Planner.</div>
                         </div>
 
                     </div>
@@ -284,15 +306,17 @@ function resetVendorForm() {
 }
 
 function editVendor(id, data) {
-    document.getElementById('vendorId').value            = id;
-    document.getElementById('vendorCompanyName').value   = data.company_name   || '';
-    document.getElementById('vendorContactName').value   = data.contact_name   || '';
-    document.getElementById('vendorEmail').value         = data.email          || '';
-    document.getElementById('vendorPhone').value         = data.phone          || '';
-    document.getElementById('vendorBillingEmail').value  = data.billing_email  || '';
-    document.getElementById('vendorMediaCategory').value = data.media_category || '';
-    document.getElementById('vendorAddress').value       = data.address        || '';
-    document.getElementById('vendorNotes').value         = data.notes          || '';
+    document.getElementById('vendorId').value              = id;
+    document.getElementById('vendorCompanyName').value     = data.company_name   || '';
+    document.getElementById('vendorContactName').value     = data.contact_name   || '';
+    document.getElementById('vendorEmail').value           = data.email          || '';
+    document.getElementById('vendorPhone').value           = data.phone          || '';
+    document.getElementById('vendorBillingEmail').value    = data.billing_email  || '';
+    document.getElementById('vendorMediaCategory').value   = data.media_category || '';
+    document.getElementById('vendorAddress').value         = data.address        || '';
+    document.getElementById('vendorNotes').value           = data.notes          || '';
+    document.getElementById('vendorDemographics').value    = data.demographics   || '';
+    document.getElementById('vendorMediaKit').value        = data.media_kit      || '';
     document.getElementById('vendorModalTitleText').textContent = 'Edit Vendor: ' + (data.company_name || '');
 }
 
@@ -305,22 +329,13 @@ function filterTable(query, tableId) {
 }
 
 <?php if (!empty($errors) && $editVendor !== null): ?>
-document.addEventListener('DOMContentLoaded', function () {
-    var modal = new bootstrap.Modal(document.getElementById('vendorModal'));
+window.addEventListener('load', function () {
     <?php if (!empty($editVendor['id'])): ?>
     editVendor(<?= (int)$editVendor['id'] ?>, <?= json_encode($editVendor) ?>);
     <?php else: ?>
-    resetVendorForm();
-    document.getElementById('vendorCompanyName').value  = <?= json_encode($editVendor['company_name']) ?>;
-    document.getElementById('vendorContactName').value  = <?= json_encode($editVendor['contact_name']) ?>;
-    document.getElementById('vendorEmail').value        = <?= json_encode($editVendor['email']) ?>;
-    document.getElementById('vendorPhone').value        = <?= json_encode($editVendor['phone']) ?>;
-    document.getElementById('vendorBillingEmail').value  = <?= json_encode($editVendor['billing_email']) ?>;
-    document.getElementById('vendorMediaCategory').value = <?= json_encode($editVendor['media_category']) ?>;
-    document.getElementById('vendorAddress').value       = <?= json_encode($editVendor['address']) ?>;
-    document.getElementById('vendorNotes').value        = <?= json_encode($editVendor['notes']) ?>;
+    editVendor(0, <?= json_encode($editVendor) ?>);
     <?php endif; ?>
-    modal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('vendorModal')).show();
 });
 <?php endif; ?>
 </script>
