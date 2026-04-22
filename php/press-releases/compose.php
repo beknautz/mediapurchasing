@@ -349,13 +349,7 @@ function loadTemplate() {
         .map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>")
         .join("") || "<p></p>";
 
-    // Try Summernote API first; fall back to raw textarea value
-    const $ed = $("#body_html_editor");
-    if ($ed.length && $ed.data("summernote")) {
-        $ed.summernote("code", html);
-    } else {
-        document.getElementById("body_html_editor").value = html;
-    }
+    $("#body_html_editor").summernote("code", html);
 
     document.getElementById("subject").focus();
 }
