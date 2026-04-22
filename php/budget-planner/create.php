@@ -316,77 +316,39 @@ require_once __DIR__ . '/../includes/header.php';
             <table class="table align-middle mb-0" id="allocationTable">
                 <thead class="table-dark">
                     <tr>
-                        <th style="width:20%">Category</th>
-                        <th style="width:22%">Vendor</th>
-                        <th class="text-end" style="width:16%">
+                        <th style="width:32px"></th><!-- drag handle -->
+                        <th style="width:18%">Category</th>
+                        <th>Vendor</th>
+                        <th class="text-end" style="width:14%">
                             Good<br>
                             <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_good']) ?></small>
                         </th>
-                        <th class="text-end" style="width:16%">
+                        <th class="text-end" style="width:14%">
                             Better<br>
                             <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_better']) ?></small>
                         </th>
-                        <th class="text-end" style="width:16%">
+                        <th class="text-end" style="width:14%">
                             Best<br>
                             <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_best']) ?></small>
                         </th>
-                        <th style="width:10%"></th>
+                        <th style="width:72px"></th><!-- actions -->
                     </tr>
                 </thead>
-                <tbody>
-                <?php
-                $currentCat = null;
-                $catGood = $catBetter = $catBest = 0;
-                $rowCount = count($unifiedRows);
-
-                foreach ($unifiedRows as $idx => $row):
-                    $isNewCat = ($row['category'] !== $currentCat);
-                    $isLastInCat = ($idx + 1 >= $rowCount) || ($unifiedRows[$idx + 1]['category'] !== $row['category']);
-
-                    if ($isNewCat && $currentCat !== null):
-                ?>
-                    <!-- Category subtotal -->
-                    <tr class="table-secondary fw-semibold">
-                        <td colspan="2" class="text-muted small ps-4">
-                            <i class="bi bi-arrow-return-right me-1"></i><?= h($currentCat) ?> Total
+                <tbody id="vendorRows">
+                <?php foreach ($unifiedRows as $idx => $row): ?>
+                    <tr class="vendor-row">
+                        <td class="drag-handle text-center text-muted" style="cursor:grab;" title="Drag to reorder">
+                            <i class="bi bi-grip-vertical fs-5"></i>
                         </td>
-                        <td class="text-end small" data-cat-total="good-<?= h(preg_replace('/\W/', '_', $currentCat ?? '')) ?>">
-                            $<?= number_format($catGood) ?>
-                        </td>
-                        <td class="text-end small" data-cat-total="better-<?= h(preg_replace('/\W/', '_', $currentCat ?? '')) ?>">
-                            $<?= number_format($catBetter) ?>
-                        </td>
-                        <td class="text-end small" data-cat-total="best-<?= h(preg_replace('/\W/', '_', $currentCat ?? '')) ?>">
-                            $<?= number_format($catBest) ?>
-                        </td>
-                        <td></td>
-                    </tr>
-                <?php
-                        $catGood = $catBetter = $catBest = 0;
-                    endif;
-
-                    if ($isNewCat):
-                        $currentCat = $row['category'];
-                ?>
-                    <!-- Category header row -->
-                    <tr class="table-light">
-                        <td colspan="6" class="fw-bold text-primary small py-2">
-                            <i class="bi bi-tag-fill me-1"></i><?= h($row['category'] ?: 'Uncategorized') ?>
-                        </td>
-                    </tr>
-                <?php endif; ?>
-
-                    <!-- Vendor row -->
-                    <tr>
-                        <td class="ps-4 text-muted small"><?= h($row['category']) ?></td>
+                        <td class="text-muted small"><?= h($row['category']) ?></td>
                         <td class="fw-semibold">
                             <?= h($row['vendor_name']) ?>
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_id]"   value="<?= (int)$row['vendor_id'] ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_name]" value="<?= h($row['vendor_name']) ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][category]"    value="<?= h($row['category']) ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][good_rationale]"   value="<?= h($row['good_rationale'] ?? '') ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_id]"        value="<?= (int)$row['vendor_id'] ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_name]"       value="<?= h($row['vendor_name']) ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][category]"          value="<?= h($row['category']) ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][good_rationale]"   value="<?= h($row['good_rationale']   ?? '') ?>">
                             <input type="hidden" name="vendor_data[<?= $idx ?>][better_rationale]" value="<?= h($row['better_rationale'] ?? '') ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][best_rationale]"   value="<?= h($row['best_rationale'] ?? '') ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][best_rationale]"   value="<?= h($row['best_rationale']   ?? '') ?>">
                         </td>
                         <td class="text-end">
                             <div class="input-group input-group-sm justify-content-end">
@@ -395,7 +357,7 @@ require_once __DIR__ . '/../includes/header.php';
                                        name="vendor_data[<?= $idx ?>][good_amount]"
                                        data-tier="good"
                                        value="<?= (float)($row['good_amount'] ?? 0) ?>"
-                                       min="0" step="100" style="max-width:100px;">
+                                       min="0" step="any" style="max-width:100px;">
                             </div>
                         </td>
                         <td class="text-end">
@@ -405,7 +367,7 @@ require_once __DIR__ . '/../includes/header.php';
                                        name="vendor_data[<?= $idx ?>][better_amount]"
                                        data-tier="better"
                                        value="<?= (float)($row['better_amount'] ?? 0) ?>"
-                                       min="0" step="100" style="max-width:100px;">
+                                       min="0" step="any" style="max-width:100px;">
                             </div>
                         </td>
                         <td class="text-end">
@@ -415,61 +377,45 @@ require_once __DIR__ . '/../includes/header.php';
                                        name="vendor_data[<?= $idx ?>][best_amount]"
                                        data-tier="best"
                                        value="<?= (float)($row['best_amount'] ?? 0) ?>"
-                                       min="0" step="100" style="max-width:100px;">
+                                       min="0" step="any" style="max-width:100px;">
                             </div>
                         </td>
                         <td class="text-center">
-                            <span class="text-muted small" data-bs-toggle="tooltip"
-                                  title="<?= h(implode(' | ', array_filter([
-                                      $row['good_rationale']   ? 'Good: '   . $row['good_rationale']   : '',
-                                      $row['better_rationale'] ? 'Better: ' . $row['better_rationale'] : '',
-                                      $row['best_rationale']   ? 'Best: '   . $row['best_rationale']   : '',
-                                  ]))) ?>">
+                            <?php $rationale = implode(' | ', array_filter([
+                                $row['good_rationale']   ? 'Good: '   . $row['good_rationale']   : '',
+                                $row['better_rationale'] ? 'Better: ' . $row['better_rationale'] : '',
+                                $row['best_rationale']   ? 'Best: '   . $row['best_rationale']   : '',
+                            ])); ?>
+                            <?php if ($rationale): ?>
+                            <span class="text-muted me-1" data-bs-toggle="tooltip" title="<?= h($rationale) ?>">
                                 <i class="bi bi-info-circle"></i>
                             </span>
+                            <?php endif; ?>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-row"
+                                    title="Remove vendor" onclick="removeRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </td>
                     </tr>
-
-                <?php
-                    $catGood   += (float)($row['good_amount'] ?? 0);
-                    $catBetter += (float)($row['better_amount'] ?? 0);
-                    $catBest   += (float)($row['best_amount'] ?? 0);
-
-                    if ($isLastInCat):
-                ?>
-                    <!-- Last category subtotal -->
-                    <tr class="table-secondary fw-semibold">
-                        <td colspan="2" class="text-muted small ps-4">
-                            <i class="bi bi-arrow-return-right me-1"></i><?= h($currentCat) ?> Total
-                        </td>
-                        <td class="text-end small">$<?= number_format($catGood) ?></td>
-                        <td class="text-end small">$<?= number_format($catBetter) ?></td>
-                        <td class="text-end small">$<?= number_format($catBest) ?></td>
-                        <td></td>
-                    </tr>
-                <?php
-                        $catGood = $catBetter = $catBest = 0;
-                    endif;
-                endforeach;
-                ?>
+                <?php endforeach; ?>
                 </tbody>
                 <tfoot class="table-dark fw-bold">
                     <tr>
-                        <td colspan="2">Grand Total</td>
+                        <td colspan="3">Grand Total</td>
                         <td class="text-end" id="totalGood">$0</td>
                         <td class="text-end" id="totalBetter">$0</td>
                         <td class="text-end" id="totalBest">$0</td>
                         <td></td>
                     </tr>
                     <tr class="small">
-                        <td colspan="2" class="text-muted">Target</td>
+                        <td colspan="3" class="text-muted">Target</td>
                         <td class="text-end text-muted">$<?= number_format((float)$formData['budget_good']) ?></td>
                         <td class="text-end text-muted">$<?= number_format((float)$formData['budget_better']) ?></td>
                         <td class="text-end text-muted">$<?= number_format((float)$formData['budget_best']) ?></td>
                         <td></td>
                     </tr>
                     <tr class="small" id="diffRow">
-                        <td colspan="2" class="text-muted">Difference</td>
+                        <td colspan="3" class="text-muted">Difference</td>
                         <td class="text-end" id="diffGood">$0</td>
                         <td class="text-end" id="diffBetter">$0</td>
                         <td class="text-end" id="diffBest">$0</td>
@@ -490,65 +436,91 @@ require_once __DIR__ . '/../includes/header.php';
     </form>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
-(function () {
-    var targetGood   = <?= (float)($formData['budget_good']   ?? 0) ?>;
-    var targetBetter = <?= (float)($formData['budget_better'] ?? 0) ?>;
-    var targetBest   = <?= (float)($formData['budget_best']   ?? 0) ?>;
+// ── Totals recalculation ──────────────────────────────────────────────────────
+var targetGood   = <?= (float)($formData['budget_good']   ?? 0) ?>;
+var targetBetter = <?= (float)($formData['budget_better'] ?? 0) ?>;
+var targetBest   = <?= (float)($formData['budget_best']   ?? 0) ?>;
 
-    function fmt(n) {
-        return '$' + Math.round(n).toLocaleString('en-US');
-    }
+function fmt(n) {
+    return '$' + Math.round(n).toLocaleString('en-US');
+}
 
-    function recalc() {
-        var good = 0, better = 0, best = 0;
-        document.querySelectorAll('.tier-input').forEach(function(inp) {
-            var v = parseFloat(inp.value) || 0;
-            if (inp.dataset.tier === 'good')   good   += v;
-            if (inp.dataset.tier === 'better') better += v;
-            if (inp.dataset.tier === 'best')   best   += v;
+function recalc() {
+    var good = 0, better = 0, best = 0;
+    document.querySelectorAll('.tier-input').forEach(function (inp) {
+        var v = parseFloat(inp.value) || 0;
+        if (inp.dataset.tier === 'good')   good   += v;
+        if (inp.dataset.tier === 'better') better += v;
+        if (inp.dataset.tier === 'best')   best   += v;
+    });
+
+    document.getElementById('totalGood').textContent   = fmt(good);
+    document.getElementById('totalBetter').textContent = fmt(better);
+    document.getElementById('totalBest').textContent   = fmt(best);
+
+    var dg  = good   - targetGood;
+    var db  = better - targetBetter;
+    var dbs = best   - targetBest;
+
+    var dGood   = document.getElementById('diffGood');
+    var dBetter = document.getElementById('diffBetter');
+    var dBest   = document.getElementById('diffBest');
+
+    dGood.textContent   = (dg  >= 0 ? '+' : '') + fmt(dg);
+    dBetter.textContent = (db  >= 0 ? '+' : '') + fmt(db);
+    dBest.textContent   = (dbs >= 0 ? '+' : '') + fmt(dbs);
+
+    dGood.className   = dg  === 0 ? 'text-end text-success' : 'text-end text-danger';
+    dBetter.className = db  === 0 ? 'text-end text-success' : 'text-end text-danger';
+    dBest.className   = dbs === 0 ? 'text-end text-success' : 'text-end text-danger';
+}
+
+// ── Re-index input names after any sort or delete ─────────────────────────────
+function reindex() {
+    document.querySelectorAll('#vendorRows tr.vendor-row').forEach(function (tr, i) {
+        tr.querySelectorAll('input[name]').forEach(function (inp) {
+            inp.name = inp.name.replace(/vendor_data\[\d+\]/, 'vendor_data[' + i + ']');
         });
-
-        document.getElementById('totalGood').textContent   = fmt(good);
-        document.getElementById('totalBetter').textContent = fmt(better);
-        document.getElementById('totalBest').textContent   = fmt(best);
-
-        var dg = good   - targetGood;
-        var db = better - targetBetter;
-        var dbs = best  - targetBest;
-
-        var dGood   = document.getElementById('diffGood');
-        var dBetter = document.getElementById('diffBetter');
-        var dBest   = document.getElementById('diffBest');
-
-        dGood.textContent   = (dg >= 0 ? '+' : '') + fmt(dg);
-        dBetter.textContent = (db >= 0 ? '+' : '') + fmt(db);
-        dBest.textContent   = (dbs >= 0 ? '+' : '') + fmt(dbs);
-
-        dGood.className   = dg   === 0 ? 'text-end text-success' : 'text-end text-danger';
-        dBetter.className = db   === 0 ? 'text-end text-success' : 'text-end text-danger';
-        dBest.className   = dbs  === 0 ? 'text-end text-success' : 'text-end text-danger';
-    }
-
-    document.querySelectorAll('.tier-input').forEach(function(inp) {
-        inp.addEventListener('input', recalc);
     });
-
     recalc();
+}
 
-    // Init tooltips
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
-        new bootstrap.Tooltip(el);
+// ── Delete a vendor row ───────────────────────────────────────────────────────
+function removeRow(btn) {
+    var tr = btn.closest('tr.vendor-row');
+    tr.style.transition = 'opacity .15s, background .15s';
+    tr.style.opacity    = '0';
+    tr.style.background = '#fee2e2';
+    setTimeout(function () { tr.remove(); reindex(); }, 180);
+}
+
+// ── Drag-to-sort via SortableJS ───────────────────────────────────────────────
+var tbody = document.getElementById('vendorRows');
+if (tbody) {
+    Sortable.create(tbody, {
+        handle:     '.drag-handle',
+        animation:  150,
+        ghostClass: 'table-primary',
+        onEnd: reindex
     });
-})();
+}
 
+// ── Wire live totals & tooltips ───────────────────────────────────────────────
+document.querySelectorAll('.tier-input').forEach(function (inp) {
+    inp.addEventListener('input', recalc);
+});
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+});
+recalc();
+
+// ── Generate form overlay ─────────────────────────────────────────────────────
 document.getElementById('generateForm').addEventListener('submit', function () {
     document.getElementById('generateBtn').disabled = true;
+    document.getElementById('aiOverlay').style.display = 'flex';
 
-    var overlay = document.getElementById('aiOverlay');
-    overlay.style.display = 'flex';
-
-    // Animate step badges after short delays to give sense of progress
     setTimeout(function () {
         document.getElementById('step1').className = 'badge bg-success py-2 px-3';
         document.getElementById('step1').innerHTML = '<i class="bi bi-check-lg me-1"></i>Reading vendors';
