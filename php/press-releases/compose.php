@@ -336,15 +336,27 @@ $(function () {
 
 function loadTemplate() {
     const id = parseInt(document.getElementById("templatePicker").value, 10);
-    if (!id || !TEMPLATES[id]) return;
+    if (!id || !TEMPLATES[id]) {
+        alert("Please select a template first.");
+        return;
+    }
     const t = TEMPLATES[id];
     document.getElementById("subject").value = t.subject;
-    // Convert plain-text newlines to HTML paragraphs for the editor
-    const html = t.body_text
+
+    // Convert plain-text newlines → HTML paragraphs
+    const html = (t.body_text || "")
         .split(/\n\n+/)
         .map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>")
-        .join("");
-    $("#body_html_editor").summernote("code", html);
+        .join("") || "<p></p>";
+
+    // Try Summernote API first; fall back to raw textarea value
+    const $ed = $("#body_html_editor");
+    if ($ed.length && $ed.data("summernote")) {
+        $ed.summernote("code", html);
+    } else {
+        document.getElementById("body_html_editor").value = html;
+    }
+
     document.getElementById("subject").focus();
 }
 </script>';
