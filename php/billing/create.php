@@ -304,10 +304,10 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
 
                 <!-- AI extraction notice (shown after parse) -->
-                <div id="aiNotice" class="alert alert-info alert-dismissible small py-2 mb-3" style="display:none;">
-                    <i class="bi bi-robot me-1"></i>
-                    <strong>AI extracted these fields.</strong> Please verify each value before saving.
-                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+                <!-- No data-bs-dismiss — Bootstrap removes the element from DOM on close, breaking subsequent drops -->
+                <div id="aiNotice" class="alert alert-info small py-2 mb-3 d-flex align-items-center justify-content-between" style="display:none !important;">
+                    <span><i class="bi bi-robot me-1"></i><strong>AI extracted these fields.</strong> Please verify each value before saving.</span>
+                    <button type="button" class="btn-close ms-3" onclick="document.getElementById('aiNotice').style.display='none'"></button>
                 </div>
 
                 <!-- Hidden real file input -->
@@ -347,72 +347,65 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
+// ── safe DOM helpers ───────────────────────────────────────────────────────────
+function elShow(id) { const e = document.getElementById(id); if (e) e.style.display = ''; }
+function elHide(id) { const e = document.getElementById(id); if (e) e.style.display = 'none'; }
+function elText(id, t) { const e = document.getElementById(id); if (e) e.textContent = t; }
+
 // ── vendor lookup map for fuzzy-matching extracted vendor name ─────────────────
 const VENDORS = <?= json_encode(array_map(fn($v) => ['id' => (int)$v['id'], 'name' => strtolower($v['company_name'])], $vendors)) ?>;
 
 // ── drop zone wiring ───────────────────────────────────────────────────────────
 const dropZone = document.getElementById('dropZone');
-
-dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropZone.style.background = '#e7f1ff';
-});
-dropZone.addEventListener('dragleave', () => {
-    dropZone.style.background = '';
-});
-dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.style.background = '';
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-});
+if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.background = '#e7f1ff'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.background = ''; });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.style.background = '';
+        const file = e.dataTransfer.files[0];
+        if (file) handleFileSelect(file);
+    });
+}
 
 function handleFileSelect(file) {
     if (!file) return;
 
-    // Put file into the hidden input via DataTransfer so it submits with the form
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('invoice_file').files = dt.files;
+    // Attach file to the hidden input so it submits with the form
+    try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById('invoice_file').files = dt.files;
+    } catch (e) { /* DataTransfer not supported in all browsers — file still in FormData below */ }
 
-    // Show processing state
-    document.getElementById('dropIdle').style.display       = 'none';
-    document.getElementById('dropDone').style.display       = 'none';
-    document.getElementById('dropProcessing').style.display = '';
+    elHide('dropIdle');
+    elHide('dropDone');
+    elShow('dropProcessing');
 
-    // Send to extraction endpoint
     const fd = new FormData();
     fd.append('invoice_file', file);
 
     fetch('/billing/extract-invoice.php', { method: 'POST', body: fd })
-        .then(r => {
-            // Capture raw text first so we can show it if JSON parsing fails
-            return r.text().then(txt => {
-                try {
-                    return JSON.parse(txt);
-                } catch (e) {
-                    throw new Error('Server returned non-JSON:\n\n' + txt.substring(0, 400));
-                }
-            });
-        })
+        .then(r => r.text().then(txt => {
+            try { return JSON.parse(txt); }
+            catch (e) { throw new Error('Server returned non-JSON:\n\n' + txt.substring(0, 500)); }
+        }))
         .then(resp => {
-            document.getElementById('dropProcessing').style.display = 'none';
-
+            elHide('dropProcessing');
             if (!resp.success) {
-                document.getElementById('dropIdle').style.display = '';
+                elShow('dropIdle');
                 alert('AI extraction failed:\n\n' + (resp.error || 'Unknown error'));
                 return;
             }
-
-            document.getElementById('dropFileName').textContent = file.name;
-            document.getElementById('dropDone').style.display   = '';
-            document.getElementById('aiNotice').style.display   = '';
+            elText('dropFileName', file.name);
+            elShow('dropDone');
+            elShow('aiNotice');
             fillForm(resp.data);
         })
         .catch(err => {
-            document.getElementById('dropProcessing').style.display = 'none';
-            document.getElementById('dropIdle').style.display       = '';
-            alert(err.message || 'Unexpected error contacting the extraction service.');
+            elHide('dropProcessing');
+            elShow('dropIdle');
+            alert(err.message || 'Unexpected error — check the browser console for details.');
         });
 }
 
@@ -422,25 +415,19 @@ function fillForm(data) {
     setField('invoice_number', data.invoice_number);
     setField('invoice_date',   data.invoice_date);
     setField('due_date',       data.due_date);
-    setField('amount',         data.amount !== null && data.amount !== undefined ? data.amount : null);
+    setField('amount',         (data.amount !== null && data.amount !== undefined) ? data.amount : null);
 
-    // Build notes from po_number + notes
     const noteParts = [];
-    if (data.po_number)  noteParts.push('PO: ' + data.po_number);
-    if (data.notes)      noteParts.push(data.notes);
+    if (data.po_number) noteParts.push('PO: ' + data.po_number);
+    if (data.notes)     noteParts.push(data.notes);
     if (noteParts.length) setField('notes', noteParts.join('\n'));
 
-    // Try to match vendor by name
     if (data.vendor_name) {
         const needle = data.vendor_name.toLowerCase().trim();
-        const vendorSel = document.getElementById('vendor_id');
-        // Exact match first, then partial
-        let match = VENDORS.find(v => v.name === needle)
-                 || VENDORS.find(v => v.name.includes(needle) || needle.includes(v.name));
-        if (match) {
-            vendorSel.value = match.id;
-            highlight(vendorSel);
-        }
+        const sel = document.getElementById('vendor_id');
+        const match = VENDORS.find(v => v.name === needle)
+                   || VENDORS.find(v => v.name.includes(needle) || needle.includes(v.name));
+        if (match && sel) { sel.value = match.id; highlight(sel); }
     }
 }
 
@@ -453,15 +440,17 @@ function setField(id, value) {
 }
 
 function highlight(el) {
+    if (!el) return;
     el.classList.add('border-success', 'bg-success-subtle');
     setTimeout(() => el.classList.remove('border-success', 'bg-success-subtle'), 3000);
 }
 
 function resetDrop() {
-    document.getElementById('dropDone').style.display  = 'none';
-    document.getElementById('dropIdle').style.display  = '';
-    document.getElementById('aiNotice').style.display  = 'none';
-    document.getElementById('invoice_file').value      = '';
+    elHide('dropDone');
+    elShow('dropIdle');
+    elHide('aiNotice');
+    const fi = document.getElementById('invoice_file');
+    if (fi) fi.value = '';
 }
 </script>
 
