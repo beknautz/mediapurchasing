@@ -242,14 +242,47 @@ require_once __DIR__ . '/../includes/header.php';
                 <button type="submit" class="btn btn-primary btn-lg" id="generateBtn">
                     <i class="bi bi-robot me-2"></i>Generate AI Budget Allocation
                 </button>
-                <span class="text-muted ms-3 small" id="generatingMsg" style="display:none;">
-                    <span class="spinner-border spinner-border-sm me-1"></span>
-                    Asking Claude AI to analyze your vendors and allocate the budget… this may take 30–60 seconds.
-                </span>
             </div>
         </form>
     </div>
 </div>
+
+<!-- AI Generation Loading Overlay -->
+<div id="aiOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.75);
+     z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+    <div class="text-center text-white p-4" style="max-width:420px;">
+        <div style="position:relative; width:100px; height:100px; margin:0 auto 1.5rem;">
+            <!-- Outer ring -->
+            <div style="position:absolute; inset:0; border-radius:50%; border:4px solid rgba(255,255,255,.15);"></div>
+            <!-- Spinning arc -->
+            <div style="position:absolute; inset:0; border-radius:50%; border:4px solid transparent;
+                        border-top-color:#3b82f6; border-right-color:#3b82f6;
+                        animation:spin 1s linear infinite;"></div>
+            <!-- Robot icon -->
+            <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                <i class="bi bi-robot" style="font-size:2.2rem; color:#93c5fd;"></i>
+            </div>
+        </div>
+        <h4 class="fw-bold mb-2">Generating Budget Plan…</h4>
+        <p class="mb-3 opacity-75" style="font-size:.95rem;">
+            Claude AI is analyzing your vendors' demographics and media kits
+            to build the best Good / Better / Best allocation for your event.
+        </p>
+        <div class="d-flex justify-content-center gap-2 mb-3" id="aiSteps">
+            <span class="badge bg-primary py-2 px-3" id="step1">
+                <span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>
+                Reading vendors
+            </span>
+            <span class="badge bg-secondary py-2 px-3" id="step2">Allocating budget</span>
+            <span class="badge bg-secondary py-2 px-3" id="step3">Finalizing</span>
+        </div>
+        <p class="small opacity-50 mb-0">This usually takes 20–60 seconds. Please wait…</p>
+    </div>
+</div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
 
 <?php if (!empty($unifiedRows) && empty($errors)): ?>
 <!-- ─── Step 2: Editable Allocation Table ─────────────────────────────── -->
@@ -509,9 +542,26 @@ require_once __DIR__ . '/../includes/header.php';
     });
 })();
 
-document.getElementById('generateForm').addEventListener('submit', function() {
+document.getElementById('generateForm').addEventListener('submit', function () {
     document.getElementById('generateBtn').disabled = true;
-    document.getElementById('generatingMsg').style.display = '';
+
+    var overlay = document.getElementById('aiOverlay');
+    overlay.style.display = 'flex';
+
+    // Animate step badges after short delays to give sense of progress
+    setTimeout(function () {
+        document.getElementById('step1').className = 'badge bg-success py-2 px-3';
+        document.getElementById('step1').innerHTML = '<i class="bi bi-check-lg me-1"></i>Reading vendors';
+        document.getElementById('step2').className = 'badge bg-primary py-2 px-3';
+        document.getElementById('step2').innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>Allocating budget';
+    }, 4000);
+
+    setTimeout(function () {
+        document.getElementById('step2').className = 'badge bg-success py-2 px-3';
+        document.getElementById('step2').innerHTML = '<i class="bi bi-check-lg me-1"></i>Allocating budget';
+        document.getElementById('step3').className = 'badge bg-primary py-2 px-3';
+        document.getElementById('step3').innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>Finalizing';
+    }, 12000);
 });
 </script>
 
