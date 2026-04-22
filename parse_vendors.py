@@ -34,10 +34,16 @@ def looks_like_url(s):
     return s.startswith('http') or s.startswith('www.')
 
 def q(s):
+    """SQL string or NULL for empty."""
     if not s:
         return 'NULL'
     s = str(s).replace("'", "''")
     return "'" + s + "'"
+
+def qs(s):
+    """SQL string, never NULL (for NOT NULL columns)."""
+    s = str(s) if s else ''
+    return "'" + s.replace("'", "''") + "'"
 
 def parse_city_state_zip(addr_lines):
     for line in addr_lines:
@@ -232,18 +238,21 @@ header = """\
 SET NAMES utf8mb4;
 
 INSERT INTO vendors
-  (company_name, contact_name, email, billing_email, phone,
-   address, city, state, zip, category, notes, status,
-   created_by, created_at, updated_at)
+  (company_name, contact_name, email, phone,
+   address, billing_email, media_category, notes,
+   is_active, created_at, updated_at)
 VALUES
 """
 
 rows_sql = []
 for v in vendors:
+    # Use raw address line (already contains city/state when parsed from spreadsheet)
+    address = v['address']
+
+    # contact_name and email are NOT NULL in schema — qs() returns '' not NULL
     rows_sql.append(
-        f"  ({q(v['company_name'])}, {q(v['contact_name'])}, {q(v['email'])}, NULL, {q(v['phone'])},\n"
-        f"   {q(v['address'])}, {q(v['city'])}, {q(v['state'])}, {q(v['zip'])},\n"
-        f"   {q(v['category'])}, {q(v['notes'])}, 'active',\n"
+        f"  ({qs(v['company_name'])}, {qs(v['contact_name'])}, {qs(v['email'])}, {q(v['phone'])},\n"
+        f"   {q(address)}, NULL, {q(v['category'])}, {q(v['notes'])},\n"
         f"   1, NOW(), NOW())"
     )
 
