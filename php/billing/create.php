@@ -268,18 +268,52 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- File Upload -->
+        <!-- File Upload with AI extraction -->
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white py-3">
+            <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
                 <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2 text-primary"></i>Invoice File</h5>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">
+                    <i class="bi bi-robot me-1"></i>AI Auto-Fill
+                </span>
             </div>
             <div class="card-body">
-                <div class="mb-3">
-                    <label for="invoice_file" class="form-label fw-semibold">Upload Invoice PDF or Image</label>
-                    <input type="file" class="form-control" id="invoice_file" name="invoice_file"
-                           accept=".pdf,.jpg,.jpeg,.png,.gif,.webp">
-                    <div class="form-text">Accepted: PDF, JPG, PNG, GIF, WEBP. Max 10 MB.</div>
+
+                <!-- Drop zone -->
+                <div id="dropZone"
+                     class="border border-2 border-dashed rounded-3 text-center py-4 px-3 mb-3"
+                     style="border-color:#0d6efd !important; cursor:pointer; transition:background .15s;">
+                    <div id="dropIdle">
+                        <i class="bi bi-cloud-arrow-up fs-2 text-primary mb-2 d-block"></i>
+                        <div class="fw-semibold">Drag &amp; drop invoice here</div>
+                        <div class="text-muted small mt-1">or <span class="text-primary text-decoration-underline" style="cursor:pointer" onclick="document.getElementById('invoice_file').click()">browse to choose a file</span></div>
+                        <div class="text-muted small mt-1">PDF, JPG, PNG, GIF, WEBP — max 10 MB</div>
+                    </div>
+                    <div id="dropProcessing" style="display:none;">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="fw-semibold text-primary">Reading invoice with AI…</div>
+                        <div class="text-muted small mt-1">Extracting fields — usually takes 5–10 seconds</div>
+                    </div>
+                    <div id="dropDone" style="display:none;">
+                        <i class="bi bi-check-circle-fill fs-2 text-success mb-2 d-block"></i>
+                        <div class="fw-semibold text-success" id="dropFileName"></div>
+                        <div class="text-muted small mt-1">Fields filled in below — review before saving</div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="resetDrop()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Use a different file
+                        </button>
+                    </div>
                 </div>
+
+                <!-- AI extraction notice (shown after parse) -->
+                <div id="aiNotice" class="alert alert-info alert-dismissible small py-2 mb-3" style="display:none;">
+                    <i class="bi bi-robot me-1"></i>
+                    <strong>AI extracted these fields.</strong> Please verify each value before saving.
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Hidden real file input -->
+                <input type="file" class="d-none" id="invoice_file" name="invoice_file"
+                       accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                       onchange="handleFileSelect(this.files[0])">
             </div>
         </div>
     </div>
@@ -311,5 +345,115 @@ require_once __DIR__ . '/../includes/header.php';
 
 </div>
 </form>
+
+<script>
+// ── vendor lookup map for fuzzy-matching extracted vendor name ─────────────────
+const VENDORS = <?= json_encode(array_map(fn($v) => ['id' => (int)$v['id'], 'name' => strtolower($v['company_name'])], $vendors)) ?>;
+
+// ── drop zone wiring ───────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.style.background = '#e7f1ff';
+});
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.background = '';
+});
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.background = '';
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+});
+
+function handleFileSelect(file) {
+    if (!file) return;
+
+    // Put file into the hidden input via DataTransfer so it submits with the form
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('invoice_file').files = dt.files;
+
+    // Show processing state
+    document.getElementById('dropIdle').style.display       = 'none';
+    document.getElementById('dropDone').style.display       = 'none';
+    document.getElementById('dropProcessing').style.display = '';
+
+    // Send to extraction endpoint
+    const fd = new FormData();
+    fd.append('invoice_file', file);
+
+    fetch('/billing/extract-invoice.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(resp => {
+            document.getElementById('dropProcessing').style.display = 'none';
+
+            if (!resp.success) {
+                document.getElementById('dropIdle').style.display = '';
+                alert('AI extraction failed: ' + (resp.error || 'Unknown error'));
+                return;
+            }
+
+            document.getElementById('dropFileName').textContent = file.name;
+            document.getElementById('dropDone').style.display   = '';
+            document.getElementById('aiNotice').style.display   = '';
+            fillForm(resp.data);
+        })
+        .catch(() => {
+            document.getElementById('dropProcessing').style.display = 'none';
+            document.getElementById('dropIdle').style.display       = '';
+            alert('Network error — could not reach the extraction service.');
+        });
+}
+
+function fillForm(data) {
+    if (!data) return;
+
+    setField('invoice_number', data.invoice_number);
+    setField('invoice_date',   data.invoice_date);
+    setField('due_date',       data.due_date);
+    setField('amount',         data.amount !== null && data.amount !== undefined ? data.amount : null);
+
+    // Build notes from po_number + notes
+    const noteParts = [];
+    if (data.po_number)  noteParts.push('PO: ' + data.po_number);
+    if (data.notes)      noteParts.push(data.notes);
+    if (noteParts.length) setField('notes', noteParts.join('\n'));
+
+    // Try to match vendor by name
+    if (data.vendor_name) {
+        const needle = data.vendor_name.toLowerCase().trim();
+        const vendorSel = document.getElementById('vendor_id');
+        // Exact match first, then partial
+        let match = VENDORS.find(v => v.name === needle)
+                 || VENDORS.find(v => v.name.includes(needle) || needle.includes(v.name));
+        if (match) {
+            vendorSel.value = match.id;
+            highlight(vendorSel);
+        }
+    }
+}
+
+function setField(id, value) {
+    if (value === null || value === undefined || value === '') return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value;
+    highlight(el);
+}
+
+function highlight(el) {
+    el.classList.add('border-success', 'bg-success-subtle');
+    setTimeout(() => el.classList.remove('border-success', 'bg-success-subtle'), 3000);
+}
+
+function resetDrop() {
+    document.getElementById('dropDone').style.display  = 'none';
+    document.getElementById('dropIdle').style.display  = '';
+    document.getElementById('aiNotice').style.display  = 'none';
+    document.getElementById('invoice_file').value      = '';
+}
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
