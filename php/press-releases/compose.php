@@ -341,15 +341,37 @@ function loadTemplate() {
         return;
     }
     const t = TEMPLATES[id];
-    document.getElementById("subject").value = t.subject;
 
-    // Convert plain-text newlines → HTML paragraphs
-    const html = (t.body_text || "")
+    if (t.subject) {
+        document.getElementById("subject").value = t.subject;
+    }
+
+    const rawText = (t.body_text || "").trim();
+    if (!rawText) {
+        alert("This template has no message body. Go to Manage Templates to add content.");
+        return;
+    }
+
+    const html = rawText
         .split(/\n\n+/)
         .map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>")
-        .join("") || "<p></p>";
+        .join("");
 
+    // Set via Summernote API
     $("#body_html_editor").summernote("code", html);
+
+    // Direct fallback: write into the contenteditable div Summernote renders
+    const editable = document.querySelector(".note-editable[contenteditable]");
+    if (editable) editable.innerHTML = html;
+
+    // Visual confirmation the load ran
+    const btn = document.querySelector("button[onclick=\"loadTemplate()\"]");
+    if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = "<i class=\"bi bi-check-circle-fill me-1\"></i>Loaded";
+        btn.classList.replace("btn-outline-primary", "btn-success");
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.replace("btn-success", "btn-outline-primary"); }, 2000);
+    }
 
     document.getElementById("subject").focus();
 }
