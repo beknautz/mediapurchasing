@@ -188,7 +188,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="text-muted small">Assigned To</div>
                         <div class="fw-semibold"><?= h($bill['assigned_to_name'] ?? '—') ?></div>
                     </div>
-                    <?php if (!empty($bill['media_buy_id'])): ?>
+                    <?php if (!empty($bill['campaign_id'])): ?>
+                    <div class="col-sm-12">
+                        <div class="text-muted small">Linked Campaign</div>
+                        <a href="/campaigns/view.php?id=<?= (int)$bill['campaign_id'] ?>" class="fw-semibold">
+                            <i class="bi bi-collection-play-fill me-1"></i>
+                            <?= h($bill['campaign_title'] ?? '#' . $bill['campaign_id']) ?>
+                        </a>
+                    </div>
+                    <?php elseif (!empty($bill['media_buy_id'])): ?>
                     <div class="col-sm-12">
                         <div class="text-muted small">Linked Media Buy</div>
                         <a href="/media-buys/view.php?id=<?= (int)$bill['media_buy_id'] ?>" class="fw-semibold">

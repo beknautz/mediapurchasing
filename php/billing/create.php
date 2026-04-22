@@ -9,7 +9,7 @@ $userId = (int) ($_SESSION['user']['id'] ?? 0);
 
 $billingService = new BillingService();
 
-// Load vendors and media buys for selects
+// Load vendors and campaigns for selects
 $pdo = (function () {
     if (!defined('DB_HOST')) return null;
     try {
@@ -22,17 +22,24 @@ $pdo = (function () {
 })();
 
 $vendors   = [];
-$mediaBuys = [];
+$campaigns = [];
 
 if ($pdo) {
     $vendors   = $pdo->query("SELECT id, company_name FROM vendors WHERE is_active = 1 ORDER BY company_name")->fetchAll();
-    $mediaBuys = $pdo->query("SELECT id, title FROM media_buys WHERE status NOT IN ('cancelled') ORDER BY updated_at DESC LIMIT 200")->fetchAll();
+    $campaigns = $pdo->query(
+        "SELECT c.id, c.title, cl.company_name AS client_name
+           FROM campaigns c
+      LEFT JOIN clients cl ON cl.id = c.client_id
+          WHERE c.status NOT IN ('cancelled','completed')
+       ORDER BY c.updated_at DESC
+          LIMIT 200"
+    )->fetchAll();
 }
 
 $errors   = [];
 $formData = [
-    'vendor_id'      => (int) ($_GET['vendor_id']   ?? 0),
-    'media_buy_id'   => (int) ($_GET['media_buy_id'] ?? 0),
+    'vendor_id'      => (int) ($_GET['vendor_id']    ?? 0),
+    'campaign_id'    => (int) ($_GET['campaign_id']  ?? 0),
     'invoice_number' => '',
     'invoice_date'   => date('Y-m-d'),
     'due_date'       => '',
@@ -44,7 +51,7 @@ $formData = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formData['vendor_id']      = (int) ($_POST['vendor_id']      ?? 0);
-    $formData['media_buy_id']   = (int) ($_POST['media_buy_id']   ?? 0);
+    $formData['campaign_id']    = (int) ($_POST['campaign_id']    ?? 0);
     $formData['invoice_number'] = trim($_POST['invoice_number']    ?? '');
     $formData['invoice_date']   = trim($_POST['invoice_date']      ?? '');
     $formData['due_date']       = trim($_POST['due_date']          ?? '');
@@ -110,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $createResult = $billingService->createBill([
             'vendor_id'      => $formData['vendor_id'],
-            'media_buy_id'   => $formData['media_buy_id'] ?: null,
+            'campaign_id'    => $formData['campaign_id'] ?: null,
             'invoice_number' => $formData['invoice_number'],
             'invoice_date'   => $formData['invoice_date'],
             'due_date'       => $formData['due_date'] ?: null,
@@ -196,12 +203,12 @@ require_once __DIR__ . '/../includes/header.php';
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label for="media_buy_id" class="form-label fw-semibold">Linked Media Buy <span class="text-muted fw-normal">(optional)</span></label>
-                        <select class="form-select" id="media_buy_id" name="media_buy_id">
+                        <label for="campaign_id" class="form-label fw-semibold">Linked Campaign <span class="text-muted fw-normal">(optional)</span></label>
+                        <select class="form-select" id="campaign_id" name="campaign_id">
                             <option value="">— None —</option>
-                            <?php foreach ($mediaBuys as $mb): ?>
-                                <option value="<?= (int)$mb['id'] ?>" <?= (int)$formData['media_buy_id'] === (int)$mb['id'] ? 'selected' : '' ?>>
-                                    <?= h($mb['title']) ?>
+                            <?php foreach ($campaigns as $c): ?>
+                                <option value="<?= (int)$c['id'] ?>" <?= (int)$formData['campaign_id'] === (int)$c['id'] ? 'selected' : '' ?>>
+                                    <?= h($c['title']) ?><?= !empty($c['client_name']) ? ' — ' . h($c['client_name']) : '' ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

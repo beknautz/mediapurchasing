@@ -18,11 +18,13 @@ class BillingService extends BaseService
         $sql = 'SELECT bq.*,
                        v.company_name  AS vendor_name,
                        u.name          AS assigned_to_name,
-                       mb.title        AS media_buy_title
+                       mb.title        AS media_buy_title,
+                       c.title         AS campaign_title
                   FROM billing_queue bq
              LEFT JOIN vendors    v  ON v.id  = bq.vendor_id
              LEFT JOIN users      u  ON u.id  = bq.assigned_to
-             LEFT JOIN media_buys mb ON mb.id = bq.media_buy_id';
+             LEFT JOIN media_buys mb ON mb.id = bq.media_buy_id
+             LEFT JOIN campaigns  c  ON c.id  = bq.campaign_id';
 
         $params = [];
 
@@ -50,11 +52,13 @@ class BillingService extends BaseService
                     v.email                                 AS vendor_email,
                     u.name                                 AS assigned_to_name,
                     mb.title                                AS media_buy_title,
-                    mb.agreed_cost                          AS media_buy_agreed_cost
+                    mb.agreed_cost                          AS media_buy_agreed_cost,
+                    c.title                                 AS campaign_title
                FROM billing_queue bq
           LEFT JOIN vendors    v  ON v.id  = bq.vendor_id
           LEFT JOIN users      u  ON u.id  = bq.assigned_to
           LEFT JOIN media_buys mb ON mb.id = bq.media_buy_id
+          LEFT JOIN campaigns  c  ON c.id  = bq.campaign_id
               WHERE bq.id = :id
               LIMIT 1'
         );
@@ -76,6 +80,7 @@ class BillingService extends BaseService
     public function createBill(array $data): array
     {
         $vendorId      = (int)   ($data['vendor_id']      ?? 0);
+        $campaignId    = (int)   ($data['campaign_id']    ?? 0);
         $mediaBuyId    = (int)   ($data['media_buy_id']   ?? 0);
         $invoiceNumber = trim($data['invoice_number']      ?? '');
         $invoiceDate   = $data['invoice_date']             ?? null;
@@ -87,14 +92,15 @@ class BillingService extends BaseService
 
         $stmt = $this->db->prepare(
             'INSERT INTO billing_queue
-                 (vendor_id, media_buy_id, invoice_number, invoice_date, due_date,
+                 (vendor_id, campaign_id, media_buy_id, invoice_number, invoice_date, due_date,
                   amount, notes, status, source, vendor_email, created_at, updated_at)
              VALUES
-                 (:vendor_id, :media_buy_id, :invoice_number, :invoice_date, :due_date,
+                 (:vendor_id, :campaign_id, :media_buy_id, :invoice_number, :invoice_date, :due_date,
                   :amount, :notes, "pending", :source, :vendor_email, NOW(), NOW())'
         );
         $stmt->execute([
             ':vendor_id'      => $vendorId      > 0 ? $vendorId      : null,
+            ':campaign_id'    => $campaignId    > 0 ? $campaignId    : null,
             ':media_buy_id'   => $mediaBuyId    > 0 ? $mediaBuyId    : null,
             ':invoice_number' => $invoiceNumber,
             ':invoice_date'   => $invoiceDate,
