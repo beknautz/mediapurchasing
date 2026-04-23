@@ -13,7 +13,7 @@ $schwabSvc = new SchwabApiService();
 // Redirect to Schwab if credentials are configured
 if (SCHWAB_CLIENT_ID === '') {
     $pageTitle = 'Schwab OAuth Setup';
-    require_once __DIR__ . '/../includes/header.php';
+    require_once __DIR__ . '/../../includes/header.php';
     ?>
     <div class="alert alert-danger mt-4">
         <h5 class="alert-heading"><i class="bi bi-x-circle-fill me-2"></i>Missing Schwab credentials</h5>
@@ -29,7 +29,7 @@ if (SCHWAB_CLIENT_ID === '') {
         </p>
     </div>
     <?php
-    require_once __DIR__ . '/../includes/footer.php';
+    require_once __DIR__ . '/../../includes/footer.php';
     exit;
 }
 

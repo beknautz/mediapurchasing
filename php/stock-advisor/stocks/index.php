@@ -24,7 +24,7 @@ $sells = array_filter($recs, fn($r) => $r['action'] === 'SELL');
 $holds = array_filter($recs, fn($r) => $r['action'] === 'HOLD');
 
 $pageTitle = 'Stock Recommendations';
-require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -41,12 +41,12 @@ require_once __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="d-flex gap-2">
-        <a href="/stocks/watchlist.php" class="btn btn-outline-secondary">
+        <a href="/stock-advisor/stocks/watchlist.php" class="btn btn-outline-secondary">
             <i class="bi bi-list-stars me-1"></i>Watchlist
         </a>
         <?php if ($hasTokens): ?>
         <button class="btn btn-outline-primary"
-                hx-post="/api/stocks/run_analysis.php"
+                hx-post="/stock-advisor/api/run_analysis.php"
                 hx-target="#run-result"
                 hx-swap="innerHTML"
                 hx-indicator="#run-spinner">
@@ -54,7 +54,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="bi bi-play-fill me-1"></i>Run Analysis Now
         </button>
         <?php else: ?>
-        <a href="/stocks/auth.php" class="btn btn-warning">
+        <a href="/stock-advisor/stocks/auth.php" class="btn btn-warning">
             <i class="bi bi-key me-1"></i>Connect Schwab Account
         </a>
         <?php endif; ?>
@@ -67,7 +67,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
     <strong>Schwab account not connected.</strong>
-    <a href="/stocks/auth.php" class="alert-link">Authorize via OAuth</a> to enable price fetching and recommendations.
+    <a href="/stock-advisor/stocks/auth.php" class="alert-link">Authorize via OAuth</a> to enable price fetching and recommendations.
 </div>
 <?php endif; ?>
 
@@ -170,7 +170,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </span>
                     </td>
                     <td>
-                        <a href="/stocks/detail.php?id=<?= (int)$rec['stock_id'] ?>"
+                        <a href="/stock-advisor/stocks/detail.php?id=<?= (int)$rec['stock_id'] ?>"
                            class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-bar-chart-line"></i>
                         </a>
@@ -186,5 +186,5 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php
 $extraScripts = '<script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>';
-require_once __DIR__ . '/../includes/footer.php';
+require_once __DIR__ . '/../../includes/footer.php';
 ?>

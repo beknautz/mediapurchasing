@@ -12,12 +12,12 @@ $priceSvc = new PriceDataService();
 $stocks   = $priceSvc->getAllStocks();
 
 $pageTitle = 'Watchlist Manager';
-require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <a href="/stocks/index.php" class="text-muted small text-decoration-none">
+        <a href="/stock-advisor/stocks/index.php" class="text-muted small text-decoration-none">
             <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
         </a>
         <h1 class="h3 mb-0 fw-bold mt-1">
@@ -36,7 +36,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="bi bi-plus-circle me-1 text-success"></i>Add Symbol
             </div>
             <div class="card-body">
-                <form hx-post="/api/stocks/watchlist_add.php"
+                <form hx-post="/stock-advisor/api/watchlist_add.php"
                       hx-target="#watchlist-table"
                       hx-swap="innerHTML"
                       hx-on::after-request="this.reset()">
@@ -97,7 +97,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <span class="badge bg-primary ms-1"><?= count(array_filter($stocks, fn($s) => $s['active'])) ?> active</span>
             </div>
             <div id="watchlist-table">
-                <?php require __DIR__ . '/../api/stocks/_watchlist_rows.php'; ?>
+                <?php require __DIR__ . '/../api/_watchlist_rows.php'; ?>
             </div>
         </div>
     </div>
@@ -106,5 +106,5 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php
 $extraScripts = '<script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>';
-require_once __DIR__ . '/../includes/footer.php';
+require_once __DIR__ . '/../../includes/footer.php';
 ?>

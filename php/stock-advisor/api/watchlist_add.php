@@ -3,7 +3,7 @@
  * api/stocks/watchlist_add.php
  * HTMX POST endpoint — adds a symbol to the watchlist and returns the updated table partial.
  */
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: text/html; charset=utf-8');
 

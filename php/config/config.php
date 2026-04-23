@@ -24,16 +24,6 @@ defined('SMTP_FROM')      || define('SMTP_FROM',      $_ENV['SMTP_FROM']      ??
 defined('SMTP_FROM_NAME') || define('SMTP_FROM_NAME', $_ENV['SMTP_FROM_NAME'] ?? 'MediaBuy Platform');
 
 // ---------------------------------------------------------------------------
-// Schwab API (OAuth 2.0 + Market Data)
-// Register your app at https://developer.schwab.com to get these values.
-// ---------------------------------------------------------------------------
-defined('SCHWAB_CLIENT_ID')     || define('SCHWAB_CLIENT_ID',     $_ENV['SCHWAB_CLIENT_ID']     ?? '');
-defined('SCHWAB_CLIENT_SECRET') || define('SCHWAB_CLIENT_SECRET', $_ENV['SCHWAB_CLIENT_SECRET'] ?? '');
-defined('SCHWAB_REDIRECT_URI')  || define('SCHWAB_REDIRECT_URI',  $_ENV['SCHWAB_REDIRECT_URI']  ?? 'https://yourdomain.com/stocks/callback.php');
-defined('SCHWAB_OAUTH_BASE')    || define('SCHWAB_OAUTH_BASE',    'https://api.schwabapi.com/v1/oauth');
-defined('SCHWAB_API_BASE')      || define('SCHWAB_API_BASE',      'https://api.schwabapi.com/marketdata/v1');
-
-// ---------------------------------------------------------------------------
 // Application constants
 // ---------------------------------------------------------------------------
 defined('APP_NAME')    || define('APP_NAME',    'Media Buying Platform');

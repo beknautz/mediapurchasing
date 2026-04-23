@@ -74,7 +74,7 @@ function navActive(string $path): string {
                 <?php endif; ?>
 
                 <li class="nav-item">
-                    <a class="nav-link <?= navActive('/stocks') ?>" href="/stocks/index.php">
+                    <a class="nav-link <?= navActive('/stock-advisor') ?>" href="/stock-advisor/stocks/index.php">
                         <i class="bi bi-graph-up-arrow me-1"></i>Stocks
                     </a>
                 </li>

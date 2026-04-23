@@ -6,7 +6,7 @@
  *
  * Optional POST param: symbol — restrict run to one symbol.
  */
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: text/html; charset=utf-8');
 
@@ -31,7 +31,7 @@ $schwabSvc = new SchwabApiService();
 
 if (!$schwabSvc->hasTokens()) {
     echo '<div class="alert alert-warning"><i class="bi bi-key me-1"></i>'
-       . 'Schwab account not connected. <a href="/stocks/auth.php">Authorize here</a>.'
+       . 'Schwab account not connected. <a href="/stock-advisor/stock-advisor/stocks/auth.php">Authorize here</a>.'
        . '</div>';
     exit;
 }
