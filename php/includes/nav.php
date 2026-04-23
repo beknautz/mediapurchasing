@@ -65,6 +65,12 @@ function navActive(string $path): string {
                     </a>
                 </li>
 
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/proposals') ?>" href="/proposals/index.php">
+                        <i class="bi bi-file-earmark-richtext me-1"></i>Proposals
+                    </a>
+                </li>
+
                 <?php if ($isBuyer): ?>
                 <li class="nav-item">
                     <a class="nav-link <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
