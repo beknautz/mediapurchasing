@@ -73,6 +73,12 @@ function navActive(string $path): string {
                 </li>
                 <?php endif; ?>
 
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/stocks') ?>" href="/stocks/index.php">
+                        <i class="bi bi-graph-up-arrow me-1"></i>Stocks
+                    </a>
+                </li>
+
                 <?php if ($isBuyer): ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle <?= navActive('/admin/client') || navActive('/admin/vendor') ? 'active' : '' ?>"
