@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/auth/login.php');
+    redirect('/stock-advisor/login.php');
 }
 
 $stockId = (int) ($_GET['id'] ?? 0);
@@ -28,7 +28,7 @@ $recHistory = $recSvc->getHistory($stockId, 20);
 $priceData  = $priceSvc->getPriceHistory($stockId, pageSize: 30);
 
 $pageTitle  = h($stock['symbol']) . ' — Detail';
-require_once __DIR__ . '/../../includes/header.php';
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <!-- Header -->
@@ -283,6 +283,5 @@ require_once __DIR__ . '/../../includes/header.php';
 </div><!-- /row -->
 
 <?php
-$extraScripts = '<script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>';
-require_once __DIR__ . '/../../includes/footer.php';
+require_once __DIR__ . '/../includes/footer.php';
 ?>

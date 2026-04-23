@@ -5,14 +5,14 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/auth/login.php');
+    redirect('/stock-advisor/login.php');
 }
 
 $priceSvc = new PriceDataService();
 $stocks   = $priceSvc->getAllStocks();
 
 $pageTitle = 'Watchlist Manager';
-require_once __DIR__ . '/../../includes/header.php';
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -105,6 +105,5 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php
-$extraScripts = '<script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>';
-require_once __DIR__ . '/../../includes/footer.php';
+require_once __DIR__ . '/../includes/footer.php';
 ?>
