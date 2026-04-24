@@ -133,16 +133,6 @@ $editRecord  = $editId ? $svc->getPlacement($editId) : null;
 $pageTitle = h($plan['company_name']) . ' — ' . $plan['year'] . ' Ad Schedule — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
 
-// Helper: render a workflow / billing checkbox cell (toggles via AJAX)
-function checkCell(int $id, string $field, int $value, string $title = ''): void {
-    $checked = $value ? 'text-success' : 'text-muted opacity-50';
-    $icon    = $value ? 'bi-check-circle-fill' : 'bi-circle';
-    echo '<td class="text-center" style="width:40px;" title="' . h($title) . '">'
-       . '<button type="button" class="btn btn-link p-0 toggle-btn ' . $checked . '" '
-       . 'data-id="' . $id . '" data-field="' . $field . '" style="font-size:1.1rem;">'
-       . '<i class="bi ' . $icon . '"></i>'
-       . '</button></td>';
-}
 ?>
 
 <?php if ($flashMsg): ?>
@@ -254,9 +244,8 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
                 <i class="bi bi-table me-2 text-primary"></i>Publication Schedule
             </h5>
             <div class="d-flex gap-3 small text-muted align-items-center">
-                <span><i class="bi bi-circle-fill text-success me-1" style="font-size:.6rem;"></i>Checked</span>
-                <span><i class="bi bi-circle text-muted me-1" style="font-size:.6rem;"></i>Unchecked</span>
-                <span><i class="bi bi-circle-fill text-danger me-1" style="font-size:.6rem;"></i>Billing alert</span>
+                <span><i class="bi bi-circle-fill text-danger me-1" style="font-size:.6rem;"></i>Needs billing</span>
+                <span><i class="bi bi-check-circle-fill text-success me-1" style="font-size:.6rem;"></i>Billed</span>
             </div>
         </div>
     </div>
@@ -272,7 +261,7 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
         </div>
         <?php else: ?>
         <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle" style="min-width:1300px;">
+        <table class="table table-sm table-hover mb-0 align-middle" style="min-width:1000px;">
             <thead class="table-light" style="font-size:.75rem;">
                 <tr>
                     <th style="width:200px;">Publication</th>
@@ -283,14 +272,7 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
                     <th style="width:70px;">Ad #</th>
                     <th class="text-end" style="width:85px;">Agency $</th>
                     <th class="text-end" style="width:85px;">Client $</th>
-                    <!-- Workflow -->
-                    <th class="text-center" style="width:40px;" title="Reserved/Ordered">Res</th>
-                    <th class="text-center" style="width:40px;" title="Designed">Des</th>
-                    <th class="text-center" style="width:40px;" title="Sent to Client">→HC</th>
-                    <th class="text-center" style="width:40px;" title="Sent to Publication">→Pub</th>
-                    <!-- Billing -->
-                    <th class="text-center" style="width:48px;" title="Design Invoiced">D-Bill</th>
-                    <th class="text-center" style="width:55px;" title="Placement Invoiced">P-Bill</th>
+                    <th class="text-center" style="width:55px;" title="Placement Invoiced">Billed</th>
                     <th style="width:65px;"></th>
                 </tr>
             </thead>
@@ -350,26 +332,6 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
                     <?= $p['cost_to_client'] !== null ? '$'.number_format((float)$p['cost_to_client'], 2) : '—' ?>
                 </td>
 
-                <?php /* Workflow checkboxes */ ?>
-                <?php checkCell((int)$p['id'], 'is_reserved',            (int)$p['is_reserved'],            'Reserved/Ordered') ?>
-                <?php checkCell((int)$p['id'], 'is_designed',            (int)$p['is_designed'],            'Designed') ?>
-                <?php checkCell((int)$p['id'], 'is_sent_to_client',      (int)$p['is_sent_to_client'],      'Sent to Client') ?>
-                <?php checkCell((int)$p['id'], 'is_sent_to_publication', (int)$p['is_sent_to_publication'], 'Sent to Publication') ?>
-
-                <?php /* Billing checkboxes */ ?>
-                <td class="text-center" style="width:48px;">
-                    <button type="button"
-                            class="btn btn-link p-0 toggle-btn <?= $p['design_invoiced'] ? 'text-success' : 'text-muted opacity-50' ?>"
-                            data-id="<?= (int)$p['id'] ?>" data-field="design_invoiced"
-                            style="font-size:1.1rem;" title="Design Invoiced">
-                        <i class="bi <?= $p['design_invoiced'] ? 'bi-check-circle-fill' : 'bi-circle' ?>"></i>
-                    </button>
-                    <?php if ($p['design_invoiced_at']): ?>
-                    <div class="text-muted" style="font-size:.65rem;">
-                        <?= date('M j', strtotime($p['design_invoiced_at'])) ?>
-                    </div>
-                    <?php endif; ?>
-                </td>
                 <td class="text-center" style="width:55px;">
                     <button type="button"
                             class="btn btn-link p-0 toggle-btn <?= $p['placement_invoiced'] ? 'text-success' : ($isOverdue ? 'text-danger' : 'text-muted opacity-50') ?>"
@@ -407,7 +369,7 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
                     <td class="text-end">
                         $<?= number_format(array_sum(array_column($placements, 'cost_to_client')), 2) ?>
                     </td>
-                    <td colspan="7"></td>
+                    <td colspan="2"></td>
                 </tr>
             </tfoot>
         </table>
