@@ -764,12 +764,21 @@ window.addEventListener('load', function () { openEditModal(<?= json_encode($edi
 <script>
 // ── Excel Import ──────────────────────────────────────────────────────────────
 
-const IMPORT_FIELDS = new Set([
-    'publication', 'contact_name', 'editorial', 'ad_number',
-    'run_date', 'artwork_deadline', 'client_approval_deadline',
-    'ad_size', 'circulation', 'num_ads',
-    'cost_to_agency', 'cost_to_client', 'markup_pct', 'notes',
-]);
+// Excel header (lowercase) → form field name
+const IMPORT_COL_MAP = {
+    'publication':       'publication',
+    'editorial':         'editorial',
+    'publication month': 'run_date',
+    'artwork deadline':  'artwork_deadline',
+    'client approval':   'client_approval_deadline',
+    'size':              'ad_size',
+    'circulation':       'circulation',
+    '# of ads':          'num_ads',
+    'ad #':              'ad_number',
+    'client cost':       'cost_to_client',
+    'our cost':          'cost_to_agency',
+    'markup %':          'markup_pct',
+};
 
 let importParsedRows = [];
 
@@ -818,15 +827,16 @@ function importProcess(raw) {
     const unmapped = [];
 
     headers.forEach(function (h, idx) {
-        if (IMPORT_FIELDS.has(h) && !(h in colIndex)) {
-            colIndex[h] = idx;
+        const field = IMPORT_COL_MAP[h];
+        if (field && !(field in colIndex)) {
+            colIndex[field] = idx;
         } else if (h) {
             unmapped.push(h);
         }
     });
 
     if (!('publication' in colIndex)) {
-        alert('Could not find a "publication" column. Rename your Excel header to match the field name exactly.');
+        alert('Could not find a "Publication" column. Check that your Excel headers match exactly.');
         return;
     }
 
