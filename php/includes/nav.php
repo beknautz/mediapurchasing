@@ -73,6 +73,14 @@ function navActive(string $path): string {
 
                 <?php if ($isBuyer): ?>
                 <li class="nav-item">
+                    <a class="nav-link <?= navActive('/ad-schedules') ?>" href="/ad-schedules/index.php">
+                        <i class="bi bi-calendar3 me-1"></i>Ad Schedules
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <?php if ($isBuyer): ?>
+                <li class="nav-item">
                     <a class="nav-link <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
                         <i class="bi bi-robot me-1"></i>Budget Planner
                     </a>
