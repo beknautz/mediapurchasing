@@ -690,6 +690,18 @@ window.addEventListener('load', function () { openEditModal(<?= json_encode($edi
             </div>
             <div class="modal-body">
 
+                <!-- Template download -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Need the template? Download it, fill it in, then drag it back here.
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-success"
+                            onclick="downloadImportTemplate()">
+                        <i class="bi bi-download me-1"></i>Download Template
+                    </button>
+                </div>
+
                 <!-- Drop zone -->
                 <div id="importDropZone"
                      class="border border-2 border-dashed rounded-3 text-center py-5 px-3 mb-3"
@@ -764,7 +776,7 @@ window.addEventListener('load', function () { openEditModal(<?= json_encode($edi
 <script>
 // ── Excel Import ──────────────────────────────────────────────────────────────
 
-// Excel header (lowercase) → form field name
+// Excel header (lowercase, trimmed) → form field name
 const IMPORT_COL_MAP = {
     'publication':       'publication',
     'editorial':         'editorial',
@@ -779,6 +791,27 @@ const IMPORT_COL_MAP = {
     'our cost':          'cost_to_agency',
     'markup %':          'markup_pct',
 };
+
+// Template column order and display headers
+const TEMPLATE_HEADERS = [
+    'Publication', 'Editorial', 'Publication Month', 'Artwork Deadline',
+    'Client Approval', 'Size', 'Circulation', '# of Ads', 'Ad #',
+    'Client Cost', 'Our Cost', 'Markup %',
+];
+const TEMPLATE_SAMPLE = [
+    'Capital Press', 'Orchards & Vines', '2026-04-03', '2026-03-24',
+    '2026-03-17', '1/4 page 5" x 5"', 32000, 1, 'CP426',
+    710, 568, 20,
+];
+const TEMPLATE_COL_WIDTHS = [22, 24, 18, 18, 18, 22, 12, 10, 10, 12, 12, 10];
+
+function downloadImportTemplate() {
+    const wb  = XLSX.utils.book_new();
+    const ws  = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, TEMPLATE_SAMPLE]);
+    ws['!cols'] = TEMPLATE_COL_WIDTHS.map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Ad Schedule');
+    XLSX.writeFile(wb, 'ad_schedule_template.xlsx');
+}
 
 let importParsedRows = [];
 
@@ -842,19 +875,36 @@ function importProcess(raw) {
 
     // Parse data rows
     importParsedRows = [];
+    let lastPub = '';
     for (let i = headerRowIdx + 1; i < raw.length; i++) {
         const row = raw[i];
         if (!row || !row.filter(Boolean).length) continue;
 
-        const pub = (row[colIndex['publication']] || '').toString().trim();
-        if (!pub) continue;  // skip blank publication rows
+        // Fill-down: publication only appears on the first row of each group
+        const rawPub = ('publication' in colIndex)
+            ? (row[colIndex['publication']] || '').toString().trim()
+            : '';
+        if (rawPub) lastPub = rawPub;
+        const pub = lastPub;
 
-        const r = {};
+        // Skip rows with no publication and no editorial (totals/blank rows)
+        const editorial = ('editorial' in colIndex)
+            ? (row[colIndex['editorial']] || '').toString().trim()
+            : '';
+        if (!pub && !editorial) continue;
+
+        const r = { publication: pub };
         Object.keys(colIndex).forEach(function (field) {
-            let val = (row[colIndex[field]] || '').toString().trim();
-            // Normalise date values that come as JS Date serialised strings
+            if (field === 'publication') return; // already handled
+            let val = (row[colIndex[field]] !== undefined && row[colIndex[field]] !== null)
+                ? row[colIndex[field]].toString().trim()
+                : '';
             if (['run_date', 'artwork_deadline', 'client_approval_deadline'].includes(field)) {
                 val = importNormaliseDate(val);
+            }
+            // Markup stored as decimal (0.2) → convert to percent (20)
+            if (field === 'markup_pct' && val !== '' && parseFloat(val) > 0 && parseFloat(val) < 1) {
+                val = (parseFloat(val) * 100).toFixed(2);
             }
             r[field] = val;
         });
