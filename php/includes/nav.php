@@ -29,28 +29,63 @@ function navActive(string $path): string {
                     </a>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/campaigns') ?>" href="/campaigns/index.php">
-                        <i class="bi bi-collection-play-fill me-1"></i>Campaigns
+                <?php
+                $marketingActive = str_contains($currentUri, '/campaigns')
+                    || str_contains($currentUri, '/media-buys')
+                    || str_contains($currentUri, '/ad-schedules')
+                    || str_contains($currentUri, '/budget-planner');
+                $invoicingActive = str_contains($currentUri, '/approvals')
+                    || str_contains($currentUri, '/billing');
+                ?>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle <?= $marketingActive ? 'active' : '' ?>"
+                       href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-megaphone me-1"></i>Marketing
                     </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li>
+                            <a class="dropdown-item <?= navActive('/campaigns') ?>" href="/campaigns/index.php">
+                                <i class="bi bi-collection-play-fill me-2"></i>Campaigns
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/media-buys') ?>" href="/media-buys/index.php">
+                                <i class="bi bi-collection-play me-2"></i>Media Buys
+                            </a>
+                        </li>
+                        <?php if ($isBuyer): ?>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/ad-schedules') ?>" href="/ad-schedules/index.php">
+                                <i class="bi bi-calendar3 me-2"></i>Ad Schedules
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
+                                <i class="bi bi-robot me-2"></i>Budget Planner
+                            </a>
+                        </li>
+                        <?php endif; ?>
+                    </ul>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/media-buys') ?>" href="/media-buys/index.php">
-                        <i class="bi bi-collection-play me-1"></i>Media Buys
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle <?= $invoicingActive ? 'active' : '' ?>"
+                       href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-receipt me-1"></i>Invoicing
                     </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/approvals') ?>" href="/approvals/index.php">
-                        <i class="bi bi-check2-square me-1"></i>Approvals
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/billing') ?>" href="/billing/index.php">
-                        <i class="bi bi-receipt me-1"></i>Billing
-                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li>
+                            <a class="dropdown-item <?= navActive('/approvals') ?>" href="/approvals/index.php">
+                                <i class="bi bi-check2-square me-2"></i>Approvals
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/billing') ?>" href="/billing/index.php">
+                                <i class="bi bi-receipt me-2"></i>Billing
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 <li class="nav-item">
@@ -70,22 +105,6 @@ function navActive(string $path): string {
                         <i class="bi bi-file-earmark-richtext me-1"></i>Proposals
                     </a>
                 </li>
-
-                <?php if ($isBuyer): ?>
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/ad-schedules') ?>" href="/ad-schedules/index.php">
-                        <i class="bi bi-calendar3 me-1"></i>Ad Schedules
-                    </a>
-                </li>
-                <?php endif; ?>
-
-                <?php if ($isBuyer): ?>
-                <li class="nav-item">
-                    <a class="nav-link <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
-                        <i class="bi bi-robot me-1"></i>Budget Planner
-                    </a>
-                </li>
-                <?php endif; ?>
 
                 <?php if ($isBuyer): ?>
                 <li class="nav-item dropdown">
