@@ -1,6 +1,8 @@
 <?php
 /**
  * src/ProposalService.php
+ * Unified blocks model: each proposal/template contains an ordered list of
+ * blocks typed as 'text' (Summernote HTML), 'item' (line item), or 'signature'.
  */
 
 class ProposalService extends BaseService
@@ -49,16 +51,16 @@ class ProposalService extends BaseService
         $proposal = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$proposal) return null;
 
-        $iStmt = $this->db->prepare(
-            'SELECT * FROM proposal_items
+        $bStmt = $this->db->prepare(
+            'SELECT * FROM proposal_blocks
               WHERE proposal_id = :id
               ORDER BY sort_order ASC, id ASC'
         );
-        $iStmt->execute([':id' => $id]);
+        $bStmt->execute([':id' => $id]);
 
         return [
             'proposal' => $proposal,
-            'items'    => $iStmt->fetchAll(PDO::FETCH_ASSOC),
+            'blocks'   => $bStmt->fetchAll(PDO::FETCH_ASSOC),
         ];
     }
 
@@ -71,8 +73,6 @@ class ProposalService extends BaseService
             ':title'        => $data['title'],
             ':client_id'    => ($data['client_id'] ?? 0) ?: null,
             ':status'       => $data['status'] ?? 'draft',
-            ':intro_text'   => $data['intro_text'] ?: null,
-            ':notes'        => $data['notes']       ?: null,
             ':valid_until'  => $data['valid_until'] ?: null,
             ':total_amount' => round((float) ($data['total_amount'] ?? 0), 2),
         ];
@@ -82,7 +82,6 @@ class ProposalService extends BaseService
             $this->db->prepare(
                 'UPDATE proposals
                     SET title = :title, client_id = :client_id, status = :status,
-                        intro_text = :intro_text, notes = :notes,
                         valid_until = :valid_until, total_amount = :total_amount,
                         updated_at = NOW()
                   WHERE id = :id'
@@ -93,39 +92,49 @@ class ProposalService extends BaseService
         $fields[':created_by'] = $userId ?: null;
         $this->db->prepare(
             'INSERT INTO proposals
-                 (title, client_id, status, intro_text, notes, valid_until,
-                  total_amount, created_by, created_at, updated_at)
+                 (title, client_id, status, valid_until, total_amount, created_by, created_at, updated_at)
              VALUES
-                 (:title, :client_id, :status, :intro_text, :notes, :valid_until,
-                  :total_amount, :created_by, NOW(), NOW())'
+                 (:title, :client_id, :status, :valid_until, :total_amount, :created_by, NOW(), NOW())'
         )->execute($fields);
         return (int) $this->db->lastInsertId();
     }
 
-    public function saveItems(int $proposalId, array $items): void
+    /**
+     * Replace all blocks for a proposal.
+     * Blocks are pre-sorted by sort_order before calling this.
+     */
+    public function saveBlocks(int $proposalId, array $blocks): void
     {
-        $this->db->prepare('DELETE FROM proposal_items WHERE proposal_id = :id')
+        $this->db->prepare('DELETE FROM proposal_blocks WHERE proposal_id = :id')
                  ->execute([':id' => $proposalId]);
 
-        if (empty($items)) return;
+        if (empty($blocks)) return;
 
         $stmt = $this->db->prepare(
-            'INSERT INTO proposal_items
-                 (proposal_id, sort_order, description, quantity, unit_price, total_price, created_at, updated_at)
+            'INSERT INTO proposal_blocks
+                 (proposal_id, block_type, sort_order, content,
+                  description, quantity, unit_price, total_price, sig_label,
+                  created_at, updated_at)
              VALUES
-                 (:proposal_id, :sort_order, :description, :qty, :unit_price, :total, NOW(), NOW())'
+                 (:proposal_id, :type, :sort, :content,
+                  :desc, :qty, :unit, :total, :sig,
+                  NOW(), NOW())'
         );
 
-        foreach ($items as $i => $item) {
-            $qty   = max(0, (float) ($item['quantity']   ?? 1));
-            $price = max(0, (float) ($item['unit_price'] ?? 0));
+        foreach ($blocks as $i => $b) {
+            $type = $b['block_type'] ?? $b['type'] ?? 'text';
+            $qty  = max(0, (float) ($b['quantity']   ?? 1));
+            $unit = max(0, (float) ($b['unit_price']  ?? 0));
             $stmt->execute([
                 ':proposal_id' => $proposalId,
-                ':sort_order'  => (int) ($item['sort_order'] ?? $i),
-                ':description' => trim($item['description'] ?? ''),
-                ':qty'         => $qty,
-                ':unit_price'  => $price,
-                ':total'       => round($qty * $price, 2),
+                ':type'        => $type,
+                ':sort'        => (int) ($b['sort_order'] ?? $i),
+                ':content'     => $type === 'text' ? ($b['content'] ?? null) : null,
+                ':desc'        => $type === 'item' ? trim($b['description'] ?? '') : null,
+                ':qty'         => $type === 'item' ? $qty : 1,
+                ':unit'        => $type === 'item' ? $unit : 0,
+                ':total'       => $type === 'item' ? round($qty * $unit, 2) : 0,
+                ':sig'         => $type === 'signature' ? ($b['sig_label'] ?? null) : null,
             ]);
         }
     }
@@ -136,8 +145,8 @@ class ProposalService extends BaseService
             'UPDATE proposals
                 SET total_amount = (
                     SELECT COALESCE(SUM(total_price), 0)
-                      FROM proposal_items
-                     WHERE proposal_id = proposals.id
+                      FROM proposal_blocks
+                     WHERE proposal_id = proposals.id AND block_type = "item"
                 ),
                 updated_at = NOW()
               WHERE id = :id'
@@ -176,20 +185,20 @@ class ProposalService extends BaseService
     }
 
     /**
-     * Returns all templates with their items embedded — one query via JOIN.
-     * Result keyed by template id for easy JS lookup.
+     * All templates with their blocks embedded — one JOIN query.
+     * Returns array keyed by template id for JS lookup.
      */
-    public function getTemplatesWithItems(): array
+    public function getTemplatesWithBlocks(): array
     {
         $rows = $this->db->query(
-            'SELECT t.id, t.name, t.intro_text, t.notes, t.updated_at,
+            'SELECT t.id, t.name, t.updated_at,
                     u.name AS created_by_name,
-                    ti.id AS item_id, ti.sort_order, ti.description,
-                    ti.quantity, ti.unit_price
+                    b.id AS block_id, b.block_type, b.sort_order,
+                    b.content, b.description, b.quantity, b.unit_price, b.sig_label
                FROM proposal_templates t
-          LEFT JOIN users u  ON u.id = t.created_by
-          LEFT JOIN proposal_template_items ti ON ti.template_id = t.id
-              ORDER BY t.name ASC, ti.sort_order ASC, ti.id ASC'
+          LEFT JOIN users u ON u.id = t.created_by
+          LEFT JOIN proposal_template_blocks b ON b.template_id = t.id
+              ORDER BY t.name ASC, b.sort_order ASC, b.id ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $templates = [];
@@ -199,19 +208,20 @@ class ProposalService extends BaseService
                 $templates[$tid] = [
                     'id'              => $tid,
                     'name'            => $row['name'],
-                    'intro_text'      => $row['intro_text'] ?? '',
-                    'notes'           => $row['notes'] ?? '',
                     'created_by_name' => $row['created_by_name'] ?? '',
                     'updated_at'      => $row['updated_at'],
-                    'items'           => [],
+                    'blocks'          => [],
                 ];
             }
-            if ($row['item_id']) {
-                $templates[$tid]['items'][] = [
-                    'description' => $row['description'],
+            if ($row['block_id']) {
+                $templates[$tid]['blocks'][] = [
+                    'block_type'  => $row['block_type'],
+                    'sort_order'  => (int)   $row['sort_order'],
+                    'content'     => $row['content']     ?? '',
+                    'description' => $row['description'] ?? '',
                     'quantity'    => (float) $row['quantity'],
                     'unit_price'  => (float) $row['unit_price'],
-                    'sort_order'  => (int)   $row['sort_order'],
+                    'sig_label'   => $row['sig_label']   ?? '',
                 ];
             }
         }
@@ -227,20 +237,20 @@ class ProposalService extends BaseService
         $template = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$template) return null;
 
-        $iStmt = $this->db->prepare(
-            'SELECT * FROM proposal_template_items
+        $bStmt = $this->db->prepare(
+            'SELECT * FROM proposal_template_blocks
               WHERE template_id = :id
               ORDER BY sort_order ASC, id ASC'
         );
-        $iStmt->execute([':id' => $id]);
+        $bStmt->execute([':id' => $id]);
 
         return [
             'template' => $template,
-            'items'    => $iStmt->fetchAll(PDO::FETCH_ASSOC),
+            'blocks'   => $bStmt->fetchAll(PDO::FETCH_ASSOC),
         ];
     }
 
-    public function saveTemplate(array $data, array $items): int
+    public function saveTemplate(array $data, array $blocks): int
     {
         $userId = (int) ($_SESSION['user']['id'] ?? 0);
         $id     = (int) ($data['id'] ?? 0);
@@ -248,48 +258,44 @@ class ProposalService extends BaseService
         if ($id > 0) {
             $this->db->prepare(
                 'UPDATE proposal_templates
-                    SET name = :name, intro_text = :intro_text, notes = :notes, updated_at = NOW()
+                    SET name = :name, updated_at = NOW()
                   WHERE id = :id'
-            )->execute([
-                ':name'       => $data['name'],
-                ':intro_text' => $data['intro_text'] ?: null,
-                ':notes'      => $data['notes']       ?: null,
-                ':id'         => $id,
-            ]);
+            )->execute([':name' => $data['name'], ':id' => $id]);
         } else {
             $this->db->prepare(
-                'INSERT INTO proposal_templates
-                     (name, intro_text, notes, created_by, created_at, updated_at)
-                 VALUES
-                     (:name, :intro_text, :notes, :created_by, NOW(), NOW())'
-            )->execute([
-                ':name'       => $data['name'],
-                ':intro_text' => $data['intro_text'] ?: null,
-                ':notes'      => $data['notes']       ?: null,
-                ':created_by' => $userId ?: null,
-            ]);
+                'INSERT INTO proposal_templates (name, created_by, created_at, updated_at)
+                 VALUES (:name, :created_by, NOW(), NOW())'
+            )->execute([':name' => $data['name'], ':created_by' => $userId ?: null]);
             $id = (int) $this->db->lastInsertId();
         }
 
-        $this->db->prepare('DELETE FROM proposal_template_items WHERE template_id = :id')
+        $this->db->prepare('DELETE FROM proposal_template_blocks WHERE template_id = :id')
                  ->execute([':id' => $id]);
 
-        if (!empty($items)) {
+        if (!empty($blocks)) {
             $stmt = $this->db->prepare(
-                'INSERT INTO proposal_template_items
-                     (template_id, sort_order, description, quantity, unit_price)
+                'INSERT INTO proposal_template_blocks
+                     (template_id, block_type, sort_order, content,
+                      description, quantity, unit_price, sig_label)
                  VALUES
-                     (:template_id, :sort_order, :description, :qty, :unit_price)'
+                     (:template_id, :type, :sort, :content,
+                      :desc, :qty, :unit, :sig)'
             );
-            foreach ($items as $i => $item) {
-                $desc = trim($item['description'] ?? '');
-                if ($desc === '') continue;
+            foreach ($blocks as $i => $b) {
+                $type = $b['block_type'] ?? $b['type'] ?? 'text';
+                // Skip empty item blocks
+                if ($type === 'item' && trim($b['description'] ?? '') === '') continue;
+                $qty  = max(0, (float) ($b['quantity']  ?? 1));
+                $unit = max(0, (float) ($b['unit_price'] ?? 0));
                 $stmt->execute([
                     ':template_id' => $id,
-                    ':sort_order'  => (int)   ($item['sort_order'] ?? $i),
-                    ':description' => $desc,
-                    ':qty'         => max(0, (float) ($item['quantity']   ?? 1)),
-                    ':unit_price'  => max(0, (float) ($item['unit_price'] ?? 0)),
+                    ':type'        => $type,
+                    ':sort'        => (int) ($b['sort_order'] ?? $i),
+                    ':content'     => $type === 'text'      ? ($b['content']   ?? null) : null,
+                    ':desc'        => $type === 'item'      ? trim($b['description'] ?? '') : null,
+                    ':qty'         => $type === 'item'      ? $qty  : 1,
+                    ':unit'        => $type === 'item'      ? $unit : 0,
+                    ':sig'         => $type === 'signature' ? ($b['sig_label'] ?? null) : null,
                 ]);
             }
         }

@@ -11,34 +11,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'save') {
-        $id        = (int)   ($_POST['id']         ?? 0);
-        $name      = trim(    $_POST['name']        ?? '');
-        $introText = trim(    $_POST['intro_text']  ?? '');
-        $notes     = trim(    $_POST['notes']       ?? '');
-        $rawItems  = (array) ($_POST['items']       ?? []);
+        $id       = (int)   ($_POST['id']   ?? 0);
+        $name     = trim(    $_POST['name'] ?? '');
+        $rawBlocks = (array) ($_POST['blocks'] ?? []);
 
         if ($name === '') $errors[] = 'Template name is required.';
 
-        // Build + sort items
-        $cleanItems = [];
-        foreach ($rawItems as $item) {
-            $desc = trim($item['description'] ?? '');
-            if ($desc === '') continue;
-            $cleanItems[] = [
-                'description' => $desc,
-                'quantity'    => max(0, (float) ($item['quantity']   ?? 1)),
-                'unit_price'  => max(0, (float) ($item['unit_price'] ?? 0)),
-                'sort_order'  => (int) ($item['sort_order'] ?? 0),
-            ];
+        $cleanBlocks = [];
+        foreach ($rawBlocks as $b) {
+            $type = $b['type'] ?? 'text';
+            if ($type === 'text') {
+                $content = $b['content'] ?? '';
+                if (trim(strip_tags($content)) === '' && $content === '') continue;
+                $cleanBlocks[] = ['block_type' => 'text', 'content' => $content,
+                                  'sort_order' => (int)($b['sort_order'] ?? 0)];
+            } elseif ($type === 'item') {
+                $desc = trim($b['description'] ?? '');
+                if ($desc === '') continue;
+                $qty  = max(0, (float)($b['quantity']  ?? 1));
+                $unit = max(0, (float)($b['unit_price'] ?? 0));
+                $cleanBlocks[] = ['block_type' => 'item', 'description' => $desc,
+                                  'quantity' => $qty, 'unit_price' => $unit,
+                                  'sort_order' => (int)($b['sort_order'] ?? 0)];
+            } elseif ($type === 'signature') {
+                $cleanBlocks[] = ['block_type' => 'signature',
+                                  'sig_label'  => trim($b['sig_label'] ?? ''),
+                                  'sort_order' => (int)($b['sort_order'] ?? 0)];
+            }
         }
-        usort($cleanItems, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+        usort($cleanBlocks, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
 
         if (empty($errors)) {
             try {
-                $proposalService->saveTemplate(
-                    ['id' => $id, 'name' => $name, 'intro_text' => $introText, 'notes' => $notes],
-                    $cleanItems
-                );
+                $proposalService->saveTemplate(['id' => $id, 'name' => $name], $cleanBlocks);
                 flash('success', $id > 0 ? 'Template updated.' : 'Template created.');
                 redirect('/proposals/templates.php');
             } catch (Exception $e) {
@@ -60,41 +65,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Reload state for re-opening modal on error
-$postId        = (int)   ($_POST['id']         ?? 0);
-$postName      = trim(    $_POST['name']        ?? '');
-$postIntroText = trim(    $_POST['intro_text']  ?? '');
-$postNotes     = trim(    $_POST['notes']       ?? '');
-$postItems     = [];
-foreach ((array)($_POST['items'] ?? []) as $item) {
-    $desc = trim($item['description'] ?? '');
-    if ($desc !== '') {
-        $postItems[] = [
-            'description' => $desc,
-            'quantity'    => (float)($item['quantity']   ?? 1),
-            'unit_price'  => (float)($item['unit_price'] ?? 0),
-            'sort_order'  => (int)  ($item['sort_order'] ?? 0),
-        ];
+// Reload state for re-opening modal on validation error
+$postId     = (int)   ($_POST['id']   ?? 0);
+$postName   = trim(    $_POST['name'] ?? '');
+$postBlocks = [];
+foreach ((array)($_POST['blocks'] ?? []) as $b) {
+    $type = $b['type'] ?? 'text';
+    if ($type === 'text') {
+        $postBlocks[] = ['block_type' => 'text', 'content' => $b['content'] ?? '',
+                         'sort_order' => (int)($b['sort_order'] ?? 0)];
+    } elseif ($type === 'item') {
+        $desc = trim($b['description'] ?? '');
+        if ($desc !== '') {
+            $postBlocks[] = ['block_type' => 'item', 'description' => $desc,
+                             'quantity'   => (float)($b['quantity']  ?? 1),
+                             'unit_price' => (float)($b['unit_price'] ?? 0),
+                             'sort_order' => (int)($b['sort_order'] ?? 0)];
+        }
+    } elseif ($type === 'signature') {
+        $postBlocks[] = ['block_type' => 'signature', 'sig_label' => trim($b['sig_label'] ?? ''),
+                         'sort_order' => (int)($b['sort_order'] ?? 0)];
     }
 }
-usort($postItems, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+usort($postBlocks, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
 $reopenModal = ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save' && !empty($errors));
 
 try {
-    $templates = $proposalService->getTemplatesWithItems();
+    $templates = $proposalService->getTemplatesWithBlocks();
 } catch (Exception $e) {
     $templates = [];
-    $errors[]  = 'Could not load templates — run sql/migrate_proposals.sql first. (' . $e->getMessage() . ')';
+    $errors[]  = 'Could not load templates — run sql/migrate_proposals_v2.sql first. (' . $e->getMessage() . ')';
 }
-$flashMsg = flash('success');
-
-// Build id-keyed map for JS
-$templateMap = [];
-foreach ($templates as $t) {
-    $templateMap[$t['id']] = $t;
-}
+$flashMsg    = flash('success');
+$templateMap = $templates; // already keyed by id
 
 $pageTitle = 'Proposal Templates — MediaBuy';
+$extraHead = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.css">';
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -150,24 +156,28 @@ require_once __DIR__ . '/../includes/header.php';
             <thead class="table-light">
                 <tr>
                     <th>Name</th>
-                    <th>Line Items</th>
+                    <th>Blocks</th>
                     <th>Created By</th>
                     <th>Last Updated</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($templates as $t): ?>
+            <?php foreach ($templates as $t):
+                $itemBlocks = array_filter($t['blocks'], fn($b) => $b['block_type'] === 'item');
+                $estValue   = array_sum(array_map(fn($b) => (float)$b['quantity'] * (float)$b['unit_price'], $itemBlocks));
+                $blockCount = count($t['blocks']);
+            ?>
             <tr>
                 <td class="fw-semibold"><?= h($t['name']) ?></td>
                 <td class="small text-muted">
-                    <?php if (!empty($t['items'])): ?>
-                        <?= count($t['items']) ?> item<?= count($t['items']) !== 1 ? 's' : '' ?>
-                        <span class="text-muted">—
-                            $<?= number_format(array_sum(array_map(fn($i) => $i['quantity'] * $i['unit_price'], $t['items'])), 2) ?>
-                        </span>
+                    <?php if ($blockCount > 0): ?>
+                        <?= $blockCount ?> block<?= $blockCount !== 1 ? 's' : '' ?>
+                        <?php if ($estValue > 0): ?>
+                            <span class="text-muted">— $<?= number_format($estValue, 2) ?></span>
+                        <?php endif; ?>
                     <?php else: ?>
-                        No items
+                        Empty
                     <?php endif; ?>
                 </td>
                 <td class="small text-muted"><?= h($t['created_by_name'] ?? '—') ?></td>
@@ -208,87 +218,37 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
 
                 <div class="modal-body">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-12">
-                            <label for="tmplName" class="form-label fw-semibold">
-                                Template Name <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" class="form-control" id="tmplName" name="name" required
-                                   value="<?= h($postName) ?>"
-                                   placeholder="e.g. Standard Media Buy Proposal">
-                        </div>
-                    </div>
-
                     <div class="mb-3">
-                        <label for="tmplIntro" class="form-label fw-semibold">Introduction Text</label>
-                        <textarea class="form-control" id="tmplIntro" name="intro_text" rows="5"
-                                  placeholder="Opening statement or boilerplate intro that will pre-fill the proposal…"><?= h($postIntroText) ?></textarea>
+                        <label for="tmplName" class="form-label fw-semibold">
+                            Template Name <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="tmplName" name="name" required
+                               value="<?= h($postName) ?>"
+                               placeholder="e.g. Standard Media Buy Proposal">
                     </div>
 
-                    <!-- Line Items -->
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="form-label fw-semibold mb-0">Default Line Items</label>
-                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                    onclick="addTemplateItem()">
-                                <i class="bi bi-plus-circle me-1"></i>Add Item
-                            </button>
-                        </div>
-                        <div class="table-responsive border rounded">
-                            <table class="table table-sm mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width:30px;"></th>
-                                        <th>Description</th>
-                                        <th style="width:80px;">Qty</th>
-                                        <th style="width:140px;">Unit Price</th>
-                                        <th style="width:35px;"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tmplItemsBody">
-                                <?php foreach ($postItems as $i => $item): ?>
-                                <tr class="tmpl-item-row">
-                                    <td class="tmpl-drag text-muted ps-2" style="cursor:grab;vertical-align:middle;">
-                                        <i class="bi bi-grip-vertical"></i>
-                                    </td>
-                                    <td>
-                                        <input type="text" name="items[<?= $i ?>][description]"
-                                               class="form-control form-control-sm" placeholder="Description" required
-                                               value="<?= h($item['description']) ?>">
-                                        <input type="hidden" name="items[<?= $i ?>][sort_order]"
-                                               class="tmpl-sort" value="<?= $i ?>">
-                                    </td>
-                                    <td>
-                                        <input type="number" name="items[<?= $i ?>][quantity]"
-                                               class="form-control form-control-sm"
-                                               value="<?= h($item['quantity']) ?>" min="0" step="0.01">
-                                    </td>
-                                    <td>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text">$</span>
-                                            <input type="number" name="items[<?= $i ?>][unit_price]"
-                                                   class="form-control"
-                                                   value="<?= h($item['unit_price']) ?>" min="0" step="0.01">
-                                        </div>
-                                    </td>
-                                    <td style="vertical-align:middle;">
-                                        <button type="button" class="btn btn-sm btn-link text-danger p-0"
-                                                onclick="removeTmplItem(this)">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="form-text">Drag to reorder. Prices are defaults — editable in each proposal.</div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold mb-1">Content Blocks</label>
+                        <div class="text-muted small mb-2">Drag to reorder. These blocks will pre-fill the proposal when this template is loaded.</div>
                     </div>
 
-                    <div>
-                        <label for="tmplNotes" class="form-label fw-semibold">Default Notes / Terms</label>
-                        <textarea class="form-control" id="tmplNotes" name="notes" rows="3"
-                                  placeholder="Payment terms, disclaimers… (optional)"><?= h($postNotes) ?></textarea>
+                    <!-- Sortable blocks container -->
+                    <div id="tmplBlocksContainer" class="mb-2"></div>
+
+                    <!-- Add block toolbar -->
+                    <div class="d-flex gap-2 pt-2 border-top">
+                        <button type="button" class="btn btn-sm btn-outline-info"
+                                onclick="addTmplTextBlock()">
+                            <i class="bi bi-text-paragraph me-1"></i>Add Text
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                onclick="addTmplLineItem()">
+                            <i class="bi bi-receipt me-1"></i>Add Line Item
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success"
+                                onclick="addTmplSignature()">
+                            <i class="bi bi-pen me-1"></i>Add Signature
+                        </button>
                     </div>
                 </div>
 
@@ -327,143 +287,330 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 const TEMPLATE_MAP = <?= json_encode($templateMap) ?>;
 
-// ── Template modal item counter ───────────────────────────────────────────────
-let tmplCounter = <?= max(count($postItems), 0) ?>;
+const TMPL_SNOTE_OPTS = {
+    height: 180,
+    dialogsInBody: true,
+    toolbar: [
+        ['style',  ['bold','italic','underline','strikethrough','clear']],
+        ['font',   ['fontsize']],
+        ['color',  ['color']],
+        ['para',   ['ul','ol','paragraph']],
+        ['insert', ['link','hr']],
+        ['view',   ['fullscreen','codeview']],
+    ],
+    placeholder: 'Write your text here…',
+};
 
-// ── SortableJS inside modal ───────────────────────────────────────────────────
-let tmplSortable = null;
-document.getElementById('templateModal').addEventListener('shown.bs.modal', function () {
+let tmplBlockCounter = 0;
+let tmplSortable     = null;
+const templateModal  = document.getElementById('templateModal');
+
+// ── Modal lifecycle ───────────────────────────────────────────────────────────
+templateModal.addEventListener('shown.bs.modal', function () {
+    // Init Summernote on any text blocks not yet initialized
+    templateModal.querySelectorAll('.tmpl-summernote-editor').forEach(function (ta) {
+        if (!$(ta).data('summernote')) {
+            const content = ta.value;
+            $(ta).summernote(TMPL_SNOTE_OPTS);
+            if (content) $(ta).summernote('code', content);
+        }
+    });
+    // Init SortableJS once
     if (!tmplSortable) {
-        tmplSortable = Sortable.create(document.getElementById('tmplItemsBody'), {
-            handle:    '.tmpl-drag',
+        tmplSortable = Sortable.create(document.getElementById('tmplBlocksContainer'), {
+            handle:    '.tmpl-block-handle',
             animation: 150,
+            onStart:   syncTmplEditors,
             onEnd:     updateTmplSortOrders,
         });
     }
 });
 
+templateModal.addEventListener('hidden.bs.modal', function () {
+    // Sync then destroy all Summernote instances
+    templateModal.querySelectorAll('.tmpl-summernote-editor').forEach(function (ta) {
+        if ($(ta).data('summernote')) {
+            ta.value = $(ta).summernote('code');
+            $(ta).summernote('destroy');
+        }
+    });
+    if (tmplSortable) { tmplSortable.destroy(); tmplSortable = null; }
+});
+
+// ── Sync editors to textareas ─────────────────────────────────────────────────
+function syncTmplEditors() {
+    templateModal.querySelectorAll('.tmpl-summernote-editor').forEach(function (ta) {
+        if ($(ta).data('summernote')) {
+            ta.value = $(ta).summernote('code');
+        }
+    });
+}
+
+// ── Update sort order hidden inputs ───────────────────────────────────────────
 function updateTmplSortOrders() {
-    document.querySelectorAll('#tmplItemsBody .tmpl-item-row').forEach((tr, i) => {
-        const inp = tr.querySelector('.tmpl-sort');
+    templateModal.querySelectorAll('#tmplBlocksContainer .tmpl-block-row').forEach(function (el, i) {
+        const inp = el.querySelector('.tmpl-sort-input');
         if (inp) inp.value = i;
     });
 }
 
-// ── Open / populate modal ─────────────────────────────────────────────────────
+// ── Add TEXT block ────────────────────────────────────────────────────────────
+function addTmplTextBlock(content) {
+    const idx = tmplBlockCounter++;
+    const div = document.createElement('div');
+    div.className   = 'tmpl-block-row card border mb-3';
+    div.dataset.type = 'text';
+    div.innerHTML = `
+        <div class="tmpl-block-handle card-header py-2 d-flex align-items-center gap-2"
+             style="cursor:grab;user-select:none;">
+            <i class="bi bi-grip-vertical text-muted fs-5"></i>
+            <span class="badge bg-info-subtle text-info border border-info-subtle">
+                <i class="bi bi-text-paragraph me-1"></i>Text Block
+            </span>
+            <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0"
+                    onclick="removeTmplBlock(this)" title="Remove block">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <input type="hidden" name="blocks[${idx}][type]" value="text">
+            <input type="hidden" name="blocks[${idx}][sort_order]" class="tmpl-sort-input" value="${idx}">
+            <textarea name="blocks[${idx}][content]" class="tmpl-summernote-editor"></textarea>
+        </div>`;
+
+    document.getElementById('tmplBlocksContainer').appendChild(div);
+
+    // If modal is already visible, init Summernote immediately
+    const ta = div.querySelector('.tmpl-summernote-editor');
+    if (templateModal.classList.contains('show')) {
+        $(ta).summernote(TMPL_SNOTE_OPTS);
+        if (content) $(ta).summernote('code', content);
+    } else if (content) {
+        ta.value = content;
+    }
+    updateTmplSortOrders();
+}
+
+// ── Add LINE ITEM block ───────────────────────────────────────────────────────
+function addTmplLineItem(description, quantity, unitPrice) {
+    const idx = tmplBlockCounter++;
+    const div = document.createElement('div');
+    div.className    = 'tmpl-block-row card border mb-3';
+    div.dataset.type = 'item';
+    div.innerHTML = `
+        <div class="tmpl-block-handle card-header py-2 d-flex align-items-center gap-2"
+             style="cursor:grab;user-select:none;">
+            <i class="bi bi-grip-vertical text-muted fs-5"></i>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                <i class="bi bi-receipt me-1"></i>Line Item
+            </span>
+            <span class="ms-auto fw-semibold small text-muted tmpl-item-header-total">$0.00</span>
+            <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                    onclick="removeTmplBlock(this)" title="Remove block">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="card-body">
+            <input type="hidden" name="blocks[${idx}][type]" value="item">
+            <input type="hidden" name="blocks[${idx}][sort_order]" class="tmpl-sort-input" value="${idx}">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold mb-1">Description</label>
+                    <input type="text" name="blocks[${idx}][description]"
+                           class="form-control" placeholder="Service or item description" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Qty</label>
+                    <input type="number" name="blocks[${idx}][quantity]"
+                           class="form-control tmpl-item-qty" value="1" min="0" step="0.01">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Unit Price</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="blocks[${idx}][unit_price]"
+                               class="form-control tmpl-item-unit" value="0.00" min="0" step="0.01">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Total</label>
+                    <div class="form-control bg-light text-end fw-semibold tmpl-item-total-disp">$0.00</div>
+                </div>
+            </div>
+        </div>`;
+
+    div.querySelector('[name$="[description]"]').value = description || '';
+    div.querySelector('.tmpl-item-qty').value          = parseFloat(quantity)  || 1;
+    div.querySelector('.tmpl-item-unit').value         = parseFloat(unitPrice) || 0;
+
+    document.getElementById('tmplBlocksContainer').appendChild(div);
+    bindTmplItemEvents(div);
+    calcTmplItem(div);
+    updateTmplSortOrders();
+}
+
+// ── Add SIGNATURE block ───────────────────────────────────────────────────────
+function addTmplSignature(label) {
+    const idx = tmplBlockCounter++;
+    const div = document.createElement('div');
+    div.className    = 'tmpl-block-row card border mb-3';
+    div.dataset.type = 'signature';
+    div.innerHTML = `
+        <div class="tmpl-block-handle card-header py-2 d-flex align-items-center gap-2"
+             style="cursor:grab;user-select:none;">
+            <i class="bi bi-grip-vertical text-muted fs-5"></i>
+            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                <i class="bi bi-pen me-1"></i>Signature Block
+            </span>
+            <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0"
+                    onclick="removeTmplBlock(this)" title="Remove block">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="card-body">
+            <input type="hidden" name="blocks[${idx}][type]" value="signature">
+            <input type="hidden" name="blocks[${idx}][sort_order]" class="tmpl-sort-input" value="${idx}">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold mb-1">Signature Label</label>
+                    <input type="text" name="blocks[${idx}][sig_label]"
+                           class="form-control tmpl-sig-label-input"
+                           placeholder="e.g. Authorized Signature, Client Name">
+                </div>
+                <div class="col-md-7">
+                    <div class="border-0 border-bottom border-dark border-2 pb-1" style="min-height:40px;"></div>
+                    <div class="d-flex justify-content-between small text-muted mt-1">
+                        <span class="tmpl-sig-preview">Signature</span>
+                        <span>Date</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+    div.querySelector('.tmpl-sig-label-input').value = label || '';
+    div.querySelector('.tmpl-sig-label-input').addEventListener('input', function () {
+        const preview = div.querySelector('.tmpl-sig-preview');
+        if (preview) preview.textContent = this.value || 'Signature';
+    });
+    if (label) {
+        div.querySelector('.tmpl-sig-preview').textContent = label;
+    }
+
+    document.getElementById('tmplBlocksContainer').appendChild(div);
+    updateTmplSortOrders();
+}
+
+// ── Remove any block ──────────────────────────────────────────────────────────
+function removeTmplBlock(btn) {
+    const block = btn.closest('.tmpl-block-row');
+    const ta    = block.querySelector('.tmpl-summernote-editor');
+    if (ta && $(ta).data('summernote')) {
+        ta.value = $(ta).summernote('code');
+        $(ta).summernote('destroy');
+    }
+    block.remove();
+}
+
+// ── Item calc ─────────────────────────────────────────────────────────────────
+function calcTmplItem(block) {
+    const qty   = parseFloat(block.querySelector('.tmpl-item-qty')?.value)  || 0;
+    const price = parseFloat(block.querySelector('.tmpl-item-unit')?.value) || 0;
+    const total = qty * price;
+    const fmt   = '$' + total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const disp  = block.querySelector('.tmpl-item-total-disp');
+    const hdr   = block.querySelector('.tmpl-item-header-total');
+    if (disp) disp.textContent = fmt;
+    if (hdr)  hdr.textContent  = fmt;
+}
+
+function bindTmplItemEvents(block) {
+    block.querySelector('.tmpl-item-qty')?.addEventListener('input',  () => calcTmplItem(block));
+    block.querySelector('.tmpl-item-unit')?.addEventListener('input', () => calcTmplItem(block));
+}
+
+// ── Open new-template modal ───────────────────────────────────────────────────
 function openModal() {
     document.getElementById('modalTitle').innerHTML =
         '<i class="bi bi-file-earmark-text me-2 text-primary"></i>New Template';
-    document.getElementById('tmplId').value    = '0';
-    document.getElementById('tmplName').value  = '';
-    document.getElementById('tmplIntro').value = '';
-    document.getElementById('tmplNotes').value = '';
-    document.getElementById('tmplItemsBody').innerHTML = '';
-    tmplCounter = 0;
-    addTemplateItem(); // start with one empty row
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
+    document.getElementById('tmplId').value   = '0';
+    document.getElementById('tmplName').value = '';
+    clearTmplBlocks();
+    addTmplTextBlock(); // start with one empty text block
+    bootstrap.Modal.getOrCreateInstance(templateModal).show();
 }
 
+// ── Edit existing template ────────────────────────────────────────────────────
 function editTemplate(id) {
     const t = TEMPLATE_MAP[id];
     if (!t) return;
 
     document.getElementById('modalTitle').innerHTML =
         '<i class="bi bi-pencil me-2 text-primary"></i>Edit Template';
-    document.getElementById('tmplId').value    = t.id;
-    document.getElementById('tmplName').value  = t.name       || '';
-    document.getElementById('tmplIntro').value = t.intro_text || '';
-    document.getElementById('tmplNotes').value = t.notes      || '';
+    document.getElementById('tmplId').value   = t.id;
+    document.getElementById('tmplName').value = t.name || '';
 
-    document.getElementById('tmplItemsBody').innerHTML = '';
-    tmplCounter = 0;
-    if (t.items && t.items.length) {
-        t.items.forEach(item => addTemplateItem(item.description, item.quantity, item.unit_price));
+    clearTmplBlocks();
+    if (t.blocks && t.blocks.length) {
+        t.blocks.forEach(function (b) {
+            if      (b.block_type === 'text')      addTmplTextBlock(b.content);
+            else if (b.block_type === 'item')      addTmplLineItem(b.description, b.quantity, b.unit_price);
+            else if (b.block_type === 'signature') addTmplSignature(b.sig_label);
+        });
     } else {
-        addTemplateItem();
+        addTmplTextBlock();
     }
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
+    bootstrap.Modal.getOrCreateInstance(templateModal).show();
 }
 
-function addTemplateItem(description, quantity, unitPrice) {
-    const idx = tmplCounter++;
-    const tr  = document.createElement('tr');
-    tr.className = 'tmpl-item-row';
-    tr.innerHTML = `
-        <td class="tmpl-drag text-muted ps-2" style="cursor:grab;vertical-align:middle;">
-            <i class="bi bi-grip-vertical"></i>
-        </td>
-        <td>
-            <input type="text" name="items[${idx}][description]"
-                   class="form-control form-control-sm" placeholder="Description" required>
-            <input type="hidden" name="items[${idx}][sort_order]" class="tmpl-sort" value="${idx}">
-        </td>
-        <td>
-            <input type="number" name="items[${idx}][quantity]"
-                   class="form-control form-control-sm" value="1" min="0" step="0.01">
-        </td>
-        <td>
-            <div class="input-group input-group-sm">
-                <span class="input-group-text">$</span>
-                <input type="number" name="items[${idx}][unit_price]"
-                       class="form-control" value="0.00" min="0" step="0.01">
-            </div>
-        </td>
-        <td style="vertical-align:middle;">
-            <button type="button" class="btn btn-sm btn-link text-danger p-0"
-                    onclick="removeTmplItem(this)">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>`;
-
-    tr.querySelector('[name$="[description]"]').value = description || '';
-    tr.querySelector('[name$="[quantity]"]').value     = parseFloat(quantity)  || 1;
-    tr.querySelector('[name$="[unit_price]"]').value   = parseFloat(unitPrice) || 0;
-
-    document.getElementById('tmplItemsBody').appendChild(tr);
-}
-
-function removeTmplItem(btn) {
-    const rows = document.querySelectorAll('#tmplItemsBody .tmpl-item-row');
-    if (rows.length <= 1) {
-        const tr = btn.closest('tr');
-        tr.querySelector('[name$="[description]"]').value = '';
-        tr.querySelector('[name$="[quantity]"]').value    = 1;
-        tr.querySelector('[name$="[unit_price]"]').value  = 0;
-        return;
-    }
-    btn.closest('tr').remove();
+function clearTmplBlocks() {
+    // Destroy any open Summernote instances first
+    templateModal.querySelectorAll('.tmpl-summernote-editor').forEach(function (ta) {
+        if ($(ta).data('summernote')) {
+            ta.value = $(ta).summernote('code');
+            $(ta).summernote('destroy');
+        }
+    });
+    document.getElementById('tmplBlocksContainer').innerHTML = '';
+    tmplBlockCounter = 0;
 }
 
 function confirmDelete(id, name) {
-    document.getElementById('deleteId').value          = id;
-    document.getElementById('deleteName').textContent  = name;
+    document.getElementById('deleteId').value         = id;
+    document.getElementById('deleteName').textContent = name;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
 }
 
-// Update sort orders before template form submits
-document.getElementById('templateForm').addEventListener('submit', updateTmplSortOrders);
-
-<?php if ($reopenModal && $postId > 0): ?>
-window.addEventListener('load', function () {
-    editTemplate(<?= $postId ?>);
+// ── Sync + sort orders before submit ─────────────────────────────────────────
+document.getElementById('templateForm').addEventListener('submit', function () {
+    syncTmplEditors();
+    updateTmplSortOrders();
 });
-<?php elseif ($reopenModal): ?>
+
+// ── Reopen on validation error ────────────────────────────────────────────────
+<?php if ($reopenModal): ?>
 window.addEventListener('load', function () {
-    // Reopen with POST data after validation error
     document.getElementById('modalTitle').innerHTML =
-        '<i class="bi bi-file-earmark-text me-2 text-primary"></i>New Template';
-    <?php if (!empty($postItems)): ?>
-    document.getElementById('tmplItemsBody').innerHTML = '';
-    tmplCounter = 0;
-    <?php foreach ($postItems as $pi): ?>
-    addTemplateItem(<?= json_encode($pi['description']) ?>, <?= (float)$pi['quantity'] ?>, <?= (float)$pi['unit_price'] ?>);
-    <?php endforeach; ?>
+        '<?= $postId > 0 ? '<i class="bi bi-pencil me-2 text-primary"></i>Edit Template' : '<i class="bi bi-file-earmark-text me-2 text-primary"></i>New Template' ?>';
+    clearTmplBlocks();
+    <?php foreach ($postBlocks as $pb): ?>
+    <?php if ($pb['block_type'] === 'text'): ?>
+    addTmplTextBlock(<?= json_encode($pb['content']) ?>);
+    <?php elseif ($pb['block_type'] === 'item'): ?>
+    addTmplLineItem(<?= json_encode($pb['description']) ?>, <?= (float)$pb['quantity'] ?>, <?= (float)$pb['unit_price'] ?>);
+    <?php elseif ($pb['block_type'] === 'signature'): ?>
+    addTmplSignature(<?= json_encode($pb['sig_label']) ?>);
     <?php endif; ?>
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('templateModal')).show();
+    <?php endforeach; ?>
+    <?php if (empty($postBlocks)): ?>
+    addTmplTextBlock();
+    <?php endif; ?>
+    bootstrap.Modal.getOrCreateInstance(templateModal).show();
 });
 <?php endif; ?>
 </script>

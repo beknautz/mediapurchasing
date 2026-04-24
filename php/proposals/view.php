@@ -17,7 +17,7 @@ if (!$data) {
 }
 
 $proposal = $data['proposal'];
-$items    = $data['items'];
+$blocks   = $data['blocks'];
 $flashMsg = flash('success');
 $errorMsg = flash('error');
 
@@ -46,6 +46,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_confirm'])) {
 
 $statusColor = ProposalService::STATUS_COLORS[$proposal['status']] ?? 'secondary';
 $statusLabel = ProposalService::STATUS_LABELS[$proposal['status']] ?? $proposal['status'];
+
+function renderViewItemTable(array $items): void {
+    $subtotal = array_sum(array_map(fn($i) => (float)$i['total_price'], $items));
+    ?>
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-0">
+            <table class="table mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Description</th>
+                        <th class="text-center" style="width:80px;">Qty</th>
+                        <th class="text-end" style="width:130px;">Unit Price</th>
+                        <th class="text-end" style="width:130px;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($items as $item): ?>
+                <tr>
+                    <td><?= h($item['description']) ?></td>
+                    <td class="text-center"><?= rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.') ?></td>
+                    <td class="text-end">$<?= number_format((float)$item['unit_price'], 2) ?></td>
+                    <td class="text-end fw-semibold">$<?= number_format((float)$item['total_price'], 2) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <?php if (count($items) > 1): ?>
+                <tfoot>
+                    <tr class="table-light">
+                        <td colspan="3" class="text-end text-muted small">Subtotal</td>
+                        <td class="text-end fw-semibold">$<?= number_format($subtotal, 2) ?></td>
+                    </tr>
+                </tfoot>
+                <?php endif; ?>
+            </table>
+        </div>
+    </div>
+    <?php
+}
 
 $pageTitle = h($proposal['title']) . ' — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
@@ -90,67 +128,61 @@ require_once __DIR__ . '/../includes/header.php';
     <!-- ── Main content ─────────────────────────────────────────────────────── -->
     <div class="col-lg-8">
 
-        <!-- Intro text -->
-        <?php if (!empty($proposal['intro_text'])): ?>
+        <?php
+        $itemBuffer = [];
+        foreach ($blocks as $b):
+            if ($b['block_type'] === 'item') {
+                $itemBuffer[] = $b;
+            } else {
+                if (!empty($itemBuffer)) {
+                    renderViewItemTable($itemBuffer);
+                    $itemBuffer = [];
+                }
+                if ($b['block_type'] === 'text'):
+        ?>
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <div style="white-space:pre-wrap;line-height:1.7;"><?= h($proposal['intro_text']) ?></div>
+            <div class="card-body" style="line-height:1.75;">
+                <?= $b['content'] /* Summernote HTML — rendered raw */ ?>
+            </div>
+        </div>
+        <?php       elseif ($b['block_type'] === 'signature'): ?>
+        <div class="mb-5 pt-3">
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="border-bottom border-dark border-2 mb-2" style="min-height:52px;"></div>
+                    <div class="d-flex justify-content-between small text-muted">
+                        <span><?= h($b['sig_label'] ?: 'Authorized Signature') ?></span>
+                        <span>Date</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+                endif;
+            }
+        endforeach;
+        // Flush remaining item blocks
+        if (!empty($itemBuffer)) {
+            renderViewItemTable($itemBuffer);
+        }
+        ?>
+
+        <?php if (empty($blocks)): ?>
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-file-earmark-text fs-2 d-block mb-2 opacity-50"></i>
+            <div>No content blocks yet.
+                <a href="/proposals/create.php?id=<?= $id ?>">Edit this proposal</a> to add content.
             </div>
         </div>
         <?php endif; ?>
 
-        <!-- Line items -->
+        <!-- Grand total -->
+        <?php if ((float)$proposal['total_amount'] > 0): ?>
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0 fw-semibold">
-                    <i class="bi bi-list-ul me-2 text-primary"></i>Line Items
-                </h5>
-            </div>
-            <div class="card-body p-0">
-                <?php if (empty($items)): ?>
-                <div class="text-center text-muted py-4 small">No line items.</div>
-                <?php else: ?>
-                <table class="table mb-0 align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Description</th>
-                            <th class="text-center" style="width:80px;">Qty</th>
-                            <th class="text-end" style="width:130px;">Unit Price</th>
-                            <th class="text-end" style="width:130px;">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ($items as $item): ?>
-                    <tr>
-                        <td><?= h($item['description']) ?></td>
-                        <td class="text-center"><?= h(rtrim(rtrim(number_format((float)$item['quantity'], 2), '0'), '.')) ?></td>
-                        <td class="text-end">$<?= number_format((float)$item['unit_price'], 2) ?></td>
-                        <td class="text-end fw-semibold">$<?= number_format((float)$item['total_price'], 2) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                    <tfoot>
-                        <tr class="table-light fw-bold">
-                            <td colspan="3" class="text-end">Total</td>
-                            <td class="text-end fs-5">$<?= number_format((float)$proposal['total_amount'], 2) ?></td>
-                        </tr>
-                    </tfoot>
-                </table>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Notes / Terms -->
-        <?php if (!empty($proposal['notes'])): ?>
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0 fw-semibold">
-                    <i class="bi bi-sticky me-2 text-primary"></i>Notes / Terms
-                </h5>
-            </div>
             <div class="card-body">
-                <div style="white-space:pre-wrap;line-height:1.7;" class="text-muted small">
-                    <?= h($proposal['notes']) ?>
+                <div class="d-flex justify-content-end align-items-center gap-3">
+                    <span class="fw-semibold text-muted fs-6">Grand Total</span>
+                    <span class="fs-4 fw-bold">$<?= number_format((float)$proposal['total_amount'], 2) ?></span>
                 </div>
             </div>
         </div>
@@ -181,9 +213,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <dt class="col-5 text-muted">Valid Until</dt>
                     <dd class="col-7">
                         <?php if ($proposal['valid_until']): ?>
-                            <?php
-                            $isExpired = strtotime($proposal['valid_until']) < strtotime('today');
-                            ?>
+                            <?php $isExpired = strtotime($proposal['valid_until']) < strtotime('today'); ?>
                             <span class="<?= $isExpired ? 'text-danger fw-semibold' : '' ?>">
                                 <?= h(date('M j, Y', strtotime($proposal['valid_until']))) ?>
                             </span>
