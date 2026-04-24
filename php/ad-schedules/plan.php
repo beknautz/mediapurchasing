@@ -764,62 +764,12 @@ window.addEventListener('load', function () { openEditModal(<?= json_encode($edi
 <script>
 // ── Excel Import ──────────────────────────────────────────────────────────────
 
-// Maps lowercased/trimmed header names → our field names
-const IMPORT_COL_MAP = {
-    'publication':              'publication',
-    'pub':                      'publication',
-    'publication name':         'publication',
-    'contact':                  'contact_name',
-    'contact name':             'contact_name',
-    'rep':                      'contact_name',
-    'editorial':                'editorial',
-    'edition':                  'editorial',
-    'topic':                    'editorial',
-    'ad #':                     'ad_number',
-    'ad#':                      'ad_number',
-    'ad number':                'ad_number',
-    'ad no':                    'ad_number',
-    'ad no.':                   'ad_number',
-    'run date':                 'run_date',
-    'publication date':         'run_date',
-    'pub date':                 'run_date',
-    'issue date':               'run_date',
-    'artwork deadline':         'artwork_deadline',
-    'art deadline':             'artwork_deadline',
-    'art due':                  'artwork_deadline',
-    'artwork due':              'artwork_deadline',
-    'client approval':          'client_approval_deadline',
-    'client approval deadline': 'client_approval_deadline',
-    'approval due':             'client_approval_deadline',
-    'approval deadline':        'client_approval_deadline',
-    'ad to hc':                 'client_approval_deadline',
-    'ad to hcc':                'client_approval_deadline',
-    'ad size':                  'ad_size',
-    'size':                     'ad_size',
-    'circulation':              'circulation',
-    'circ':                     'circulation',
-    '# ads':                    'num_ads',
-    'num ads':                  'num_ads',
-    'number of ads':            'num_ads',
-    '# of ads':                 'num_ads',
-    'agency cost':              'cost_to_agency',
-    'cost to agency':           'cost_to_agency',
-    'agency $':                 'cost_to_agency',
-    'net cost':                 'cost_to_agency',
-    'net':                      'cost_to_agency',
-    'client cost':              'cost_to_client',
-    'cost to client':           'cost_to_client',
-    'client $':                 'cost_to_client',
-    'gross':                    'cost_to_client',
-    'gross cost':               'cost_to_client',
-    'markup':                   'markup_pct',
-    'markup %':                 'markup_pct',
-    'markup pct':               'markup_pct',
-    'mark up':                  'markup_pct',
-    'notes':                    'notes',
-    'note':                     'notes',
-    'comments':                 'notes',
-};
+const IMPORT_FIELDS = new Set([
+    'publication', 'contact_name', 'editorial', 'ad_number',
+    'run_date', 'artwork_deadline', 'client_approval_deadline',
+    'ad_size', 'circulation', 'num_ads',
+    'cost_to_agency', 'cost_to_client', 'markup_pct', 'notes',
+]);
 
 let importParsedRows = [];
 
@@ -868,16 +818,15 @@ function importProcess(raw) {
     const unmapped = [];
 
     headers.forEach(function (h, idx) {
-        const field = IMPORT_COL_MAP[h];
-        if (field && !(field in colIndex)) {
-            colIndex[field] = idx;
-        } else if (h && !IMPORT_COL_MAP[h]) {
+        if (IMPORT_FIELDS.has(h) && !(h in colIndex)) {
+            colIndex[h] = idx;
+        } else if (h) {
             unmapped.push(h);
         }
     });
 
     if (!('publication' in colIndex)) {
-        alert('Could not find a "Publication" column. Please check your spreadsheet headers.');
+        alert('Could not find a "publication" column. Rename your Excel header to match the field name exactly.');
         return;
     }
 
@@ -905,8 +854,8 @@ function importProcess(raw) {
     // Show mapping hint
     const hintEl = document.getElementById('importMappingHint');
     const mappedFields = Object.keys(colIndex).length;
-    let hintText = 'Mapped ' + mappedFields + ' column(s): ' + Object.keys(colIndex).join(', ') + '.';
-    if (unmapped.length) hintText += '  Ignored: ' + unmapped.join(', ') + '.';
+    let hintText = 'Matched ' + mappedFields + ' column(s): ' + Object.keys(colIndex).join(', ') + '.';
+    if (unmapped.length) hintText += '  Ignored (no matching field): ' + unmapped.join(', ') + '.';
     document.getElementById('importMappingText').textContent = hintText;
     hintEl.classList.remove('d-none');
 
