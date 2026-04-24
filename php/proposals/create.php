@@ -146,7 +146,7 @@ function renderBlock(array $b, int $i): void {
         <div class="card-body p-0">
             <input type="hidden" name="blocks[<?= $i ?>][type]" value="text">
             <input type="hidden" name="blocks[<?= $i ?>][sort_order]" class="sort-input" value="<?= $i ?>">
-            <textarea name="blocks[<?= $i ?>][content]" class="text-content summernote-editor"><?= h($b['content'] ?? '') ?></textarea>
+            <textarea name="blocks[<?= $i ?>][content]" class="summernote-editor" style="display:none;"><?= h($b['content'] ?? '') ?></textarea>
         </div>
 
         <?php elseif ($type === 'item'): ?>
@@ -476,14 +476,17 @@ const sortable = Sortable.create(document.getElementById('blocksContainer'), {
 });
 
 // ── Init: Summernote on existing text blocks, bind item events ────────────────
-document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('#blocksContainer .summernote-editor').forEach(function (ta) {
-        $(ta).summernote(SNOTE_OPTS);
+$(function () {
+    // Init Summernote on every PHP-rendered text block; try/catch prevents one
+    // bad block from stopping the rest from initializing.
+    $('#blocksContainer .block-row[data-type="text"] .summernote-editor').each(function () {
+        try { $(this).summernote(SNOTE_OPTS); }
+        catch (e) { console.error('Summernote init error:', e, this); }
     });
     document.querySelectorAll('#blocksContainer .block-row[data-type="item"]').forEach(bindItemEvents);
     updateGrandTotal();
 
-    // For a brand-new proposal with no blocks, start with one empty text block
+    // New proposal with no blocks — start with one empty text block
     if (document.querySelectorAll('#blocksContainer .block-row').length === 0) {
         addTextBlock();
     }
