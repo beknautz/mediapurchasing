@@ -482,6 +482,11 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     document.querySelectorAll('#blocksContainer .block-row[data-type="item"]').forEach(bindItemEvents);
     updateGrandTotal();
+
+    // For a brand-new proposal with no blocks, start with one empty text block
+    if (document.querySelectorAll('#blocksContainer .block-row').length === 0) {
+        addTextBlock();
+    }
 });
 
 // ── Sync all open editors to their hidden textareas ───────────────────────────
