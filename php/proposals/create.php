@@ -121,119 +121,12 @@ foreach ($blocks as $b) {
     }
 }
 
+// Serialize existing blocks for JS rendering
+$blockJson = json_encode(array_values($blocks));
+
 $extraHead = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.css">';
 $pageTitle  = ($isEdit ? 'Edit Proposal' : 'New Proposal') . ' — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
-
-// Helper: render one block row from PHP (used for existing/repopulated blocks)
-function renderBlock(array $b, int $i): void {
-    $type = $b['block_type'] ?? $b['type'] ?? 'text';
-    ?>
-    <div class="block-row card border mb-3" data-type="<?= h($type) ?>">
-
-        <?php if ($type === 'text'): ?>
-        <div class="block-handle card-header py-2 d-flex align-items-center gap-2"
-             style="cursor:grab; user-select:none;">
-            <i class="bi bi-grip-vertical text-muted fs-5"></i>
-            <span class="badge bg-info-subtle text-info border border-info-subtle">
-                <i class="bi bi-text-paragraph me-1"></i>Text Block
-            </span>
-            <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0"
-                    onclick="removeBlock(this)" title="Remove block">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-        <div class="card-body p-0">
-            <input type="hidden" name="blocks[<?= $i ?>][type]" value="text">
-            <input type="hidden" name="blocks[<?= $i ?>][sort_order]" class="sort-input" value="<?= $i ?>">
-            <textarea name="blocks[<?= $i ?>][content]" class="summernote-editor" style="display:none;"><?= h($b['content'] ?? '') ?></textarea>
-        </div>
-
-        <?php elseif ($type === 'item'): ?>
-        <div class="block-handle card-header py-2 d-flex align-items-center gap-2"
-             style="cursor:grab; user-select:none;">
-            <i class="bi bi-grip-vertical text-muted fs-5"></i>
-            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                <i class="bi bi-receipt me-1"></i>Line Item
-            </span>
-            <span class="ms-auto fw-semibold small text-muted item-header-total">
-                $<?= number_format((float)($b['quantity'] ?? 1) * (float)($b['unit_price'] ?? 0), 2) ?>
-            </span>
-            <button type="button" class="btn btn-sm btn-link text-danger p-0"
-                    onclick="removeBlock(this)" title="Remove block">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-        <div class="card-body">
-            <input type="hidden" name="blocks[<?= $i ?>][type]" value="item">
-            <input type="hidden" name="blocks[<?= $i ?>][sort_order]" class="sort-input" value="<?= $i ?>">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-6">
-                    <label class="form-label small fw-semibold mb-1">Description</label>
-                    <input type="text" name="blocks[<?= $i ?>][description]"
-                           class="form-control" placeholder="Service or item description"
-                           value="<?= h($b['description'] ?? '') ?>" required>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Qty</label>
-                    <input type="number" name="blocks[<?= $i ?>][quantity]"
-                           class="form-control item-qty"
-                           value="<?= h($b['quantity'] ?? 1) ?>" min="0" step="0.01">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Unit Price</label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" name="blocks[<?= $i ?>][unit_price]"
-                               class="form-control item-unit"
-                               value="<?= h($b['unit_price'] ?? 0) ?>" min="0" step="0.01">
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Total</label>
-                    <div class="form-control bg-light text-end fw-semibold item-total-disp">
-                        $<?= number_format((float)($b['quantity'] ?? 1) * (float)($b['unit_price'] ?? 0), 2) ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <?php elseif ($type === 'signature'): ?>
-        <div class="block-handle card-header py-2 d-flex align-items-center gap-2"
-             style="cursor:grab; user-select:none;">
-            <i class="bi bi-grip-vertical text-muted fs-5"></i>
-            <span class="badge bg-success-subtle text-success border border-success-subtle">
-                <i class="bi bi-pen me-1"></i>Signature Block
-            </span>
-            <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0"
-                    onclick="removeBlock(this)" title="Remove block">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-        <div class="card-body">
-            <input type="hidden" name="blocks[<?= $i ?>][type]" value="signature">
-            <input type="hidden" name="blocks[<?= $i ?>][sort_order]" class="sort-input" value="<?= $i ?>">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-5">
-                    <label class="form-label small fw-semibold mb-1">Signature Label</label>
-                    <input type="text" name="blocks[<?= $i ?>][sig_label]" class="form-control"
-                           placeholder="e.g. Authorized Signature, Client Name"
-                           value="<?= h($b['sig_label'] ?? '') ?>">
-                </div>
-                <div class="col-md-7">
-                    <div class="border-0 border-bottom border-dark border-2 pb-1" style="min-height:40px;"></div>
-                    <div class="d-flex justify-content-between small text-muted mt-1">
-                        <span><?= h($b['sig_label'] ?: 'Signature') ?></span>
-                        <span>Date</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
-    </div>
-    <?php
-}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -355,12 +248,8 @@ function renderBlock(array $b, int $i): void {
             </div>
             <div class="card-body pb-2">
 
-                <!-- Sortable blocks container -->
-                <div id="blocksContainer">
-                    <?php foreach ($blocks as $i => $b): ?>
-                        <?php renderBlock($b, $i); ?>
-                    <?php endforeach; ?>
-                </div>
+                <!-- Sortable blocks container — populated by JS on load -->
+                <div id="blocksContainer"></div>
 
                 <!-- Add block toolbar -->
                 <div class="d-flex gap-2 pt-1 pb-1 border-top mt-2">
@@ -463,8 +352,11 @@ const SNOTE_OPTS = {
 // ── Template data (keyed by id) ───────────────────────────────────────────────
 const TEMPLATE_MAP = <?= json_encode(array_values($templates)) ?>.reduce((m, t) => { m[t.id] = t; return m; }, {});
 
-// ── Block counter (starts after PHP-rendered blocks) ──────────────────────────
-let blockCounter = <?= count($blocks) ?>;
+// ── Existing blocks from server (JS renders these, same path as template load) ─
+const EXISTING_BLOCKS = <?= $blockJson ?>;
+
+// ── Block counter ─────────────────────────────────────────────────────────────
+let blockCounter = 0;
 
 // ── SortableJS ────────────────────────────────────────────────────────────────
 const sortable = Sortable.create(document.getElementById('blocksContainer'), {
@@ -475,21 +367,18 @@ const sortable = Sortable.create(document.getElementById('blocksContainer'), {
     onEnd:   updateSortOrders,
 });
 
-// ── Init: Summernote on existing text blocks, bind item events ────────────────
+// ── Render blocks on load ─────────────────────────────────────────────────────
 $(function () {
-    // Init Summernote on every PHP-rendered text block; try/catch prevents one
-    // bad block from stopping the rest from initializing.
-    $('#blocksContainer .block-row[data-type="text"] .summernote-editor').each(function () {
-        try { $(this).summernote(SNOTE_OPTS); }
-        catch (e) { console.error('Summernote init error:', e, this); }
-    });
-    document.querySelectorAll('#blocksContainer .block-row[data-type="item"]').forEach(bindItemEvents);
-    updateGrandTotal();
-
-    // New proposal with no blocks — start with one empty text block
-    if (document.querySelectorAll('#blocksContainer .block-row').length === 0) {
-        addTextBlock();
+    if (EXISTING_BLOCKS.length > 0) {
+        EXISTING_BLOCKS.forEach(function (b) {
+            if      (b.block_type === 'text')      addTextBlock(b.content || '');
+            else if (b.block_type === 'item')      addLineItem(b.description, b.quantity, b.unit_price);
+            else if (b.block_type === 'signature') addSignature(b.sig_label);
+        });
+    } else {
+        addTextBlock(); // new proposal — start with one empty text block
     }
+    updateGrandTotal();
 });
 
 // ── Sync all open editors to their hidden textareas ───────────────────────────
