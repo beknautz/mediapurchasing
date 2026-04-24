@@ -76,6 +76,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('error', 'Could not delete plan: ' . $e->getMessage());
             redirect('/ad-schedules/plan.php?id=' . $planId);
         }
+
+    } elseif ($action === 'import_placements') {
+        $rows = json_decode($_POST['rows_json'] ?? '[]', true);
+        if (!is_array($rows)) {
+            flash('error', 'Invalid import data.');
+            redirect('/ad-schedules/plan.php?id=' . $planId);
+        }
+        $imported = 0;
+        $skipped  = 0;
+        foreach ($rows as $row) {
+            if (empty(trim($row['publication'] ?? ''))) { $skipped++; continue; }
+            try {
+                $svc->savePlacement([
+                    'id'                        => 0,
+                    'plan_id'                   => $planId,
+                    'client_id'                 => (int)$plan['client_id'],
+                    'publication'               => $row['publication']              ?? '',
+                    'contact_name'              => $row['contact_name']             ?? '',
+                    'editorial'                 => $row['editorial']                ?? '',
+                    'ad_number'                 => $row['ad_number']                ?? '',
+                    'run_date'                  => $row['run_date']                 ?? '',
+                    'artwork_deadline'          => $row['artwork_deadline']         ?? '',
+                    'client_approval_deadline'  => $row['client_approval_deadline'] ?? '',
+                    'ad_size'                   => $row['ad_size']                  ?? '',
+                    'circulation'               => $row['circulation']              ?? '',
+                    'num_ads'                   => $row['num_ads']                  ?? 1,
+                    'cost_to_agency'            => $row['cost_to_agency']           ?? '',
+                    'cost_to_client'            => $row['cost_to_client']           ?? '',
+                    'markup_pct'                => $row['markup_pct']               ?? '',
+                    'notes'                     => $row['notes']                    ?? '',
+                    'sort_order'                => 0,
+                ]);
+                $imported++;
+            } catch (Exception $e) {
+                $skipped++;
+            }
+        }
+        $msg = 'Imported ' . $imported . ' placement' . ($imported !== 1 ? 's' : '');
+        if ($skipped > 0) $msg .= ' (' . $skipped . ' skipped)';
+        flash('success', $msg . '.');
+        redirect('/ad-schedules/plan.php?id=' . $planId);
     }
 }
 
@@ -144,6 +185,10 @@ function checkCell(int $id, string $field, int $value, string $title = ''): void
         <button type="button" class="btn btn-primary btn-sm"
                 onclick="openAddModal()">
             <i class="bi bi-plus-circle me-1"></i>Add Placement
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm"
+                data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Import Excel
         </button>
         <button type="button" class="btn btn-outline-danger btn-sm"
                 onclick="confirmDeletePlan()">
@@ -631,6 +676,309 @@ document.querySelectorAll('.toggle-btn').forEach(function (btn) {
 // Auto-open edit modal for ?edit= parameter
 window.addEventListener('load', function () { openEditModal(<?= json_encode($editRecord) ?>); });
 <?php endif; ?>
+</script>
+
+<!-- ── Import Excel Modal ─────────────────────────────────────────────────── -->
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-semibold">
+                    <i class="bi bi-file-earmark-spreadsheet me-2 text-success"></i>Import from Excel
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Drop zone -->
+                <div id="importDropZone"
+                     class="border border-2 border-dashed rounded-3 text-center py-5 px-3 mb-3"
+                     style="border-color:#6c757d!important; cursor:pointer; transition:background .15s;"
+                     ondragover="importDragOver(event)" ondragleave="importDragLeave(event)"
+                     ondrop="importDrop(event)" onclick="document.getElementById('importFileInput').click()">
+                    <i class="bi bi-cloud-upload fs-2 text-muted d-block mb-2"></i>
+                    <div class="fw-semibold">Drag &amp; drop an Excel file here</div>
+                    <div class="small text-muted mt-1">or click to browse — .xlsx / .xls / .csv</div>
+                    <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv"
+                           class="d-none" onchange="importFileSelected(this)">
+                </div>
+
+                <!-- Column mapping hint -->
+                <div id="importMappingHint" class="alert alert-info small py-2 d-none">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <span id="importMappingText"></span>
+                </div>
+
+                <!-- Preview -->
+                <div id="importPreviewWrap" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-semibold small">
+                            Preview — <span id="importRowCount">0</span> row(s) detected
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="importReset()">
+                            <i class="bi bi-x-circle me-1"></i>Clear
+                        </button>
+                    </div>
+                    <div class="table-responsive" style="max-height:340px; overflow-y:auto;">
+                        <table class="table table-sm table-bordered mb-0 align-middle"
+                               style="font-size:.78rem; min-width:1100px;">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Publication</th>
+                                    <th>Contact</th>
+                                    <th>Editorial</th>
+                                    <th>Ad #</th>
+                                    <th>Run Date</th>
+                                    <th>Art Due</th>
+                                    <th>Approval Due</th>
+                                    <th>Ad Size</th>
+                                    <th class="text-end">Agency $</th>
+                                    <th class="text-end">Client $</th>
+                                    <th class="text-end">Markup %</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody id="importPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary"
+                        data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="/ad-schedules/plan.php?id=<?= $planId ?>" id="importForm">
+                    <input type="hidden" name="action" value="import_placements">
+                    <input type="hidden" name="rows_json" id="importRowsJson" value="[]">
+                    <button type="submit" class="btn btn-success d-none" id="importSubmitBtn">
+                        <i class="bi bi-cloud-download me-1"></i>
+                        Import <span id="importSubmitCount">0</span> Placement(s)
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ── Excel Import ──────────────────────────────────────────────────────────────
+
+// Maps lowercased/trimmed header names → our field names
+const IMPORT_COL_MAP = {
+    'publication':              'publication',
+    'pub':                      'publication',
+    'publication name':         'publication',
+    'contact':                  'contact_name',
+    'contact name':             'contact_name',
+    'rep':                      'contact_name',
+    'editorial':                'editorial',
+    'edition':                  'editorial',
+    'topic':                    'editorial',
+    'ad #':                     'ad_number',
+    'ad#':                      'ad_number',
+    'ad number':                'ad_number',
+    'ad no':                    'ad_number',
+    'ad no.':                   'ad_number',
+    'run date':                 'run_date',
+    'publication date':         'run_date',
+    'pub date':                 'run_date',
+    'issue date':               'run_date',
+    'artwork deadline':         'artwork_deadline',
+    'art deadline':             'artwork_deadline',
+    'art due':                  'artwork_deadline',
+    'artwork due':              'artwork_deadline',
+    'client approval':          'client_approval_deadline',
+    'client approval deadline': 'client_approval_deadline',
+    'approval due':             'client_approval_deadline',
+    'approval deadline':        'client_approval_deadline',
+    'ad to hc':                 'client_approval_deadline',
+    'ad to hcc':                'client_approval_deadline',
+    'ad size':                  'ad_size',
+    'size':                     'ad_size',
+    'circulation':              'circulation',
+    'circ':                     'circulation',
+    '# ads':                    'num_ads',
+    'num ads':                  'num_ads',
+    'number of ads':            'num_ads',
+    '# of ads':                 'num_ads',
+    'agency cost':              'cost_to_agency',
+    'cost to agency':           'cost_to_agency',
+    'agency $':                 'cost_to_agency',
+    'net cost':                 'cost_to_agency',
+    'net':                      'cost_to_agency',
+    'client cost':              'cost_to_client',
+    'cost to client':           'cost_to_client',
+    'client $':                 'cost_to_client',
+    'gross':                    'cost_to_client',
+    'gross cost':               'cost_to_client',
+    'markup':                   'markup_pct',
+    'markup %':                 'markup_pct',
+    'markup pct':               'markup_pct',
+    'mark up':                  'markup_pct',
+    'notes':                    'notes',
+    'note':                     'notes',
+    'comments':                 'notes',
+};
+
+let importParsedRows = [];
+
+function importDragOver(e) {
+    e.preventDefault();
+    document.getElementById('importDropZone').style.background = '#e8f5e9';
+}
+function importDragLeave(e) {
+    document.getElementById('importDropZone').style.background = '';
+}
+function importDrop(e) {
+    e.preventDefault();
+    importDragLeave(e);
+    const file = e.dataTransfer.files[0];
+    if (file) importParseFile(file);
+}
+function importFileSelected(input) {
+    if (input.files[0]) importParseFile(input.files[0]);
+}
+
+function importParseFile(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true, dateNF: 'yyyy-mm-dd' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const raw = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
+            importProcess(raw);
+        } catch (err) {
+            alert('Could not read file: ' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function importProcess(raw) {
+    // Find first non-empty row as header
+    let headerRowIdx = -1;
+    for (let i = 0; i < Math.min(raw.length, 10); i++) {
+        if (raw[i] && raw[i].filter(Boolean).length >= 2) { headerRowIdx = i; break; }
+    }
+    if (headerRowIdx === -1) { alert('Could not detect a header row.'); return; }
+
+    const headers = raw[headerRowIdx].map(h => (h || '').toString().trim().toLowerCase());
+    const colIndex = {};  // fieldName → column index
+    const unmapped = [];
+
+    headers.forEach(function (h, idx) {
+        const field = IMPORT_COL_MAP[h];
+        if (field && !(field in colIndex)) {
+            colIndex[field] = idx;
+        } else if (h && !IMPORT_COL_MAP[h]) {
+            unmapped.push(h);
+        }
+    });
+
+    if (!('publication' in colIndex)) {
+        alert('Could not find a "Publication" column. Please check your spreadsheet headers.');
+        return;
+    }
+
+    // Parse data rows
+    importParsedRows = [];
+    for (let i = headerRowIdx + 1; i < raw.length; i++) {
+        const row = raw[i];
+        if (!row || !row.filter(Boolean).length) continue;
+
+        const pub = (row[colIndex['publication']] || '').toString().trim();
+        if (!pub) continue;  // skip blank publication rows
+
+        const r = {};
+        Object.keys(colIndex).forEach(function (field) {
+            let val = (row[colIndex[field]] || '').toString().trim();
+            // Normalise date values that come as JS Date serialised strings
+            if (['run_date', 'artwork_deadline', 'client_approval_deadline'].includes(field)) {
+                val = importNormaliseDate(val);
+            }
+            r[field] = val;
+        });
+        importParsedRows.push(r);
+    }
+
+    // Show mapping hint
+    const hintEl = document.getElementById('importMappingHint');
+    const mappedFields = Object.keys(colIndex).length;
+    let hintText = 'Mapped ' + mappedFields + ' column(s): ' + Object.keys(colIndex).join(', ') + '.';
+    if (unmapped.length) hintText += '  Ignored: ' + unmapped.join(', ') + '.';
+    document.getElementById('importMappingText').textContent = hintText;
+    hintEl.classList.remove('d-none');
+
+    importRenderPreview();
+}
+
+function importNormaliseDate(val) {
+    if (!val) return '';
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    // Try parsing
+    const d = new Date(val);
+    if (!isNaN(d)) return d.toISOString().slice(0, 10);
+    return val;
+}
+
+function importRenderPreview() {
+    const tbody = document.getElementById('importPreviewBody');
+    tbody.innerHTML = '';
+
+    importParsedRows.forEach(function (r) {
+        const tr = document.createElement('tr');
+        [
+            r.publication, r.contact_name, r.editorial, r.ad_number,
+            r.run_date, r.artwork_deadline, r.client_approval_deadline,
+            r.ad_size,
+        ].forEach(function (val) {
+            const td = document.createElement('td');
+            td.textContent = val || '';
+            tr.appendChild(td);
+        });
+        ['cost_to_agency', 'cost_to_client', 'markup_pct'].forEach(function (f) {
+            const td = document.createElement('td');
+            td.className = 'text-end';
+            td.textContent = r[f] || '';
+            tr.appendChild(td);
+        });
+        const tdNotes = document.createElement('td');
+        tdNotes.textContent = r.notes || '';
+        tr.appendChild(tdNotes);
+        tbody.appendChild(tr);
+    });
+
+    const count = importParsedRows.length;
+    document.getElementById('importRowCount').textContent = count;
+    document.getElementById('importSubmitCount').textContent = count;
+    document.getElementById('importRowsJson').value = JSON.stringify(importParsedRows);
+
+    const previewWrap = document.getElementById('importPreviewWrap');
+    const submitBtn   = document.getElementById('importSubmitBtn');
+    if (count > 0) {
+        previewWrap.classList.remove('d-none');
+        submitBtn.classList.remove('d-none');
+    } else {
+        previewWrap.classList.add('d-none');
+        submitBtn.classList.add('d-none');
+        alert('No importable rows found. Check that the Publication column is filled.');
+    }
+}
+
+function importReset() {
+    importParsedRows = [];
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importPreviewBody').innerHTML = '';
+    document.getElementById('importPreviewWrap').classList.add('d-none');
+    document.getElementById('importSubmitBtn').classList.add('d-none');
+    document.getElementById('importMappingHint').classList.add('d-none');
+    document.getElementById('importDropZone').style.background = '';
+}
+
+// Reset state when modal is closed
+document.getElementById('importModal').addEventListener('hidden.bs.modal', importReset);
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
