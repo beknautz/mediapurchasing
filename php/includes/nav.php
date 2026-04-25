@@ -60,6 +60,13 @@ function navActive(string $path): string {
                                 <i class="bi bi-calendar3 me-2"></i>Ad Schedules
                             </a>
                         </li>
+                        <?php if ($isBuyer): ?>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/ad-automation') ?>" href="/ad-automation/index.php">
+                                <i class="bi bi-robot me-2"></i>Ad Automation
+                            </a>
+                        </li>
+                        <?php endif; ?>
                         <li>
                             <a class="dropdown-item <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
                                 <i class="bi bi-robot me-2"></i>Budget Planner
