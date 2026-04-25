@@ -66,6 +66,16 @@ function navActive(string $path): string {
                                 <i class="bi bi-robot me-2"></i>Ad Automation
                             </a>
                         </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/ad-automation/performance') ?>" href="/ad-automation/performance.php">
+                                <i class="bi bi-bar-chart me-2"></i>Ad Performance
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/ad-automation/google-settings') ?>" href="/ad-automation/google-settings.php">
+                                <i class="bi bi-google me-2"></i>Google Settings
+                            </a>
+                        </li>
                         <?php endif; ?>
                         <li>
                             <a class="dropdown-item <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">

@@ -1,0 +1,12 @@
+{
+    "name": "mediabuy/platform",
+    "description": "Media Buying Platform",
+    "require": {
+        "php": ">=8.1",
+        "googleads/google-ads-php": "^26.0",
+        "google/apiclient": "^2.15"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

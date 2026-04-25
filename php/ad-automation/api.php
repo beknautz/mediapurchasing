@@ -223,6 +223,44 @@ try {
             echo alertSuccess('Status updated to ' . $status . '.');
             break;
 
+        // ── Google Publishing ─────────────────────────────────────────────
+
+        case 'publish_to_google':
+            $id = (int)($_POST['id'] ?? 0);
+            if (!$id) { echo alertError('Invalid schedule.'); exit; }
+            require_once __DIR__ . '/../config/google.php';
+            $adsService = new GoogleAdsService();
+            if (!$adsService->isConfigured()) {
+                echo alertError('Google Ads is not connected. <a href="/ad-automation/google-settings.php">Go to Google Settings</a>.');
+                exit;
+            }
+            $result = $svc->publishToGoogle($id);
+            echo alertSuccess('Campaign created in Google Ads! Resource: ' . htmlspecialchars($result['campaign_resource'] ?? ''));
+            break;
+
+        case 'publish_post_to_google_business':
+            $id           = (int)($_POST['id']            ?? 0);
+            $locationName = trim($_POST['location_name'] ?? '');
+            if (!$id || !$locationName) { echo alertError('Post ID and location are required.'); exit; }
+            require_once __DIR__ . '/../config/google.php';
+            $bizService = new GoogleBusinessService();
+            if (!$bizService->isConfigured()) {
+                echo alertError('Google Business Profile is not connected. <a href="/ad-automation/google-settings.php">Go to Google Settings</a>.');
+                exit;
+            }
+            $result = $svc->publishPostToGoogleBusiness($id, $locationName);
+            echo alertSuccess('Post published to Google Business Profile!');
+            break;
+
+        case 'set_google_campaign_status':
+            $resource = trim($_POST['campaign_resource'] ?? '');
+            $status   = trim($_POST['status'] ?? '');
+            if (!$resource || !$status) { echo alertError('Missing parameters.'); exit; }
+            require_once __DIR__ . '/../config/google.php';
+            (new GoogleAdsService())->setCampaignStatus($resource, $status);
+            echo alertSuccess('Campaign status updated to ' . $status . '.');
+            break;
+
         default:
             http_response_code(400);
             echo alertError('Unknown action.');

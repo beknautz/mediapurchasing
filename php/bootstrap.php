@@ -12,6 +12,15 @@ ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
 // ---------------------------------------------------------------------------
+// Composer autoloader (Google Ads API, etc.)
+// ---------------------------------------------------------------------------
+$_composerAutoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($_composerAutoload)) {
+    require_once $_composerAutoload;
+}
+unset($_composerAutoload);
+
+// ---------------------------------------------------------------------------
 // Config — DB constants and app settings (must load before anything else)
 // ---------------------------------------------------------------------------
 require_once __DIR__ . '/config/config.php';

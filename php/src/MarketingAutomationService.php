@@ -465,34 +465,131 @@ class MarketingAutomationService extends BaseService
     }
 
     /**
-     * Placeholder — connect Google Ads API here.
-     * @see https://developers.google.com/google-ads/api/docs/start
+     * Create a Google Search campaign + RSA from an ad schedule record.
+     * Requires the schedule to have an ad_copy_id pointing to approved Google copy.
+     * The schedule's final_url field is used as the landing page.
      */
     public function publishToGoogle(int $scheduleId): array
     {
-        // TODO: Implement Google Ads API call
-        // 1. Load schedule + ad copy by $scheduleId
-        // 2. Use Google Ads PHP client library
-        // 3. Update schedule status to 'active' on success
-        throw new Exception('Google Ads API not yet connected. Configure GOOGLE_ADS_DEVELOPER_TOKEN first.');
+        $schedule = $this->getAdSchedule($scheduleId);
+        if (!$schedule) throw new Exception('Schedule not found.');
+        if ($schedule['platform'] !== 'google') throw new Exception('Schedule is not a Google platform schedule.');
+
+        $adCopy = $schedule['ad_copy_id'] ? $this->getAdCopyById((int)$schedule['ad_copy_id']) : null;
+
+        $adsSvc = new GoogleAdsService();
+
+        // Create campaign
+        $campaign = $adsSvc->createSearchCampaign(
+            name:            $schedule['ad_name'],
+            dailyBudgetUsd:  (float)($schedule['daily_budget'] ?? 5),
+            startDate:        $schedule['start_datetime'] ? date('Y-m-d', strtotime($schedule['start_datetime'])) : '',
+            endDate:          $schedule['end_datetime']   ? date('Y-m-d', strtotime($schedule['end_datetime']))   : '',
+            startPaused:      true
+        );
+
+        $result = ['campaign_resource' => $campaign['campaign_resource']];
+
+        // Create RSA if ad copy is linked
+        if ($adCopy) {
+            $finalUrl = $schedule['target_location']
+                ? 'https://' . ltrim($schedule['target_location'], 'https://')
+                : 'https://enigmamarketing.com';
+
+            $adResult = $adsSvc->createAdGroupWithRSA(
+                $campaign['campaign_resource'],
+                $adCopy,
+                $finalUrl
+            );
+            $result = array_merge($result, $adResult);
+        }
+
+        // Persist Google resource names back to the schedule
+        $this->db->prepare(
+            'UPDATE crm_ad_schedules
+                SET google_campaign_resource = :cr,
+                    google_ad_resource       = :ar,
+                    status                   = "scheduled",
+                    published_at             = NOW(),
+                    updated_at               = NOW()
+              WHERE id = :id'
+        )->execute([
+            ':cr' => $result['campaign_resource']  ?? null,
+            ':ar' => $result['ad_resource']        ?? null,
+            ':id' => $scheduleId,
+        ]);
+
+        $this->logActivity('ad_schedule', $scheduleId, 'published_to_google',
+            'Campaign: ' . ($result['campaign_resource'] ?? ''));
+
+        return $result;
     }
 
     /**
-     * Placeholder — validate a Meta ad before publishing.
+     * Publish a social post to Google Business Profile.
+     * $postId — crm_social_posts.id
+     * $locationName — Google Business location resource name (locations/{id})
+     */
+    public function publishPostToGoogleBusiness(int $postId, string $locationName): array
+    {
+        $post = $this->getSocialPost($postId);
+        if (!$post) throw new Exception('Post not found.');
+
+        $bizSvc = new GoogleBusinessService();
+        $result = $bizSvc->createPost($locationName, [
+            'summary'   => $post['caption'] ?? $post['title'],
+            'image_url' => $post['image_url'] ?? '',
+        ]);
+
+        // Mark post as published
+        $this->db->prepare(
+            'UPDATE crm_social_posts
+                SET status            = "published",
+                    published_at      = NOW(),
+                    external_post_id  = :ext,
+                    updated_at        = NOW()
+              WHERE id = :id'
+        )->execute([
+            ':ext' => $result['name'] ?? null,
+            ':id'  => $postId,
+        ]);
+
+        $this->logActivity('social_post', $postId, 'published_to_google_business',
+            $result['name'] ?? '');
+
+        return $result;
+    }
+
+    /**
+     * Validate a Meta ad before publishing.
      */
     public function validateMetaAd(array $adData): array
     {
-        // TODO: Validate headline length <= 40 chars, primary text <= 125 chars, etc.
-        return ['valid' => true, 'warnings' => []];
+        $warnings = [];
+        if (strlen($adData['headline'] ?? '') > 40)      $warnings[] = 'Headline exceeds 40 characters.';
+        if (strlen($adData['primary_text'] ?? '') > 125) $warnings[] = 'Primary text exceeds 125 characters.';
+        if (strlen($adData['description'] ?? '') > 30)   $warnings[] = 'Description exceeds 30 characters.';
+        return ['valid' => empty($warnings), 'warnings' => $warnings];
     }
 
     /**
-     * Placeholder — validate a Google ad before publishing.
+     * Validate a Google Responsive Search Ad before publishing.
      */
     public function validateGoogleAd(array $adData): array
     {
-        // TODO: Validate headline <= 30 chars each, descriptions <= 90 chars each
-        return ['valid' => true, 'warnings' => []];
+        $warnings  = [];
+        $headlines = json_decode($adData['google_headlines']    ?? '[]', true) ?: [];
+        $descs     = json_decode($adData['google_descriptions'] ?? '[]', true) ?: [];
+
+        if (count($headlines) < 3) $warnings[] = 'Google RSA requires at least 3 headlines (up to 15).';
+        if (count($descs)     < 2) $warnings[] = 'Google RSA requires at least 2 descriptions (up to 4).';
+        foreach ($headlines as $h) {
+            if (strlen($h) > 30) $warnings[] = "Headline too long (max 30 chars): \"{$h}\"";
+        }
+        foreach ($descs as $d) {
+            if (strlen($d) > 90) $warnings[] = "Description too long (max 90 chars): \"{$d}\"";
+        }
+        return ['valid' => empty($warnings), 'warnings' => $warnings];
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
