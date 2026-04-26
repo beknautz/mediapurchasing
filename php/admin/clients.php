@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone        = trim($_POST['phone'] ?? '');
     $address      = trim($_POST['address'] ?? '');
     $notes        = trim($_POST['notes'] ?? '');
+    $google_ads_customer_id = preg_replace('/\D/', '', $_POST['google_ads_customer_id'] ?? '');
 
     if ($company_name === '') {
         $errors[] = 'Company name is required.';
@@ -31,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'phone'        => $phone,
             'address'      => $address,
             'notes'        => $notes,
+            'google_ads_customer_id' => $google_ads_customer_id ?: null,
         ];
         if ($id !== null) {
             $data['id'] = $id;
@@ -41,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/clients.php');
     }
 
-    $editClient = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'address', 'notes');
+    $editClient = compact('id', 'company_name', 'contact_name', 'email', 'phone', 'address', 'notes', 'google_ads_customer_id');
 }
 
 $clients = $crmService->getClients();
@@ -198,6 +200,16 @@ require_once __DIR__ . '/../includes/header.php';
                                       placeholder="Any relevant notes about this client..."><?= h($editClient['notes'] ?? '') ?></textarea>
                         </div>
 
+                        <div class="col-md-6">
+                            <label for="googleAdsCustomerId" class="form-label fw-semibold">
+                                <i class="bi bi-google me-1 text-warning"></i>Google Ads Customer ID
+                            </label>
+                            <input type="text" id="googleAdsCustomerId" name="google_ads_customer_id"
+                                   class="form-control" placeholder="e.g. 352-371-6554"
+                                   value="<?= h($editClient['google_ads_customer_id'] ?? '') ?>">
+                            <div class="form-text">Found in the top-right of the client's Google Ads account.</div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -227,6 +239,7 @@ function editClient(id, data) {
     document.getElementById('clientPhone').value  = data.phone || '';
     document.getElementById('clientAddress').value = data.address || '';
     document.getElementById('clientNotes').value   = data.notes || '';
+    document.getElementById('googleAdsCustomerId').value = data.google_ads_customer_id || '';
     document.getElementById('clientModalTitleText').textContent = 'Edit Client: ' + (data.company_name || '');
 }
 

@@ -89,6 +89,7 @@ class CRMService extends BaseService
         $phone       = trim($data['phone']           ?? '');
         $address     = trim($data['address']         ?? '');
         $notes       = trim($data['notes']            ?? '');
+        $googleAdsId = preg_replace('/\D/', '', $data['google_ads_customer_id'] ?? '') ?: null;
         $isActive    = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
         if ($companyName === '') {
@@ -99,19 +100,20 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO clients
                      (company_name, contact_name, email, phone,
-                      address, notes, is_active, created_at, updated_at)
+                      address, notes, google_ads_customer_id, is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :notes, :is_active, NOW(), NOW())'
+                      :address, :notes, :google_ads_customer_id, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
-                ':company_name' => $companyName,
-                ':contact_name' => $contactName,
-                ':email'        => $email,
-                ':phone'        => $phone,
-                ':address'      => $address,
-                ':notes'        => $notes,
-                ':is_active'    => $isActive,
+                ':company_name'          => $companyName,
+                ':contact_name'          => $contactName,
+                ':email'                 => $email,
+                ':phone'                 => $phone,
+                ':address'               => $address,
+                ':notes'                 => $notes,
+                ':google_ads_customer_id'=> $googleAdsId,
+                ':is_active'             => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -122,25 +124,27 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE clients
-                SET company_name = :company_name,
-                    contact_name = :contact_name,
-                    email        = :email,
-                    phone        = :phone,
-                    address      = :address,
-                    notes        = :notes,
-                    is_active    = :is_active,
-                    updated_at   = NOW()
+                SET company_name           = :company_name,
+                    contact_name           = :contact_name,
+                    email                  = :email,
+                    phone                  = :phone,
+                    address                = :address,
+                    notes                  = :notes,
+                    google_ads_customer_id = :google_ads_customer_id,
+                    is_active              = :is_active,
+                    updated_at             = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':company_name' => $companyName,
-            ':contact_name' => $contactName,
-            ':email'        => $email,
-            ':phone'        => $phone,
-            ':address'      => $address,
-            ':notes'        => $notes,
-            ':is_active'    => $isActive,
-            ':id'           => $id,
+            ':company_name'          => $companyName,
+            ':contact_name'          => $contactName,
+            ':email'                 => $email,
+            ':phone'                 => $phone,
+            ':address'               => $address,
+            ':notes'                 => $notes,
+            ':google_ads_customer_id'=> $googleAdsId,
+            ':is_active'             => $isActive,
+            ':id'                    => $id,
         ]);
 
         $this->auditLog('update_client', 'client', $id, "Updated: {$companyName}");

@@ -38,12 +38,13 @@ class GoogleAdsService
     private int     $customerId;
     private array   $tokens = [];
 
-    public function __construct()
+    public function __construct(?string $customerId = null)
     {
         if (!defined('GOOGLE_ADS_CUSTOMER_ID')) {
             require_once __DIR__ . '/../config/google.php';
         }
-        $this->customerId = (int) preg_replace('/\D/', '', GOOGLE_ADS_CUSTOMER_ID);
+        $raw = $customerId ?? GOOGLE_ADS_CUSTOMER_ID;
+        $this->customerId = (int) preg_replace('/\D/', '', $raw);
         $this->tokens     = $this->loadTokens();
     }
 

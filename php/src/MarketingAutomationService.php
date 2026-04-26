@@ -477,7 +477,14 @@ class MarketingAutomationService extends BaseService
 
         $adCopy = $schedule['ad_copy_id'] ? $this->getAdCopyById((int)$schedule['ad_copy_id']) : null;
 
-        $adsSvc = new GoogleAdsService();
+        // Use the client's Google Ads Customer ID if set, otherwise fall back to config
+        $clientCustomerId = null;
+        if (!empty($schedule['client_id'])) {
+            $row = $this->db->prepare('SELECT google_ads_customer_id FROM clients WHERE id = :id');
+            $row->execute([':id' => $schedule['client_id']]);
+            $clientCustomerId = $row->fetchColumn() ?: null;
+        }
+        $adsSvc = new GoogleAdsService($clientCustomerId);
 
         // Create campaign
         $campaign = $adsSvc->createSearchCampaign(
