@@ -1,30 +1,21 @@
 <?php
 /**
  * config/google.php
- * Google API credentials — fill these in after completing OAuth setup.
- * Keep this file out of version control (add to .gitignore).
+ * Google API credentials — fill in your values below.
+ * This file is gitignored and must never be committed.
  */
 
-// ── Google Cloud Console OAuth2 credentials ───────────────────────────────
-// From: console.cloud.google.com → APIs & Services → Credentials
-defined('GOOGLE_CLIENT_ID')     || define('GOOGLE_CLIENT_ID',     $_ENV['GOOGLE_CLIENT_ID']     ?? '');
-defined('GOOGLE_CLIENT_SECRET') || define('GOOGLE_CLIENT_SECRET', $_ENV['GOOGLE_CLIENT_SECRET'] ?? '');
+// ── Google Cloud Console OAuth2 ───────────────────────────────────────────────
+define('GOOGLE_CLIENT_ID',     '');   // e.g. 123456789.apps.googleusercontent.com
+define('GOOGLE_CLIENT_SECRET', '');   // e.g. GOCSPX-xxxxxxxxxxxxxxx
 
-// OAuth2 redirect URI — must match exactly what you set in Cloud Console
-defined('GOOGLE_REDIRECT_URI')  || define('GOOGLE_REDIRECT_URI',
-    $_ENV['GOOGLE_REDIRECT_URI'] ?? 'https://media.enigmamarketing.com/ad-automation/google-callback.php'
-);
+// Must match exactly what you set in Cloud Console → Credentials → Redirect URIs
+define('GOOGLE_REDIRECT_URI',  'https://media.enigmamarketing.com/ad-automation/google-callback.php');
 
-// ── Google Ads ─────────────────────────────────────────────────────────────
-// Developer token: Google Ads → Tools → API Center
-defined('GOOGLE_ADS_DEVELOPER_TOKEN') || define('GOOGLE_ADS_DEVELOPER_TOKEN', $_ENV['GOOGLE_ADS_DEVELOPER_TOKEN'] ?? '');
+// ── Google Ads ────────────────────────────────────────────────────────────────
+define('GOOGLE_ADS_DEVELOPER_TOKEN', '');  // Google Ads → Tools → API Center
+define('GOOGLE_ADS_CUSTOMER_ID',     '');  // Your agency account ID digits only e.g. 3523716554
+define('GOOGLE_ADS_MANAGER_ID',      '');  // Your Manager Account ID digits only e.g. 8468743800
 
-// Your Google Ads Customer ID (digits only, no dashes)
-defined('GOOGLE_ADS_CUSTOMER_ID') || define('GOOGLE_ADS_CUSTOMER_ID', $_ENV['GOOGLE_ADS_CUSTOMER_ID'] ?? '');
-
-// Manager/MCC account customer ID — leave blank if using a standalone account
-defined('GOOGLE_ADS_MANAGER_ID') || define('GOOGLE_ADS_MANAGER_ID', $_ENV['GOOGLE_ADS_MANAGER_ID'] ?? '');
-
-// ── Token storage ─────────────────────────────────────────────────────────
-// Path to the JSON file where refresh tokens are stored after OAuth
+// ── Token storage ─────────────────────────────────────────────────────────────
 define('GOOGLE_TOKENS_PATH', __DIR__ . '/google_tokens.json');
