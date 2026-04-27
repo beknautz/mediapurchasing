@@ -2,16 +2,11 @@
 /**
  * src/GoogleBusinessService.php
  * Google Business Profile API integration — posts, locations, insights.
- *
- * Uses REST API directly via Guzzle (the discovery-based client does not
- * cover the newer mybusinesspostings/mybusinessbusinessinformation endpoints).
+ * Uses REST API directly via PHP curl (no Guzzle dependency).
  *
  * @see https://developers.google.com/my-business/reference/businessinformation/rest
  * @see https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts
  */
-
-use GuzzleHttp\Client as GuzzleClient;
-use GuzzleHttp\Exception\ClientException;
 
 class GoogleBusinessService
 {
@@ -41,9 +36,6 @@ class GoogleBusinessService
         return json_decode(file_get_contents(GOOGLE_TOKENS_PATH), true) ?? [];
     }
 
-    /**
-     * Get a fresh access token, refreshing if necessary.
-     */
     private function getAccessToken(): string
     {
         if ($this->accessToken) return $this->accessToken;
@@ -56,22 +48,34 @@ class GoogleBusinessService
             }
         }
 
-        // Refresh token
-        $response = (new GuzzleClient())->post('https://oauth2.googleapis.com/token', [
-            'form_params' => [
+        // Refresh the token
+        $ch = curl_init('https://oauth2.googleapis.com/token');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([
                 'client_id'     => GOOGLE_CLIENT_ID,
                 'client_secret' => GOOGLE_CLIENT_SECRET,
                 'refresh_token' => $this->tokens['refresh_token'],
                 'grant_type'    => 'refresh_token',
-            ],
+            ]),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT    => 15,
         ]);
-        $data = json_decode((string) $response->getBody(), true);
+        $raw = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($err) throw new RuntimeException('cURL error refreshing token: ' . $err);
 
-        $this->accessToken           = $data['access_token'];
+        $data = json_decode($raw, true) ?? [];
+        if (empty($data['access_token'])) {
+            throw new RuntimeException('Token refresh failed: ' . ($data['error_description'] ?? $raw));
+        }
+
+        $this->accessToken            = $data['access_token'];
         $this->tokens['access_token'] = $data['access_token'];
         $this->tokens['expires_at']   = time() + (int)($data['expires_in'] ?? 3600);
 
-        // Persist updated tokens
         if (defined('GOOGLE_TOKENS_PATH')) {
             file_put_contents(GOOGLE_TOKENS_PATH, json_encode($this->tokens, JSON_PRETTY_PRINT));
         }
@@ -79,41 +83,67 @@ class GoogleBusinessService
         return $this->accessToken;
     }
 
-    private function http(): GuzzleClient
+    // ── Low-level HTTP ─────────────────────────────────────────────────────
+
+    private function request(string $method, string $url, ?array $body = null, array $query = []): array
     {
-        return new GuzzleClient([
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->getAccessToken(),
-                'Content-Type'  => 'application/json',
-            ],
+        if ($query) $url .= '?' . http_build_query($query);
+
+        $headers = [
+            'Authorization: Bearer ' . $this->getAccessToken(),
+            'Content-Type: application/json',
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => strtoupper($method),
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_TIMEOUT        => 20,
         ]);
+
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+        } elseif (strtoupper($method) === 'POST') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, '');
+        }
+
+        $raw      = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err      = curl_error($ch);
+        curl_close($ch);
+
+        if ($err) throw new RuntimeException('cURL error: ' . $err);
+
+        $data = json_decode($raw, true) ?? [];
+
+        if ($httpCode >= 400) {
+            $msg = $data['error']['message'] ?? ('HTTP ' . $httpCode . ': ' . $raw);
+            throw new RuntimeException('Google API error: ' . $msg);
+        }
+
+        return $data;
     }
 
     // ── Accounts & Locations ───────────────────────────────────────────────
 
-    /**
-     * List Google Business accounts the authenticated user manages.
-     */
     public function getAccounts(): array
     {
-        $response = $this->http()->get(
-            'https://mybusinessaccountmanagement.googleapis.com/v1/accounts'
-        );
-        $data = json_decode((string) $response->getBody(), true);
+        $data = $this->request('GET', 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts');
         return $data['accounts'] ?? [];
     }
 
     /**
-     * List locations (businesses) under an account.
      * $accountName — format: "accounts/{accountId}"
      */
     public function getLocations(string $accountName): array
     {
-        $response = $this->http()->get(
+        $data = $this->request(
+            'GET',
             "https://mybusinessbusinessinformation.googleapis.com/v1/{$accountName}/locations",
-            ['query' => ['readMask' => 'name,title,storefrontAddress,websiteUri,regularHours,phoneNumbers']]
+            null,
+            ['readMask' => 'name,title,storefrontAddress,websiteUri,regularHours,phoneNumbers']
         );
-        $data = json_decode((string) $response->getBody(), true);
         return $data['locations'] ?? [];
     }
 
@@ -121,15 +151,7 @@ class GoogleBusinessService
 
     /**
      * Create a local post on a Business Profile location.
-     *
      * $locationName — format: "locations/{locationId}"
-     * $postData keys:
-     *   summary     string  (caption / body text)
-     *   image_url   string  (optional photo URL)
-     *   cta_type    string  LEARN_MORE | CALL | BOOK | ORDER | SIGN_UP | SHOP | GET_OFFER
-     *   cta_url     string  (URL for the call-to-action button)
-     *   start_date  string  YYYY-MM-DD (for events/offers)
-     *   end_date    string  YYYY-MM-DD
      */
     public function createPost(string $locationName, array $postData): array
     {
@@ -164,46 +186,28 @@ class GoogleBusinessService
             ];
         }
 
-        $response = $this->http()->post(
-            "https://mybusiness.googleapis.com/v4/{$locationName}/localPosts",
-            ['json' => $body]
-        );
-        return json_decode((string) $response->getBody(), true);
+        return $this->request('POST', "https://mybusiness.googleapis.com/v4/{$locationName}/localPosts", $body);
     }
 
-    /**
-     * List local posts for a location.
-     */
     public function listPosts(string $locationName): array
     {
-        $response = $this->http()->get(
-            "https://mybusiness.googleapis.com/v4/{$locationName}/localPosts"
-        );
-        $data = json_decode((string) $response->getBody(), true);
+        $data = $this->request('GET', "https://mybusiness.googleapis.com/v4/{$locationName}/localPosts");
         return $data['localPosts'] ?? [];
     }
 
-    /**
-     * Delete a local post.
-     * $postName — format: "locations/{locationId}/localPosts/{postId}"
-     */
     public function deletePost(string $postName): void
     {
-        $this->http()->delete(
-            "https://mybusiness.googleapis.com/v4/{$postName}"
-        );
+        $this->request('DELETE', "https://mybusiness.googleapis.com/v4/{$postName}");
     }
 
     // ── Insights ───────────────────────────────────────────────────────────
 
-    /**
-     * Get basic location metrics.
-     * Returns searches, views, clicks, direction requests for the last 30 days.
-     */
     public function getLocationInsights(string $locationName): array
     {
         $endDate   = new DateTime();
         $startDate = (new DateTime())->modify('-30 days');
+
+        $accountName = 'accounts/' . ($this->tokens['business_account_id'] ?? '');
 
         $body = [
             'locationNames' => [$locationName],
@@ -224,19 +228,14 @@ class GoogleBusinessService
             ],
         ];
 
-        // Get account name from location name (locations/{id} → need account context)
-        // NOTE: reportInsights requires account-level endpoint
-        // Use the parent account from the location resource name
-        $accountName = 'accounts/' . ($this->tokens['business_account_id'] ?? '');
-
         try {
-            $response = $this->http()->post(
+            $data = $this->request(
+                'POST',
                 "https://mybusiness.googleapis.com/v4/{$accountName}/locations:reportInsights",
-                ['json' => $body]
+                $body
             );
-            $data = json_decode((string) $response->getBody(), true);
             return $data['locationMetrics'][0]['metricValues'] ?? [];
-        } catch (ClientException $e) {
+        } catch (RuntimeException $e) {
             return [];
         }
     }

@@ -345,16 +345,24 @@ class GoogleAdsService
         if (!defined('GOOGLE_CLIENT_ID')) {
             require_once __DIR__ . '/../config/google.php';
         }
-        $response = (new \GuzzleHttp\Client())->post(
-            'https://oauth2.googleapis.com/token',
-            ['form_params' => [
+        $ch = curl_init('https://oauth2.googleapis.com/token');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([
                 'code'          => $code,
                 'client_id'     => GOOGLE_CLIENT_ID,
                 'client_secret' => GOOGLE_CLIENT_SECRET,
                 'redirect_uri'  => GOOGLE_REDIRECT_URI,
                 'grant_type'    => 'authorization_code',
-            ]]
-        );
-        return json_decode((string) $response->getBody(), true);
+            ]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $raw  = curl_exec($ch);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        if ($err) throw new RuntimeException('cURL error during token exchange: ' . $err);
+        return json_decode($raw, true) ?? [];
     }
 }
