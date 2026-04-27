@@ -175,17 +175,32 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="text-muted small p-3">No locations found. Make sure you manage at least one Google Business Profile.</div>
                 <?php else: ?>
                 <table class="table table-sm mb-0 small">
-                    <thead class="table-light"><tr><th>Name</th><th>Address</th><th>Resource Name</th></tr></thead>
+                    <thead class="table-light"><tr><th>Name</th><th>Address</th><th>Location ID (copy to client)</th></tr></thead>
                     <tbody>
-                    <?php foreach ($locations as $loc): ?>
+                    <?php foreach ($locations as $loc):
+                        $locName = $loc['name'] ?? '';
+                    ?>
                     <tr>
                         <td class="fw-semibold"><?= h($loc['title'] ?? '') ?></td>
                         <td class="text-muted"><?= h(($loc['storefrontAddress']['addressLines'][0] ?? '') . ', ' . ($loc['storefrontAddress']['locality'] ?? '')) ?></td>
-                        <td><code class="small"><?= h($loc['name'] ?? '') ?></code></td>
+                        <td>
+                            <code class="small"><?= h($locName) ?></code>
+                            <?php if ($locName): ?>
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1"
+                                    onclick="navigator.clipboard.writeText('<?= h(addslashes($locName)) ?>').then(()=>this.innerHTML='<i class=\'bi bi-check-lg text-success\'></i>').catch(()=>{})"
+                                    title="Copy to clipboard">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
+                <div class="p-2 text-muted small border-top">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Copy the Location ID and paste it into <a href="/admin/clients.php">Admin → Clients</a> → Edit Client → Google Business Profile Location.
+                </div>
                 <?php endif; ?>
             </div>
         </div>
