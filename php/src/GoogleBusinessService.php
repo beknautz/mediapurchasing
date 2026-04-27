@@ -272,20 +272,26 @@ class GoogleBusinessService
         $accountId = $this->tokens['business_account_id'] ?? '';
 
         if (!$accountId) {
-            // Account ID wasn't saved during OAuth — fetch and persist it now
-            try {
-                $accounts  = $this->getAccounts();
-                $accountId = str_replace('accounts/', '', $accounts[0]['name'] ?? '');
-                if ($accountId && defined('GOOGLE_TOKENS_PATH')) {
-                    $this->tokens['business_account_id']   = $accountId;
-                    $this->tokens['business_account_name'] = $accounts[0]['accountName'] ?? '';
-                    file_put_contents(GOOGLE_TOKENS_PATH, json_encode($this->tokens, JSON_PRETTY_PRINT));
+            // Account ID wasn't saved during OAuth — fetch once per request and persist
+            static $fetchedAccountId = null;
+            if ($fetchedAccountId !== null) {
+                $accountId = $fetchedAccountId;
+            } else {
+                try {
+                    $accounts  = $this->getAccounts();
+                    $accountId = str_replace('accounts/', '', $accounts[0]['name'] ?? '');
+                    $fetchedAccountId = $accountId;
+                    if ($accountId && defined('GOOGLE_TOKENS_PATH')) {
+                        $this->tokens['business_account_id']   = $accountId;
+                        $this->tokens['business_account_name'] = $accounts[0]['accountName'] ?? '';
+                        file_put_contents(GOOGLE_TOKENS_PATH, json_encode($this->tokens, JSON_PRETTY_PRINT));
+                    }
+                } catch (Throwable $e) {
+                    throw new RuntimeException(
+                        'Could not retrieve Google Business Profile account: ' . $e->getMessage() . ' — ' .
+                        'Try <a href="/ad-automation/google-settings.php">reconnecting your Google account</a>.'
+                    );
                 }
-            } catch (Throwable $e) {
-                throw new RuntimeException(
-                    'Could not retrieve Google Business Profile account: ' . $e->getMessage() . ' — ' .
-                    'Try <a href="/ad-automation/google-settings.php">reconnecting your Google account</a>.'
-                );
             }
         }
 
