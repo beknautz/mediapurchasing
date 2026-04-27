@@ -144,10 +144,21 @@ class GoogleAdsService
         $data = json_decode($raw, true);
 
         if ($httpCode >= 400) {
-            $msg = $data['error']['message'] ?? ('HTTP ' . $httpCode . ' at ' . $url);
+            // Try to extract Google's error message; fall back to the raw body snippet
+            $msg = $data['error']['message']
+                ?? $data['error']['errors'][0]['message']
+                ?? null;
+
+            if (!$msg) {
+                $snippet = mb_substr((string)$raw, 0, 400);
+                $msg = 'HTTP ' . $httpCode . ' at ' . $url . ' — response: ' . $snippet;
+            }
 
             // Detect test-mode developer token attempting to access a real account
-            if ($httpCode === 403 || str_contains($msg, 'DEVELOPER_TOKEN') || str_contains($msg, 'developer token')) {
+            if ($httpCode === 403
+                || str_contains($msg, 'DEVELOPER_TOKEN')
+                || str_contains($msg, 'developer token')
+                || str_contains($msg, 'TEST_ACCOUNT')) {
                 $msg .= ' — Your Google Ads developer token may still be in TEST mode. '
                       . 'Go to Google Ads → Tools → API Center to apply for Basic Access.';
             }

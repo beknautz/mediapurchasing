@@ -282,11 +282,9 @@ class GoogleBusinessService
                     file_put_contents(GOOGLE_TOKENS_PATH, json_encode($this->tokens, JSON_PRETTY_PRINT));
                 }
             } catch (Throwable $e) {
-                // Still can't get it — throw a useful error
                 throw new RuntimeException(
-                    'Google Business Profile account ID is not stored. ' .
-                    'Please disconnect and reconnect your Google account on the ' .
-                    '<a href="/ad-automation/google-settings.php">Google Settings</a> page.'
+                    'Could not retrieve Google Business Profile account: ' . $e->getMessage() . ' — ' .
+                    'Try <a href="/ad-automation/google-settings.php">reconnecting your Google account</a>.'
                 );
             }
         }
