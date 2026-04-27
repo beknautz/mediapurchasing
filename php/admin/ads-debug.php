@@ -182,3 +182,54 @@ if (isset($data3['results'])) {
 } else {
     echo "Raw response:\n" . mb_substr($raw3, 0, 800) . "\n";
 }
+
+// ── Try WITHOUT login-customer-id (direct standalone access) ───────────────
+echo "\n\n=== Try WITHOUT login-customer-id (standalone/direct access) ===\n\n";
+
+$directHeaders = [
+    'Authorization: Bearer ' . $accessToken,
+    'developer-token: ' . GOOGLE_ADS_DEVELOPER_TOKEN,
+    'Content-Type: application/json',
+];
+$ch4 = curl_init('https://googleads.googleapis.com/v18/customers/' . $customerId . '/googleAds:search');
+curl_setopt_array($ch4, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST  => 'POST',
+    CURLOPT_HTTPHEADER     => $directHeaders,
+    CURLOPT_POSTFIELDS     => json_encode(['query' => 'SELECT campaign.id, campaign.name FROM campaign LIMIT 5', 'pageSize' => 5]),
+    CURLOPT_TIMEOUT        => 30,
+]);
+$raw4      = curl_exec($ch4);
+$httpCode4 = curl_getinfo($ch4, CURLINFO_HTTP_CODE);
+curl_close($ch4);
+
+echo "HTTP status: $httpCode4\n";
+$data4 = json_decode($raw4, true);
+if (isset($data4['results'])) {
+    echo "Campaigns: " . count($data4['results']) . " found\n";
+} elseif ($httpCode4 === 200) {
+    echo "200 OK — no results key\n";
+} else {
+    echo "Raw: " . mb_substr($raw4, 0, 400) . "\n";
+}
+
+// ── Try newer API versions ─────────────────────────────────────────────────
+echo "\n\n=== Try newer API versions ===\n\n";
+
+foreach (['v19', 'v20', 'v21'] as $ver) {
+    $vUrl = 'https://googleads.googleapis.com/' . $ver . '/customers/' . $customerId . '/googleAds:search';
+    $ch = curl_init($vUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST  => 'POST',
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_POSTFIELDS     => json_encode(['query' => 'SELECT campaign.id FROM campaign LIMIT 1', 'pageSize' => 1]),
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $vRaw  = curl_exec($ch);
+    $vCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $vData = json_decode($vRaw, true);
+    $summary = isset($vData['results']) ? count($vData['results']) . ' campaign(s)' : mb_substr($vRaw, 0, 120);
+    echo "$ver → HTTP $vCode: $summary\n";
+}
