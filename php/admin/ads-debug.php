@@ -213,23 +213,61 @@ if (isset($data4['results'])) {
     echo "Raw: " . mb_substr($raw4, 0, 400) . "\n";
 }
 
-// ── Try newer API versions ─────────────────────────────────────────────────
-echo "\n\n=== Try newer API versions ===\n\n";
+// ── v20: test different login-customer-id combinations ────────────────────
+echo "\n\n=== v20 with different login-customer-id values ===\n\n";
 
-foreach (['v19', 'v20', 'v21'] as $ver) {
-    $vUrl = 'https://googleads.googleapis.com/' . $ver . '/customers/' . $customerId . '/googleAds:search';
-    $ch = curl_init($vUrl);
+$q    = json_encode(['query' => 'SELECT campaign.id, campaign.name FROM campaign LIMIT 5', 'pageSize' => 5]);
+$base = [
+    'Authorization: Bearer ' . $accessToken,
+    'developer-token: ' . GOOGLE_ADS_DEVELOPER_TOKEN,
+    'Content-Type: application/json',
+];
+
+$combos = [
+    'No login-customer-id (standalone)'        => [],
+    'login-customer-id = ' . $customerId . ' (self)'  => ['login-customer-id: ' . $customerId],
+    'login-customer-id = ' . $managerId . ' (manager)' => ['login-customer-id: ' . $managerId],
+];
+
+foreach ($combos as $label => $extra) {
+    $ch = curl_init('https://googleads.googleapis.com/v20/customers/' . $customerId . '/googleAds:search');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST  => 'POST',
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_POSTFIELDS     => json_encode(['query' => 'SELECT campaign.id FROM campaign LIMIT 1', 'pageSize' => 1]),
+        CURLOPT_HTTPHEADER     => array_merge($base, $extra),
+        CURLOPT_POSTFIELDS     => $q,
         CURLOPT_TIMEOUT        => 15,
     ]);
-    $vRaw  = curl_exec($ch);
-    $vCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $r    = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    $vData = json_decode($vRaw, true);
-    $summary = isset($vData['results']) ? count($vData['results']) . ' campaign(s)' : mb_substr($vRaw, 0, 120);
-    echo "$ver → HTTP $vCode: $summary\n";
+    $d = json_decode($r, true);
+    if (isset($d['results'])) {
+        $result = count($d['results']) . ' campaign(s)';
+    } elseif (isset($d['error']['message'])) {
+        $result = 'ERROR: ' . $d['error']['message'];
+    } else {
+        $result = mb_substr($r, 0, 150);
+    }
+    echo "$label\n  → HTTP $code: $result\n\n";
+}
+
+// ── v20 listAccessibleCustomers (no customer in path) ─────────────────────
+echo "=== v20 listAccessibleCustomers ===\n\n";
+$ch = curl_init('https://googleads.googleapis.com/v20/customers:listAccessibleCustomers');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST  => 'GET',
+    CURLOPT_HTTPHEADER     => $base,
+    CURLOPT_TIMEOUT        => 15,
+]);
+$r    = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+$d = json_decode($r, true);
+echo "HTTP $code\n";
+if (isset($d['resourceNames'])) {
+    foreach ($d['resourceNames'] as $rn) echo "  $rn\n";
+} else {
+    echo mb_substr($r, 0, 400) . "\n";
 }

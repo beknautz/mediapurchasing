@@ -9,7 +9,7 @@
 
 class GoogleAdsService
 {
-    private const API_BASE    = 'https://googleads.googleapis.com/v18';
+    private const API_BASE    = 'https://googleads.googleapis.com/v20';
     private const TOKEN_URL   = 'https://oauth2.googleapis.com/token';
 
     private int   $customerId;
