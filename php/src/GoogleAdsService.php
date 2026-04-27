@@ -136,60 +136,51 @@ class GoogleAdsService
 
         if ($curlErr) throw new RuntimeException('cURL error: ' . $curlErr);
 
-        if ($httpCode >= 400) {
-            // Try to extract a JSON error message; fall back to plain HTTP code
-            $errData = json_decode($raw, true);
-            $msg = $errData['error']['message']
-                ?? $errData[0]['error']['message']
-                ?? ('HTTP ' . $httpCode . ' calling ' . $url);
-            throw new RuntimeException('Google Ads API error: ' . $msg);
-        }
-
-        // searchStream can return either a JSON array or newline-delimited JSON
-        $trimmed = trim($raw);
-        if (str_starts_with($trimmed, '[')) {
-            // JSON array of chunk objects
-            return json_decode($trimmed, true) ?? [];
-        }
-
-        if (str_starts_with($trimmed, '{')) {
-            // Newline-delimited JSON — split and collect
-            $rows = [];
-            foreach (explode("\n", $trimmed) as $line) {
-                $line = trim($line);
-                if ($line !== '') {
-                    $obj = json_decode($line, true);
-                    if (is_array($obj)) $rows[] = $obj;
-                }
-            }
-            return $rows;
-        }
-
         $data = json_decode($raw, true);
+
+        if ($httpCode >= 400) {
+            $msg = $data['error']['message'] ?? ('HTTP ' . $httpCode . ' at ' . $url);
+
+            // Detect test-mode developer token attempting to access a real account
+            if ($httpCode === 403 || str_contains($msg, 'DEVELOPER_TOKEN') || str_contains($msg, 'developer token')) {
+                $msg .= ' — Your Google Ads developer token may still be in TEST mode. '
+                      . 'Go to Google Ads → Tools → API Center to apply for Basic Access.';
+            }
+            throw new RuntimeException($msg);
+        }
+
         if (!is_array($data)) {
-            throw new RuntimeException('Unexpected response from Google Ads API (HTTP ' . $httpCode . '): ' . mb_substr($raw, 0, 200));
+            throw new RuntimeException('Unexpected response from Google Ads API (HTTP ' . $httpCode . '): ' . mb_substr($raw, 0, 300));
         }
         return $data;
     }
 
     /**
-     * Execute a GAQL query via the searchStream endpoint.
-     * Returns a flat array of result rows.
+     * Execute a GAQL query via the search endpoint (paged, simpler than searchStream).
+     * Returns a flat array of result rows across all pages.
      */
     private function gaql(string $query): array
     {
-        $chunks = $this->request(
-            'POST',
-            '/customers/' . $this->customerId . '/googleAds:searchStream',
-            ['query' => $query]
-        );
+        $rows      = [];
+        $pageToken = null;
 
-        $rows = [];
-        foreach ($chunks as $chunk) {
-            foreach ($chunk['results'] ?? [] as $row) {
+        do {
+            $body = ['query' => $query, 'pageSize' => 1000];
+            if ($pageToken) $body['pageToken'] = $pageToken;
+
+            $data = $this->request(
+                'POST',
+                '/customers/' . $this->customerId . '/googleAds:search',
+                $body
+            );
+
+            foreach ($data['results'] ?? [] as $row) {
                 $rows[] = $row;
             }
-        }
+            $pageToken = $data['nextPageToken'] ?? null;
+
+        } while ($pageToken);
+
         return $rows;
     }
 

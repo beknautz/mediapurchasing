@@ -293,9 +293,10 @@ class GoogleBusinessService
 
         if (!$accountId) {
             throw new RuntimeException(
-                'No Google Business Profile accounts found for this Google login. ' .
-                'Make sure you manage at least one Business Profile at ' .
-                '<a href="https://business.google.com" target="_blank">business.google.com</a>.'
+                'No Google Business Profile found for the connected Google account. ' .
+                'Visit <a href="https://business.google.com" target="_blank">business.google.com</a> ' .
+                'to create or claim a Business Profile, then ' .
+                '<a href="/ad-automation/google-settings.php">reconnect your Google account</a>.'
             );
         }
 
