@@ -155,6 +155,7 @@ class GoogleBusinessService
      */
     public function createPost(string $locationName, array $postData): array
     {
+        $locationName = $this->normalizeLoc($locationName);
         $body = [
             'languageCode' => 'en',
             'summary'      => $postData['summary'] ?? '',
@@ -191,12 +192,14 @@ class GoogleBusinessService
 
     public function listPosts(string $locationName): array
     {
+        $locationName = $this->normalizeLoc($locationName);
         $data = $this->request('GET', "https://mybusiness.googleapis.com/v4/{$locationName}/localPosts");
         return $data['localPosts'] ?? [];
     }
 
     public function deletePost(string $postName): void
     {
+        // $postName is the full resource path returned by the API (e.g. accounts/.../locations/.../localPosts/...)
         $this->request('DELETE', "https://mybusiness.googleapis.com/v4/{$postName}");
     }
 
@@ -204,13 +207,13 @@ class GoogleBusinessService
 
     public function getLocationInsights(string $locationName): array
     {
-        $endDate   = new DateTime();
-        $startDate = (new DateTime())->modify('-30 days');
-
-        $accountName = 'accounts/' . ($this->tokens['business_account_id'] ?? '');
+        $endDate      = new DateTime();
+        $startDate    = (new DateTime())->modify('-30 days');
+        $fullLocation = $this->normalizeLoc($locationName);
+        $accountName  = 'accounts/' . ($this->tokens['business_account_id'] ?? '');
 
         $body = [
-            'locationNames' => [$locationName],
+            'locationNames' => [$fullLocation],
             'basicRequest'  => [
                 'metricRequests' => [
                     ['metric' => 'QUERIES_DIRECT'],
@@ -241,6 +244,39 @@ class GoogleBusinessService
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    /**
+     * Build the full GBP resource path for a location.
+     *
+     * The v4 localPosts API requires the full parent path:
+     *   accounts/{accountId}/locations/{locationId}
+     *
+     * Accepts any of:
+     *   "12345"                               → accounts/{stored}/locations/12345
+     *   "locations/12345"                     → accounts/{stored}/locations/12345
+     *   "accounts/111/locations/12345"        → unchanged (already full)
+     */
+    private function normalizeLoc(string $location): string
+    {
+        $location = trim($location);
+        if ($location === '') return '';
+
+        // Already a full path — return as-is
+        if (str_starts_with($location, 'accounts/')) return $location;
+
+        // Strip "locations/" prefix if present to get bare ID
+        $locId = str_starts_with($location, 'locations/')
+            ? substr($location, strlen('locations/'))
+            : $location;
+
+        $accountId = $this->tokens['business_account_id'] ?? '';
+        if (!$accountId) {
+            // Fallback: can't build full path, use what we have
+            return 'locations/' . $locId;
+        }
+
+        return 'accounts/' . $accountId . '/locations/' . $locId;
+    }
 
     private function dateToApiFormat(string $date): array
     {
