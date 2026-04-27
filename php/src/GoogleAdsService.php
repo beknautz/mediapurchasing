@@ -30,7 +30,8 @@ class GoogleAdsService
 
     public function isConfigured(): bool
     {
-        return defined('GOOGLE_CLIENT_ID')
+        return $this->customerId > 0
+            && defined('GOOGLE_CLIENT_ID')
             && GOOGLE_CLIENT_ID !== ''
             && defined('GOOGLE_ADS_DEVELOPER_TOKEN')
             && GOOGLE_ADS_DEVELOPER_TOKEN !== ''
@@ -135,10 +136,26 @@ class GoogleAdsService
 
         if ($curlErr) throw new RuntimeException('cURL error: ' . $curlErr);
 
-        // searchStream returns newline-delimited JSON objects
-        if (str_contains($raw, "\n") && str_starts_with(trim($raw), '{')) {
+        if ($httpCode >= 400) {
+            // Try to extract a JSON error message; fall back to plain HTTP code
+            $errData = json_decode($raw, true);
+            $msg = $errData['error']['message']
+                ?? $errData[0]['error']['message']
+                ?? ('HTTP ' . $httpCode . ' calling ' . $url);
+            throw new RuntimeException('Google Ads API error: ' . $msg);
+        }
+
+        // searchStream can return either a JSON array or newline-delimited JSON
+        $trimmed = trim($raw);
+        if (str_starts_with($trimmed, '[')) {
+            // JSON array of chunk objects
+            return json_decode($trimmed, true) ?? [];
+        }
+
+        if (str_starts_with($trimmed, '{')) {
+            // Newline-delimited JSON — split and collect
             $rows = [];
-            foreach (explode("\n", trim($raw)) as $line) {
+            foreach (explode("\n", $trimmed) as $line) {
                 $line = trim($line);
                 if ($line !== '') {
                     $obj = json_decode($line, true);
@@ -150,13 +167,8 @@ class GoogleAdsService
 
         $data = json_decode($raw, true);
         if (!is_array($data)) {
-            throw new RuntimeException('Invalid JSON from Google Ads API (HTTP ' . $httpCode . ')');
+            throw new RuntimeException('Unexpected response from Google Ads API (HTTP ' . $httpCode . '): ' . mb_substr($raw, 0, 200));
         }
-        if ($httpCode >= 400) {
-            $msg = $data['error']['message'] ?? ('HTTP ' . $httpCode);
-            throw new RuntimeException('Google Ads API error: ' . $msg);
-        }
-
         return $data;
     }
 

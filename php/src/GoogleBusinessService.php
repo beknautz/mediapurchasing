@@ -270,9 +270,33 @@ class GoogleBusinessService
             : $location;
 
         $accountId = $this->tokens['business_account_id'] ?? '';
+
         if (!$accountId) {
-            // Fallback: can't build full path, use what we have
-            return 'locations/' . $locId;
+            // Account ID wasn't saved during OAuth — fetch and persist it now
+            try {
+                $accounts  = $this->getAccounts();
+                $accountId = str_replace('accounts/', '', $accounts[0]['name'] ?? '');
+                if ($accountId && defined('GOOGLE_TOKENS_PATH')) {
+                    $this->tokens['business_account_id']   = $accountId;
+                    $this->tokens['business_account_name'] = $accounts[0]['accountName'] ?? '';
+                    file_put_contents(GOOGLE_TOKENS_PATH, json_encode($this->tokens, JSON_PRETTY_PRINT));
+                }
+            } catch (Throwable $e) {
+                // Still can't get it — throw a useful error
+                throw new RuntimeException(
+                    'Google Business Profile account ID is not stored. ' .
+                    'Please disconnect and reconnect your Google account on the ' .
+                    '<a href="/ad-automation/google-settings.php">Google Settings</a> page.'
+                );
+            }
+        }
+
+        if (!$accountId) {
+            throw new RuntimeException(
+                'No Google Business Profile accounts found for this Google login. ' .
+                'Make sure you manage at least one Business Profile at ' .
+                '<a href="https://business.google.com" target="_blank">business.google.com</a>.'
+            );
         }
 
         return 'accounts/' . $accountId . '/locations/' . $locId;

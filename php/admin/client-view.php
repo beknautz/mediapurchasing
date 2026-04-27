@@ -19,11 +19,12 @@ $recentBuys = $result['recentBuys'];
 // ── Google Ads ─────────────────────────────────────────────────────────────
 $adsCampaigns  = [];
 $adsError      = '';
-$hasAdsId      = !empty($client['google_ads_customer_id']);
+$rawAdsId      = preg_replace('/\D/', '', $client['google_ads_customer_id'] ?? '');
+$hasAdsId      = $rawAdsId !== '';
 
 if ($hasAdsId) {
     try {
-        $adsSvc       = new GoogleAdsService($client['google_ads_customer_id']);
+        $adsSvc       = new GoogleAdsService($rawAdsId);
         $adsConnected = $adsSvc->isConfigured();
         if ($adsConnected) {
             $adsCampaigns = $adsSvc->listCampaigns();
@@ -40,7 +41,7 @@ if ($hasAdsId) {
 $gbpPosts     = [];
 $gbpInsights  = [];
 $gbpError     = '';
-$hasGbpLoc    = !empty($client['google_business_location']);
+$hasGbpLoc    = trim($client['google_business_location'] ?? '') !== '';
 
 if ($hasGbpLoc) {
     try {
@@ -178,9 +179,13 @@ function insightLabel(string $metric): string {
                     </div>
                 <?php elseif (!$adsConnected): ?>
                     <div class="alert alert-warning m-3 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
                         <?= $adsError
-                            ? '<i class="bi bi-exclamation-triangle me-1"></i>' . h($adsError)
+                            ? h($adsError)
                             : 'Google Ads not connected. <a href="/ad-automation/google-settings.php">Connect →</a>' ?>
+                        <?php if ($hasAdsId): ?>
+                        <div class="text-muted small mt-1">Customer ID: <?= h($rawAdsId) ?></div>
+                        <?php endif; ?>
                     </div>
                 <?php elseif (empty($adsCampaigns)): ?>
                     <div class="text-center text-muted py-4 small">
@@ -327,8 +332,9 @@ function insightLabel(string $metric): string {
                     </div>
                 <?php elseif (!$bizConnected): ?>
                     <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
                         <?= $gbpError
-                            ? h($gbpError)
+                            ? $gbpError  /* may contain safe HTML links from RuntimeException */
                             : 'Google not connected. <a href="/ad-automation/google-settings.php">Connect →</a>' ?>
                     </div>
                 <?php elseif (empty($gbpPosts)): ?>
