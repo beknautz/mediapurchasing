@@ -112,3 +112,73 @@ foreach ($responseHeaders as $h) {
 
 echo "\nResponse body (first 600 chars):\n";
 echo mb_substr((string)$raw, 0, 600) . "\n";
+
+// ── listAccessibleCustomers ────────────────────────────────────────────────
+echo "\n\n=== listAccessibleCustomers (what this token can actually see) ===\n\n";
+
+$accessHeaders = [
+    'Authorization: Bearer ' . $accessToken,
+    'developer-token: ' . GOOGLE_ADS_DEVELOPER_TOKEN,
+    'Content-Type: application/json',
+    'login-customer-id: ' . $managerId,
+];
+
+$ch2 = curl_init('https://googleads.googleapis.com/v18/customers:listAccessibleCustomers');
+curl_setopt_array($ch2, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST  => 'GET',
+    CURLOPT_HTTPHEADER     => $accessHeaders,
+    CURLOPT_TIMEOUT        => 30,
+]);
+$raw2      = curl_exec($ch2);
+$httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+curl_close($ch2);
+
+echo "HTTP status: $httpCode2\n";
+$data2 = json_decode($raw2, true);
+if (isset($data2['resourceNames'])) {
+    echo "Accessible customer resource names:\n";
+    foreach ($data2['resourceNames'] as $rn) {
+        echo "  $rn\n";
+    }
+} else {
+    echo "Raw response:\n" . mb_substr($raw2, 0, 800) . "\n";
+}
+
+// ── Try manager account directly ───────────────────────────────────────────
+echo "\n\n=== Try querying manager account " . $managerId . " directly ===\n\n";
+
+$mgr = $managerId;
+$mgrUrl = 'https://googleads.googleapis.com/v18/customers/' . $mgr . '/googleAds:search';
+$mgrHeaders = [
+    'Authorization: Bearer ' . $accessToken,
+    'developer-token: ' . GOOGLE_ADS_DEVELOPER_TOKEN,
+    'Content-Type: application/json',
+    'login-customer-id: ' . $mgr,
+];
+$ch3 = curl_init($mgrUrl);
+curl_setopt_array($ch3, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CUSTOMREQUEST  => 'POST',
+    CURLOPT_HTTPHEADER     => $mgrHeaders,
+    CURLOPT_POSTFIELDS     => json_encode(['query' => 'SELECT customer_client.id, customer_client.descriptive_name FROM customer_client LIMIT 20', 'pageSize' => 20]),
+    CURLOPT_TIMEOUT        => 30,
+]);
+$raw3      = curl_exec($ch3);
+$httpCode3 = curl_getinfo($ch3, CURLINFO_HTTP_CODE);
+curl_close($ch3);
+
+echo "URL: $mgrUrl\n";
+echo "HTTP status: $httpCode3\n";
+$data3 = json_decode($raw3, true);
+if (isset($data3['results'])) {
+    echo "Sub-accounts under manager $mgr:\n";
+    foreach ($data3['results'] as $row) {
+        $id   = $row['customerClient']['id']              ?? '?';
+        $name = $row['customerClient']['descriptiveName'] ?? '(no name)';
+        echo "  ID: $id  Name: $name\n";
+    }
+    if (empty($data3['results'])) echo "  (no results)\n";
+} else {
+    echo "Raw response:\n" . mb_substr($raw3, 0, 800) . "\n";
+}
