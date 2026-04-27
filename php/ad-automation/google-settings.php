@@ -25,17 +25,27 @@ if (($_POST['action'] ?? '') === 'disconnect') {
 }
 
 // Fetch live data if connected
-$locations  = [];
-$campaigns  = [];
+$locations    = [];
+$campaigns    = [];
+$gbpAccounts  = [];
+$gbpError     = '';
+$adsError     = '';
+
 if ($bizOk) {
     try {
-        $accounts  = $bizSvc->getAccounts();
-        $accountName = $accounts[0]['name'] ?? '';
+        $gbpAccounts = $bizSvc->getAccounts();
+        $accountName = $gbpAccounts[0]['name'] ?? '';
         if ($accountName) $locations = $bizSvc->getLocations($accountName);
-    } catch (Throwable $e) { /* show below */ }
+    } catch (Throwable $e) {
+        $gbpError = $e->getMessage();
+    }
 }
 if ($adsOk) {
-    try { $campaigns = $adsSvc->listCampaigns(); } catch (Throwable $e) { /* show below */ }
+    try {
+        $campaigns = $adsSvc->listCampaigns();
+    } catch (Throwable $e) {
+        $adsError = $e->getMessage();
+    }
 }
 
 $authUrl    = GoogleAdsService::buildAuthUrl();
@@ -171,8 +181,20 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-0">
                 <?php if (!$bizOk): ?>
                 <div class="text-muted small p-3">Connect your Google account to see locations.</div>
+                <?php elseif ($gbpError): ?>
+                <div class="alert alert-warning m-3 mb-0 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i><?= h($gbpError) ?>
+                </div>
+                <?php elseif (empty($gbpAccounts)): ?>
+                <div class="text-muted small p-3">
+                    No Business Profile accounts returned by the API for this Google login.<br>
+                    Make sure <code><?= h($tokens['authorized_email'] ?? 'your Google account') ?></code>
+                    manages a Business Profile at
+                    <a href="https://business.google.com" target="_blank">business.google.com</a>.
+                </div>
                 <?php elseif (empty($locations)): ?>
-                <div class="text-muted small p-3">No locations found. Make sure you manage at least one Google Business Profile.</div>
+                <div class="text-muted small p-3">Account found (<code><?= h($gbpAccounts[0]['name'] ?? '') ?></code>) but no locations returned.
+                Make sure this account manages at least one verified Business Profile location.</div>
                 <?php else: ?>
                 <table class="table table-sm mb-0 small">
                     <thead class="table-light"><tr><th>Name</th><th>Address</th><th>Location ID (copy to client)</th></tr></thead>
@@ -218,6 +240,10 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-0">
                 <?php if (!$adsOk): ?>
                 <div class="text-muted small p-3">Connect your Google account to see campaigns.</div>
+                <?php elseif ($adsError): ?>
+                <div class="alert alert-warning m-3 mb-0 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i><?= h($adsError) ?>
+                </div>
                 <?php elseif (empty($campaigns)): ?>
                 <div class="text-muted small p-3">No campaigns found in account <?= h(GOOGLE_ADS_CUSTOMER_ID) ?>.</div>
                 <?php else: ?>
@@ -246,6 +272,50 @@ require_once __DIR__ . '/../includes/header.php';
                     </tbody>
                 </table>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Diagnostics ────────────────────────────────────────────────────────── -->
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bug me-2"></i>API Diagnostics</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#diagPanel">
+            Show / Hide
+        </button>
+    </div>
+    <div class="collapse" id="diagPanel">
+        <div class="card-body small font-monospace">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <strong>Stored Tokens (sensitive fields redacted)</strong>
+                    <pre class="bg-light p-2 mt-1 rounded small" style="max-height:180px;overflow:auto"><?php
+                        $diag = $tokens;
+                        if (!empty($diag['access_token']))  $diag['access_token']  = substr($diag['access_token'],  0, 8) . '…';
+                        if (!empty($diag['refresh_token'])) $diag['refresh_token'] = substr($diag['refresh_token'], 0, 8) . '…';
+                        echo h(json_encode($diag, JSON_PRETTY_PRINT));
+                    ?></pre>
+                </div>
+                <div class="col-md-6">
+                    <strong>GBP getAccounts() response</strong>
+                    <pre class="bg-light p-2 mt-1 rounded small" style="max-height:180px;overflow:auto"><?php
+                        if ($gbpError) {
+                            echo h('ERROR: ' . $gbpError);
+                        } elseif (empty($gbpAccounts)) {
+                            echo h('Empty array — no accounts returned');
+                        } else {
+                            echo h(json_encode($gbpAccounts, JSON_PRETTY_PRINT));
+                        }
+                    ?></pre>
+                    <strong class="mt-2 d-block">Google Ads API config</strong>
+                    <pre class="bg-light p-2 mt-1 rounded small"><?php
+                        echo h("CUSTOMER_ID: " . (GOOGLE_ADS_CUSTOMER_ID ?: '(empty)') . "\n");
+                        echo h("MANAGER_ID:  " . ((defined('GOOGLE_ADS_MANAGER_ID') ? GOOGLE_ADS_MANAGER_ID : '') ?: '(empty — will use CUSTOMER_ID as login-customer-id)') . "\n");
+                        echo h("ADS ERROR:   " . ($adsError ?: 'none'));
+                    ?></pre>
+                </div>
             </div>
         </div>
     </div>

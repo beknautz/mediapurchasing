@@ -114,8 +114,13 @@ class GoogleAdsService
             'Content-Type: application/json',
         ];
 
-        if (defined('GOOGLE_ADS_MANAGER_ID') && GOOGLE_ADS_MANAGER_ID !== '') {
-            $headers[] = 'login-customer-id: ' . preg_replace('/\D/', '', GOOGLE_ADS_MANAGER_ID);
+        // login-customer-id must be the MCC/manager account.
+        // Use GOOGLE_ADS_MANAGER_ID if set, otherwise fall back to GOOGLE_ADS_CUSTOMER_ID.
+        $managerId = (defined('GOOGLE_ADS_MANAGER_ID') && GOOGLE_ADS_MANAGER_ID !== '')
+            ? preg_replace('/\D/', '', GOOGLE_ADS_MANAGER_ID)
+            : preg_replace('/\D/', '', GOOGLE_ADS_CUSTOMER_ID ?? '');
+        if ($managerId) {
+            $headers[] = 'login-customer-id: ' . $managerId;
         }
 
         $ch = curl_init($url);
