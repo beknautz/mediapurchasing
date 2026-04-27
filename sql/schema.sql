@@ -305,7 +305,8 @@ INSERT INTO workflow_settings (setting_key, label, description, setting_group, s
 ('twilio_from_number',       'Twilio From Number',                 'Your Twilio phone number (E.164 format)',               'sms', ''),
 ('app_base_url',             'Application Base URL',               'Public base URL for generating approval links',         'general', 'https://yourdomain.com'),
 ('bill_queue_auto_assign',   'Auto-Assign Bills',                  'Automatically assign queued bills to available buyers', 'billing', '0'),
-('inbound_email_domain',     'Inbound Email Domain',               'SendGrid inbound parse domain for receiving emails',    'email', 'mail.yourdomain.com');
+('inbound_email_domain',     'Inbound Email Domain',               'SendGrid inbound parse domain for receiving emails',    'email', 'mail.yourdomain.com'),
+('anthropic_api_key',        'Anthropic API Key',                  'Claude API key for AI ad copy generation (keep secret)', 'ai', '');
 
 -- Default email templates
 INSERT INTO email_templates (name, slug, category, channel, subject, body_html, body_text, variables) VALUES

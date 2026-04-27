@@ -225,8 +225,8 @@ class MarketingAutomationService extends BaseService
     }
 
     /**
-     * Placeholder AI generation — replace body with OpenAI/Claude API call later.
-     * Returns a structured array of generated copy.
+     * Generate ad copy using Claude AI.
+     * Falls back to template copy if no API key is configured.
      */
     public function generateAdCopy(array $inputs): array
     {
@@ -236,21 +236,26 @@ class MarketingAutomationService extends BaseService
         $location = $inputs['location']         ?? 'your area';
         $tone     = $inputs['tone']             ?? 'professional';
         $platform = $inputs['platform']         ?? 'meta';
+        $objective= $inputs['objective']        ?? 'awareness';
 
-        // ── TODO: Replace this block with API call ─────────────────────────
-        // Meta:   POST https://api.openai.com/v1/chat/completions
-        // Claude: POST https://api.anthropic.com/v1/messages
-        // Pass $inputs as the prompt context. Parse JSON response into the
-        // structure returned below.
-        // ──────────────────────────────────────────────────────────────────
+        $apiKey = $GLOBALS['appSettings']['anthropic_api_key'] ?? '';
+        if ($apiKey) {
+            try {
+                return $this->generateWithClaude($apiKey, $platform, $biz, $offer, $audience, $location, $tone, $objective);
+            } catch (Exception $e) {
+                error_log('[MediaBuy] Claude API error: ' . $e->getMessage());
+                // Fall through to template fallback
+            }
+        }
 
+        // Template fallback when API key not configured or call fails
         if ($platform === 'meta') {
             return [
-                'platform'         => 'meta',
-                'headline'         => ucfirst($tone) . ': ' . $biz . ' — ' . $offer,
-                'primary_text'     => "Looking for {$offer}? {$biz} is here to help {$audience} in {$location}. Don't miss out — act now!",
-                'description'      => "Serving {$audience} in {$location}. Trusted. Proven. Ready for you.",
-                'call_to_action'   => 'Learn More',
+                'platform'           => 'meta',
+                'headline'           => ucfirst($tone) . ': ' . $biz . ' — ' . $offer,
+                'primary_text'       => "Looking for {$offer}? {$biz} is here to help {$audience} in {$location}. Don't miss out — act now!",
+                'description'        => "Serving {$audience} in {$location}. Trusted. Proven. Ready for you.",
+                'call_to_action'     => 'Learn More',
                 'suggested_audience' => $audience . ', located in ' . $location,
             ];
         }
@@ -271,6 +276,133 @@ class MarketingAutomationService extends BaseService
             ],
             'suggested_audience'  => $audience . ' near ' . $location,
         ];
+    }
+
+    private function generateWithClaude(
+        string $apiKey,
+        string $platform,
+        string $biz,
+        string $offer,
+        string $audience,
+        string $location,
+        string $tone,
+        string $objective
+    ): array {
+        $isGoogle = ($platform === 'google');
+
+        if ($isGoogle) {
+            $schema = <<<'JSON'
+{
+  "google_headlines": ["string (max 30 chars)", "...up to 15 total"],
+  "google_descriptions": ["string (max 90 chars)", "...up to 4 total"],
+  "suggested_keywords": ["keyword1", "keyword2", "...5-10 keywords"],
+  "suggested_audience": "audience targeting description"
+}
+JSON;
+            $constraints = "Google Responsive Search Ads rules:\n"
+                . "- Headlines: up to 15, each MAX 30 characters (count carefully)\n"
+                . "- Descriptions: up to 4, each MAX 90 characters\n"
+                . "- Do NOT use exclamation marks in headlines\n"
+                . "- Include the business name in at least one headline\n"
+                . "- Include a call-to-action in at least one headline\n"
+                . "- Vary the headlines so Google can mix and match effectively\n"
+                . "- Return exactly 10 headlines and 4 descriptions";
+        } else {
+            $schema = <<<'JSON'
+{
+  "headline": "string (max 40 chars for Meta)",
+  "primary_text": "string (125-500 chars, engaging body copy)",
+  "description": "string (max 30 chars, shown below headline)",
+  "call_to_action": "one of: Learn More, Shop Now, Sign Up, Contact Us, Get Quote, Book Now, Download, Apply Now",
+  "suggested_audience": "detailed audience targeting description"
+}
+JSON;
+            $constraints = "Meta Ads rules:\n"
+                . "- Headline: max 40 characters, punchy and benefit-focused\n"
+                . "- Primary text: 125-500 characters, conversational, lead with the hook\n"
+                . "- Description: max 30 characters, shown below the headline link\n"
+                . "- Avoid banned phrases like 'click here', excessive punctuation\n"
+                . "- Make it feel native to Facebook/Instagram, not like a banner ad";
+        }
+
+        $prompt = "You are an expert digital advertising copywriter. Generate high-converting ad copy for the following campaign.\n\n"
+            . "Business/Service: {$biz}\n"
+            . "Offer: {$offer}\n"
+            . "Target Audience: {$audience}\n"
+            . "Location: {$location}\n"
+            . "Tone: {$tone}\n"
+            . "Objective: {$objective}\n"
+            . "Platform: " . ($isGoogle ? 'Google Ads' : 'Meta (Facebook/Instagram)') . "\n\n"
+            . $constraints . "\n\n"
+            . "Return ONLY valid JSON matching this schema (no markdown, no explanation):\n"
+            . $schema;
+
+        $payload = json_encode([
+            'model'      => 'claude-haiku-4-5-20251001',
+            'max_tokens' => 1024,
+            'messages'   => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ]);
+
+        $ch = curl_init('https://api.anthropic.com/v1/messages');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => [
+                'x-api-key: ' . $apiKey,
+                'anthropic-version: 2023-06-01',
+                'content-type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+
+        $raw      = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            throw new Exception('cURL error: ' . $curlErr);
+        }
+        if ($httpCode !== 200) {
+            $body = json_decode($raw, true);
+            $msg  = $body['error']['message'] ?? ('HTTP ' . $httpCode);
+            throw new Exception('Anthropic API error: ' . $msg);
+        }
+
+        $response = json_decode($raw, true);
+        $text     = $response['content'][0]['text'] ?? '';
+
+        // Strip markdown code fences if the model wrapped the JSON
+        $text = preg_replace('/^```(?:json)?\s*/i', '', trim($text));
+        $text = preg_replace('/\s*```$/', '', $text);
+
+        $copy = json_decode(trim($text), true);
+        if (!is_array($copy)) {
+            throw new Exception('Could not parse JSON from Claude response.');
+        }
+
+        $copy['platform'] = $platform;
+
+        // Enforce character limits as a safety net
+        if ($isGoogle) {
+            $copy['google_headlines']    = array_slice(
+                array_map(fn($h) => mb_substr($h, 0, 30), (array)($copy['google_headlines'] ?? [])),
+                0, 15
+            );
+            $copy['google_descriptions'] = array_slice(
+                array_map(fn($d) => mb_substr($d, 0, 90), (array)($copy['google_descriptions'] ?? [])),
+                0, 4
+            );
+            $copy['suggested_keywords']  = array_slice((array)($copy['suggested_keywords'] ?? []), 0, 10);
+        } else {
+            $copy['headline']    = mb_substr($copy['headline']    ?? '', 0, 40);
+            $copy['description'] = mb_substr($copy['description'] ?? '', 0, 30);
+        }
+
+        return $copy;
     }
 
     public function saveAdCopy(array $d): int

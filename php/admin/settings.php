@@ -31,6 +31,7 @@ ksort($grouped);
 
 // Icon map for common group names
 $groupIcons = [
+    // Title-case (legacy)
     'General'      => 'bi-gear',
     'Approval'     => 'bi-check2-square',
     'Billing'      => 'bi-receipt',
@@ -39,6 +40,15 @@ $groupIcons = [
     'Notifications'=> 'bi-bell',
     'Campaign'     => 'bi-collection-play',
     'Security'     => 'bi-shield-lock',
+    // Lowercase (matches DB setting_group values)
+    'general'      => 'bi-gear',
+    'approvals'    => 'bi-check2-square',
+    'negotiation'  => 'bi-arrow-left-right',
+    'billing'      => 'bi-receipt',
+    'email'        => 'bi-envelope',
+    'sms'          => 'bi-phone',
+    'ai'           => 'bi-stars',
+    'security'     => 'bi-shield-lock',
 ];
 
 $pageTitle = 'Workflow Settings — MediaBuy';
@@ -86,12 +96,16 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body">
                 <div class="row g-3">
                     <?php foreach ($groupSettings as $setting):
-                        $key     = $setting['setting_key']   ?? '';
-                        $val     = $setting['setting_value'] ?? '';
-                        $type    = $setting['setting_type']  ?? 'text';
-                        $label   = $setting['label']         ?? ucwords(str_replace(['_', '-'], ' ', $key));
-                        $helpText = $setting['description']  ?? '';
-                        $fieldId = 'setting_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $key);
+                        $key      = $setting['setting_key']   ?? '';
+                        $val      = $setting['setting_value'] ?? '';
+                        $type     = $setting['setting_type']  ?? 'text';
+                        $label    = $setting['label']         ?? ucwords(str_replace(['_', '-'], ' ', $key));
+                        $helpText = $setting['description']   ?? '';
+                        $fieldId  = 'setting_' . preg_replace('/[^a-zA-Z0-9_]/', '_', $key);
+                        // Auto-treat secret fields as password inputs
+                        if ($type === 'text' && preg_match('/_(?:key|token|secret|sid|pass)$/', $key)) {
+                            $type = 'password';
+                        }
                     ?>
                         <div class="col-md-6">
                             <label for="<?= h($fieldId) ?>" class="form-label fw-semibold">
@@ -144,6 +158,19 @@ require_once __DIR__ . '/../includes/header.php';
                                        class="form-control"
                                        value="<?= h($val) ?>"
                                        placeholder="email@example.com">
+
+                            <?php elseif ($type === 'password'): ?>
+                                <div class="input-group">
+                                    <input type="password" id="<?= h($fieldId) ?>"
+                                           name="settings[<?= h($key) ?>]"
+                                           class="form-control font-monospace"
+                                           value="<?= h($val) ?>"
+                                           autocomplete="off">
+                                    <button class="btn btn-outline-secondary" type="button"
+                                            onclick="var f=document.getElementById('<?= h($fieldId) ?>');f.type=f.type==='password'?'text':'password'">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
 
                             <?php else: ?>
                                 <input type="text" id="<?= h($fieldId) ?>"

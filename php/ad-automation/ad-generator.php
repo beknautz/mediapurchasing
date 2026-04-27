@@ -111,7 +111,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="card-body text-center text-muted py-5">
                     <i class="bi bi-stars fs-2 d-block mb-2 opacity-50"></i>
                     <div>Fill in the form and click <strong>Generate Ad Copy</strong> to see results here.</div>
-                    <div class="small mt-2 text-muted">AI generation placeholder active — connect OpenAI or Claude API to get real copy.</div>
+                    <div class="small mt-2 text-muted">Powered by Claude AI — add your Anthropic API key in <a href="/admin/settings.php">Admin → Settings</a> to enable.</div>
                 </div>
             </div>
         </div>
