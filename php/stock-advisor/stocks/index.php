@@ -8,15 +8,23 @@ if (empty($_SESSION['loggedIn'])) {
     redirect('/stock-advisor/login.php');
 }
 
-$recSvc    = new RecommendationService();
-$schwabSvc = new SchwabApiService();
-
-$hasTokens = $schwabSvc->hasTokens();
+$dbError   = '';
+$hasTokens = false;
+$recs      = [];
 $recDate   = $_GET['date'] ?? '';
-$recs      = $hasTokens ? $recSvc->getTodaysRecommendations($recDate) : [];
 
-if (empty($recDate) && !empty($recs)) {
-    $recDate = $recs[0]['rec_date'] ?? date('Y-m-d');
+try {
+    $recSvc    = new RecommendationService();
+    $schwabSvc = new SchwabApiService();
+    $hasTokens = $schwabSvc->hasTokens();
+    $recs      = $hasTokens ? $recSvc->getTodaysRecommendations($recDate) : [];
+
+    if (empty($recDate) && !empty($recs)) {
+        $recDate = $recs[0]['rec_date'] ?? date('Y-m-d');
+    }
+} catch (Throwable $e) {
+    $dbError = $e->getMessage();
+    error_log('[StockAdvisor] index.php error: ' . $e->getMessage());
 }
 
 $buys  = array_filter($recs, fn($r) => $r['action'] === 'BUY');
@@ -63,7 +71,18 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div id="run-result" class="mb-3"></div>
 
-<?php if (!$hasTokens): ?>
+<?php if ($dbError !== ''): ?>
+<div class="alert alert-danger">
+    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle-fill me-2"></i>Database Error</h6>
+    <p class="mb-1 small"><code><?= h($dbError) ?></code></p>
+    <hr class="my-2">
+    <p class="mb-0 small">
+        If tables are missing, run <strong>sql/migrate_stocks.sql</strong> against your database first.
+    </p>
+</div>
+<?php endif; ?>
+
+<?php if (!$hasTokens && $dbError === ''): ?>
 <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
     <strong>Schwab account not connected.</strong>
