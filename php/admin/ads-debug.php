@@ -244,10 +244,11 @@ foreach ($combos as $label => $extra) {
     $d = json_decode($r, true);
     if (isset($d['results'])) {
         $result = count($d['results']) . ' campaign(s)';
-    } elseif (isset($d['error']['message'])) {
-        $result = 'ERROR: ' . $d['error']['message'];
+    } elseif (isset($d['error'])) {
+        $result = 'ERROR ' . ($d['error']['status'] ?? '') . ': ' . ($d['error']['message'] ?? '')
+                . "\n  details: " . json_encode($d['error']['details'] ?? $d['error']['errors'] ?? []);
     } else {
-        $result = mb_substr($r, 0, 150);
+        $result = mb_substr($r, 0, 300);
     }
     echo "$label\n  → HTTP $code: $result\n\n";
 }
