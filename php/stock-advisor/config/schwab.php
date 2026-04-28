@@ -10,3 +10,4 @@ defined('SCHWAB_CLIENT_SECRET') || define('SCHWAB_CLIENT_SECRET', $_ENV['SCHWAB_
 defined('SCHWAB_REDIRECT_URI')  || define('SCHWAB_REDIRECT_URI',  $_ENV['SCHWAB_REDIRECT_URI']  ?? 'https://yourdomain.com/stocks/callback.php');
 defined('SCHWAB_OAUTH_BASE')    || define('SCHWAB_OAUTH_BASE',    'https://api.schwabapi.com/v1/oauth');
 defined('SCHWAB_API_BASE')      || define('SCHWAB_API_BASE',      'https://api.schwabapi.com/marketdata/v1');
+defined('SCHWAB_TRADER_BASE')   || define('SCHWAB_TRADER_BASE',   'https://api.schwabapi.com/trader/v1');

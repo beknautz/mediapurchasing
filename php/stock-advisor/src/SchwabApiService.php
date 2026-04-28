@@ -160,11 +160,44 @@ class SchwabApiService extends BaseService
     }
 
     // -----------------------------------------------------------------------
+    // Trader API — account info and positions
+    // -----------------------------------------------------------------------
+
+    /**
+     * Returns all linked accounts with balances and positions.
+     * Each element contains accountNumber, type, balances, and positions[].
+     */
+    public function getAccounts(): array
+    {
+        $data = $this->traderRequest('GET', '/accounts', ['fields' => 'positions']);
+        return $data ?? [];
+    }
+
+    /**
+     * Returns a single account by encrypted account number.
+     */
+    public function getAccount(string $accountNumber): array
+    {
+        $data = $this->traderRequest('GET', '/accounts/' . urlencode($accountNumber), ['fields' => 'positions']);
+        return $data ?? [];
+    }
+
+    /**
+     * Returns the list of account numbers and their encrypted equivalents.
+     * Use the encrypted value for subsequent account calls.
+     */
+    public function getAccountNumbers(): array
+    {
+        $data = $this->traderRequest('GET', '/accounts/accountNumbers');
+        return $data ?? [];
+    }
+
+    // -----------------------------------------------------------------------
     // Internal HTTP helpers
     // -----------------------------------------------------------------------
 
     /**
-     * Generic authenticated request against SCHWAB_API_BASE.
+     * Generic authenticated request against SCHWAB_API_BASE (market data).
      * Retries once on 401 (token refreshed then retried).
      */
     private function request(string $method, string $path, array $params = []): array
@@ -182,6 +215,31 @@ class SchwabApiService extends BaseService
         if ($result['status'] >= 400) {
             throw new RuntimeException(
                 "Schwab API error {$result['status']} on {$method} {$path}: " .
+                substr($result['body'], 0, 300)
+            );
+        }
+
+        return json_decode($result['body'], true) ?? [];
+    }
+
+    /**
+     * Authenticated request against SCHWAB_TRADER_BASE.
+     * Same retry-on-401 behaviour as request().
+     */
+    private function traderRequest(string $method, string $path, array $params = []): array
+    {
+        $token  = $this->getValidAccessToken();
+        $result = $this->httpRequest($method, SCHWAB_TRADER_BASE . $path, $params, $token);
+
+        if ($result['status'] === 401) {
+            $this->forceRefresh();
+            $token  = $this->getValidAccessToken();
+            $result = $this->httpRequest($method, SCHWAB_TRADER_BASE . $path, $params, $token);
+        }
+
+        if ($result['status'] >= 400) {
+            throw new RuntimeException(
+                "Schwab Trader API error {$result['status']} on {$method} {$path}: " .
                 substr($result['body'], 0, 300)
             );
         }

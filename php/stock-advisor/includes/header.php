@@ -60,6 +60,12 @@ function saNavActive(string $path): string {
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link <?= saNavActive('/stocks/account') ?>"
+                       href="/stocks/account.php">
+                        <i class="bi bi-bank me-1"></i>Account
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link <?= saNavActive('/stocks/auth') ?>"
                        href="/stocks/auth.php">
                         <i class="bi bi-key me-1"></i>Schwab Connect
