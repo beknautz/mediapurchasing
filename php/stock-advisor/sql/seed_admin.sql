@@ -8,7 +8,7 @@
 INSERT INTO users (email, password_hash, full_name, role, is_active, created_at, updated_at)
 VALUES (
     'admin@enigmaiq.com',
-    '$2y$12$REPLACE_WITH_GENERATED_HASH',
+    '$2y$12$xuHsePjYDvaYYXzix8QZWOvXLM9SkaCs0//WP7yKTsmJ24cMOKqFe',
     'Admin User',
     'admin',
     1,
