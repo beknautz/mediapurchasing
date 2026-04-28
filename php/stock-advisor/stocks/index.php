@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/login.php');
+    redirect('/login.php');
 }
 
 $dbError   = '';
@@ -49,12 +49,12 @@ require_once __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="d-flex gap-2">
-        <a href="/stock-advisor/stocks/watchlist.php" class="btn btn-outline-secondary">
+        <a href="/stocks/watchlist.php" class="btn btn-outline-secondary">
             <i class="bi bi-list-stars me-1"></i>Watchlist
         </a>
         <?php if ($hasTokens): ?>
         <button class="btn btn-outline-primary"
-                hx-post="/stock-advisor/api/run_analysis.php"
+                hx-post="/api/run_analysis.php"
                 hx-target="#run-result"
                 hx-swap="innerHTML"
                 hx-indicator="#run-spinner">
@@ -62,7 +62,7 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="bi bi-play-fill me-1"></i>Run Analysis Now
         </button>
         <?php else: ?>
-        <a href="/stock-advisor/stocks/auth.php" class="btn btn-warning">
+        <a href="/stocks/auth.php" class="btn btn-warning">
             <i class="bi bi-key me-1"></i>Connect Schwab Account
         </a>
         <?php endif; ?>
@@ -86,7 +86,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
     <strong>Schwab account not connected.</strong>
-    <a href="/stock-advisor/stocks/auth.php" class="alert-link">Authorize via OAuth</a> to enable price fetching and recommendations.
+    <a href="/stocks/auth.php" class="alert-link">Authorize via OAuth</a> to enable price fetching and recommendations.
 </div>
 <?php endif; ?>
 
@@ -189,7 +189,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </span>
                     </td>
                     <td>
-                        <a href="/stock-advisor/stocks/detail.php?id=<?= (int)$rec['stock_id'] ?>"
+                        <a href="/stocks/detail.php?id=<?= (int)$rec['stock_id'] ?>"
                            class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-bar-chart-line"></i>
                         </a>

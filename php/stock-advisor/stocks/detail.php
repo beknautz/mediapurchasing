@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/login.php');
+    redirect('/login.php');
 }
 
 $stockId = (int) ($_GET['id'] ?? 0);
@@ -34,7 +34,7 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- Header -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <a href="/stock-advisor/stocks/index.php" class="text-muted small text-decoration-none">
+        <a href="/stocks/index.php" class="text-muted small text-decoration-none">
             <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
         </a>
         <h1 class="h3 mb-0 fw-bold mt-1">
@@ -155,18 +155,18 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card border-0 shadow-sm">
             <div class="card-body d-grid gap-2">
                 <button class="btn btn-outline-primary btn-sm"
-                        hx-post="/stock-advisor/api/run_analysis.php"
+                        hx-post="/api/run_analysis.php"
                         hx-vals='{"symbol": "<?= h($stock['symbol']) ?>"}'
                         hx-target="#detail-run-result"
                         hx-swap="innerHTML">
                     <i class="bi bi-arrow-clockwise me-1"></i>Re-run Analysis
                 </button>
                 <button class="btn btn-outline-danger btn-sm"
-                        hx-post="/stock-advisor/api/watchlist_remove.php"
+                        hx-post="/api/watchlist_remove.php"
                         hx-vals='{"stock_id": "<?= $stockId ?>"}'
                         hx-confirm="Remove <?= h($stock['symbol']) ?> from watchlist?"
                         hx-target="body"
-                        hx-push-url="/stock-advisor/stocks/watchlist.php">
+                        hx-push-url="/stocks/watchlist.php">
                     <i class="bi bi-trash me-1"></i>Remove from Watchlist
                 </button>
             </div>

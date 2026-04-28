@@ -42,13 +42,13 @@ $stocks = $priceSvc->getAllStocks();
                     <?php endif; ?>
                 </td>
                 <td class="text-end">
-                    <a href="/stock-advisor/stocks/detail.php?id=<?= (int)$s['id'] ?>"
+                    <a href="/stocks/detail.php?id=<?= (int)$s['id'] ?>"
                        class="btn btn-sm btn-outline-primary me-1">
                         <i class="bi bi-bar-chart-line"></i>
                     </a>
                     <?php if ($s['active']): ?>
                     <button class="btn btn-sm btn-outline-danger"
-                            hx-post="/stock-advisor/api/watchlist_remove.php"
+                            hx-post="/api/watchlist_remove.php"
                             hx-vals='{"stock_id": "<?= (int)$s['id'] ?>"}'
                             hx-target="#watchlist-table"
                             hx-swap="innerHTML"
@@ -57,7 +57,7 @@ $stocks = $priceSvc->getAllStocks();
                     </button>
                     <?php else: ?>
                     <button class="btn btn-sm btn-outline-success"
-                            hx-post="/stock-advisor/api/watchlist_add.php"
+                            hx-post="/api/watchlist_add.php"
                             hx-vals='{"symbol": "<?= h($s['symbol']) ?>", "name": "<?= h(addslashes($s['name'])) ?>", "asset_type": "<?= h($s['asset_type']) ?>", "sector": "<?= h($s['sector']) ?>"}'
                             hx-target="#watchlist-table"
                             hx-swap="innerHTML">

@@ -6,7 +6,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/login.php');
+    redirect('/login.php');
 }
 
 $schwabSvc = new SchwabApiService();
@@ -18,12 +18,12 @@ $error = $_GET['error'] ?? '';
 
 if ($error !== '') {
     $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Schwab authorization denied: ' . htmlspecialchars($error)];
-    redirect('/stock-advisor/stocks/index.php');
+    redirect('/stocks/index.php');
 }
 
 if ($code === '' || $state === '') {
     $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Invalid callback — missing code or state.'];
-    redirect('/stock-advisor/stocks/index.php');
+    redirect('/stocks/index.php');
 }
 
 try {
@@ -33,4 +33,4 @@ try {
     $_SESSION['flash'] = ['type' => 'danger', 'message' => 'OAuth error: ' . $e->getMessage()];
 }
 
-redirect('/stock-advisor/stocks/index.php');
+redirect('/stocks/index.php');

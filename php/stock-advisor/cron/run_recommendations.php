@@ -37,7 +37,7 @@ $recSvc    = new RecommendationService();
 $schwabSvc = new SchwabApiService();
 
 if (!$schwabSvc->hasTokens()) {
-    log_msg('ERROR: No Schwab OAuth tokens. Visit /stock-advisor/stocks/auth.php to authorise.');
+    log_msg('ERROR: No Schwab OAuth tokens. Visit /stocks/auth.php to authorise.');
     exit(1);
 }
 

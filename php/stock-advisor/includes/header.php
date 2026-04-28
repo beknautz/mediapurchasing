@@ -35,7 +35,7 @@ function saNavActive(string $path): string {
 
 <nav class="navbar navbar-expand-lg sa-navbar mb-0">
     <div class="container-fluid">
-        <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/stock-advisor/stocks/index.php">
+        <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/stocks/index.php">
             <span style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border-radius:.4rem;padding:.2rem .45rem;">
                 <i class="bi bi-graph-up-arrow text-white"></i>
             </span>
@@ -48,20 +48,20 @@ function saNavActive(string $path): string {
         <div class="collapse navbar-collapse" id="saNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link <?= saNavActive('/stock-advisor/stocks/index') ?>"
-                       href="/stock-advisor/stocks/index.php">
+                    <a class="nav-link <?= saNavActive('/stocks/index') ?>"
+                       href="/stocks/index.php">
                         <i class="bi bi-speedometer2 me-1"></i>Dashboard
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= saNavActive('/stock-advisor/stocks/watchlist') ?>"
-                       href="/stock-advisor/stocks/watchlist.php">
+                    <a class="nav-link <?= saNavActive('/stocks/watchlist') ?>"
+                       href="/stocks/watchlist.php">
                         <i class="bi bi-list-stars me-1"></i>Watchlist
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?= saNavActive('/stock-advisor/stocks/auth') ?>"
-                       href="/stock-advisor/stocks/auth.php">
+                    <a class="nav-link <?= saNavActive('/stocks/auth') ?>"
+                       href="/stocks/auth.php">
                         <i class="bi bi-key me-1"></i>Schwab Connect
                     </a>
                 </li>
@@ -73,7 +73,7 @@ function saNavActive(string $path): string {
                     <?= h($_SESSION['user']['name'] ?? 'User') ?>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-warning" href="/stock-advisor/logout.php">
+                    <a class="nav-link text-warning" href="/logout.php">
                         <i class="bi bi-box-arrow-right me-1"></i>Logout
                     </a>
                 </li>

@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/login.php');
+    redirect('/login.php');
 }
 
 $priceSvc = new PriceDataService();
@@ -17,7 +17,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <a href="/stock-advisor/stocks/index.php" class="text-muted small text-decoration-none">
+        <a href="/stocks/index.php" class="text-muted small text-decoration-none">
             <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
         </a>
         <h1 class="h3 mb-0 fw-bold mt-1">
@@ -36,7 +36,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="bi bi-plus-circle me-1 text-success"></i>Add Symbol
             </div>
             <div class="card-body">
-                <form hx-post="/stock-advisor/api/watchlist_add.php"
+                <form hx-post="/api/watchlist_add.php"
                       hx-target="#watchlist-table"
                       hx-swap="innerHTML"
                       hx-on::after-request="this.reset()">

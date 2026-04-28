@@ -5,7 +5,7 @@
 require_once __DIR__ . '/bootstrap.php';
 
 if (!empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/stocks/index.php');
+    redirect('/stocks/index.php');
 }
 
 $error = '';
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'role'  => $user['role'],
             ];
             $_SESSION['role'] = $user['role'];
-            redirect('/stock-advisor/stocks/index.php');
+            redirect('/stocks/index.php');
         } else {
             $error = 'Invalid email or password. Please try again.';
         }

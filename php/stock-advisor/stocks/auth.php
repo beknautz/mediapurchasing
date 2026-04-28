@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 
 if (empty($_SESSION['loggedIn'])) {
-    redirect('/stock-advisor/login.php');
+    redirect('/login.php');
 }
 
 $schwabSvc = new SchwabApiService();
