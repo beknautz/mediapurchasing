@@ -33,9 +33,28 @@ $adsError     = '';
 
 if ($bizOk) {
     try {
-        $gbpAccounts = $bizSvc->getAccounts();
-        $accountName = $gbpAccounts[0]['name'] ?? '';
-        if ($accountName) $locations = $bizSvc->getLocations($accountName);
+        // Use stored account ID from tokens to avoid hammering the rate-limited
+        // My Business Account Management API on every page load.
+        $storedAccountId = $tokens['business_account_id'] ?? '';
+        if ($storedAccountId) {
+            $accountName = 'accounts/' . $storedAccountId;
+            $gbpAccounts = [['name' => $accountName, 'accountName' => ($tokens['business_account_name'] ?? '')]];
+            $locations   = $bizSvc->getLocations($accountName);
+        } else {
+            // Fall back to live API call only when account ID not yet stored
+            $gbpAccounts = $bizSvc->getAccounts();
+            $accountName = $gbpAccounts[0]['name'] ?? '';
+            if ($accountName) {
+                $locations = $bizSvc->getLocations($accountName);
+                // Persist for future loads
+                if (!empty($gbpAccounts[0]['name'])) {
+                    $aid = str_replace('accounts/', '', $gbpAccounts[0]['name']);
+                    $tokens['business_account_id']   = $aid;
+                    $tokens['business_account_name'] = $gbpAccounts[0]['accountName'] ?? '';
+                    file_put_contents(GOOGLE_TOKENS_PATH, json_encode($tokens, JSON_PRETTY_PRINT));
+                }
+            }
+        }
     } catch (Throwable $e) {
         $gbpError = $e->getMessage();
     }
