@@ -338,8 +338,6 @@ class GoogleAdsService
 
     public function listCampaigns(): array
     {
-        // Note: campaign_budget must be queried separately in v20 — budget join
-        // via SELECT from campaign is no longer supported in the same request.
         $rows = $this->gaql(
             "SELECT campaign.resource_name, campaign.id, campaign.name, campaign.status,
                     campaign.start_date, campaign.end_date,
@@ -349,12 +347,11 @@ class GoogleAdsService
               ORDER BY campaign.name ASC"
         );
 
-        // Fetch budgets in a single follow-up query
+        // Fetch budgets in a follow-up query (campaign_budget has no status field)
         if (!empty($rows)) {
             $budgets = $this->gaql(
                 "SELECT campaign_budget.resource_name, campaign_budget.amount_micros
-                   FROM campaign_budget
-                  WHERE campaign_budget.status != 'REMOVED'"
+                   FROM campaign_budget"
             );
             $budgetMap = [];
             foreach ($budgets as $b) {
