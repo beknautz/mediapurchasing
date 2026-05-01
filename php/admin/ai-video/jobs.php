@@ -103,6 +103,10 @@ require_once __DIR__ . '/../../includes/header.php';
                     <a href="<?= h($j['video_url']) ?>" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2">
                         <i class="bi bi-play-circle me-1"></i>Watch
                     </a>
+                    <a href="/admin/ai-video/actions/download-video.php?job_id=<?= (int)$j['id'] ?>"
+                       class="btn btn-sm btn-outline-primary py-0 px-2" title="Download to desktop">
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
                     <?php else: ?>—<?php endif; ?>
                 </td>
                 <td>

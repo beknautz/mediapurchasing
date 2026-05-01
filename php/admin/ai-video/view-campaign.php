@@ -442,8 +442,11 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <td class="text-nowrap"><?= h(date('M j', strtotime($j['created_at']))) ?></td>
                                 <td>
                                     <?php if ($j['video_url']): ?>
-                                        <a href="<?= h($j['video_url']) ?>" target="_blank" class="btn btn-xs btn-sm btn-outline-success py-0 px-1">
+                                        <a href="<?= h($j['video_url']) ?>" target="_blank" class="btn btn-xs btn-sm btn-outline-success py-0 px-1" title="Watch">
                                             <i class="bi bi-play-fill"></i>
+                                        </a>
+                                        <a href="/admin/ai-video/actions/download-video.php?job_id=<?= (int)$j['id'] ?>" class="btn btn-xs btn-sm btn-outline-primary py-0 px-1" title="Download">
+                                            <i class="bi bi-download"></i>
                                         </a>
                                     <?php else: ?>—<?php endif; ?>
                                 </td>

@@ -195,7 +195,8 @@ $campaignName = $campaign['campaign_name'] ?? 'Video Review';
                     <a href="<?= h($videoUrl) ?>" target="_blank">Download video</a>
                 </video>
             </div>
-            <a href="<?= h($videoUrl) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
+            <a href="<?= h($videoUrl) ?>" download="campaign-video.mp4"
+               class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-download me-1"></i>Download Video
             </a>
         </div>
