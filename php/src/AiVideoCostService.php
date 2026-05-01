@@ -70,14 +70,16 @@ class AiVideoCostService extends BaseService
                 (campaign_id, job_id, cost_type, provider, model,
                  units, unit_cost, total_cost, notes, created_at)
              VALUES
-                (:campaign_id, :job_id, "video_generation", :provider, :provider,
-                 1, :cost, :cost, :notes, NOW())'
+                (:campaign_id, :job_id, "video_generation", :provider, :model,
+                 1, :unit_cost, :total_cost, :notes, NOW())'
         );
         $stmt->execute([
             ':campaign_id' => $campaignId,
             ':job_id'      => $jobId ?: null,
             ':provider'    => $provider,
-            ':cost'        => $cost,
+            ':model'       => $provider,
+            ':unit_cost'   => $cost,
+            ':total_cost'  => $cost,
             ':notes'       => $notes,
         ]);
     }
