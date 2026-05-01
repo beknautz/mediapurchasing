@@ -180,7 +180,9 @@ class VeoVideoService extends BaseService
                 break;
 
             case 'processing':
-                $videoUrl = VIDEO_PUBLIC_URL_BASE . '/mock_video.mp4';
+                // Use a publicly accessible sample video so mock mode works without
+                // any local file. Swap this for your own URL once real Veo is live.
+                $videoUrl = 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
                         SET job_status = "completed", progress_percent = 100,
