@@ -32,7 +32,7 @@ class ClaudeVideoService extends BaseService
             throw new RuntimeException('Claude returned invalid JSON for script generation. Raw: ' . substr($content, 0, 500));
         }
 
-        $model    = CLAUDE_MODEL;
+        $model    = $this->getSetting('anthropic_model') ?: (defined('CLAUDE_MODEL') ? CLAUDE_MODEL : 'claude-opus-4-5');
         $cost     = $this->estimateClaudeCost($inputTokens, $outputTokens, $model);
 
         // Calculate next version number
@@ -170,12 +170,27 @@ class ClaudeVideoService extends BaseService
     // -----------------------------------------------------------------------
     private function callClaude(string $userPrompt): array
     {
-        if (CLAUDE_API_KEY === '') {
-            throw new RuntimeException('CLAUDE_API_KEY is not configured.');
+        // Prefer the key stored in workflow_settings (shared with Budget Planner),
+        // fall back to the CLAUDE_API_KEY constant in config/ai_video.php.
+        $apiKey = $this->getSetting('anthropic_api_key');
+        if ($apiKey === '') {
+            $apiKey = defined('CLAUDE_API_KEY') ? CLAUDE_API_KEY : '';
+        }
+        if ($apiKey === '') {
+            throw new RuntimeException(
+                'Claude API key is not configured. ' .
+                'Add it under Admin → Settings → anthropic_api_key, ' .
+                'or set CLAUDE_API_KEY in config/ai_video.php.'
+            );
+        }
+
+        $model = $this->getSetting('anthropic_model');
+        if ($model === '') {
+            $model = defined('CLAUDE_MODEL') ? CLAUDE_MODEL : 'claude-opus-4-5';
         }
 
         $payload = json_encode([
-            'model'      => CLAUDE_MODEL,
+            'model'      => $model,
             'max_tokens' => 4096,
             'messages'   => [['role' => 'user', 'content' => $userPrompt]],
         ]);
@@ -185,7 +200,7 @@ class ClaudeVideoService extends BaseService
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_HTTPHEADER     => [
-                'x-api-key: '          . CLAUDE_API_KEY,
+                'x-api-key: '          . $apiKey,
                 'anthropic-version: 2023-06-01',
                 'content-type: application/json',
             ],
