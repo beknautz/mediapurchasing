@@ -137,7 +137,7 @@ class VeoVideoService extends BaseService
              VALUES
                 (:campaign_id, :script_id, :prompt_id, :provider, :provider_job_id,
                  :status, 0, :duration, :aspect,
-                 :req_json, :est_cost, :est_cost,
+                 :req_json, :est_cost, :total_ai_cost,
                  :created_by, NOW(), NOW())'
         );
         $ins->execute([
@@ -151,6 +151,7 @@ class VeoVideoService extends BaseService
             ':aspect'           => $aspectRatio,
             ':req_json'         => $requestJson,
             ':est_cost'         => $estimatedCost,
+            ':total_ai_cost'    => $estimatedCost,
             ':created_by'       => $createdBy,
         ]);
         $jobId = $this->lastInsertId();
@@ -245,7 +246,7 @@ class VeoVideoService extends BaseService
                 (:campaign_id, :script_id, :prompt_id, :provider, :provider_job_id,
                  "queued", 0, :duration, :aspect,
                  :req_json, :resp_json,
-                 :est_cost, :est_cost,
+                 :est_cost, :total_ai_cost,
                  :created_by, NOW(), NOW())'
         );
         $ins->execute([
@@ -259,6 +260,7 @@ class VeoVideoService extends BaseService
             ':req_json'       => json_encode($requestBody),
             ':resp_json'      => $raw,
             ':est_cost'       => $estimatedCost,
+            ':total_ai_cost'  => $estimatedCost,
             ':created_by'     => $createdBy,
         ]);
         $jobId = $this->lastInsertId();
