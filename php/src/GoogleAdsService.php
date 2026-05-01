@@ -144,23 +144,28 @@ class GoogleAdsService
         $data = json_decode($raw, true);
 
         if ($httpCode >= 400) {
-            // Try to extract Google's error message; fall back to the raw body snippet
-            $msg = $data['error']['message']
-                ?? $data['error']['errors'][0]['message']
-                ?? null;
+            $msg = $data['error']['message'] ?? null;
+
+            // Append any field-level detail so we know exactly what's wrong
+            $fieldErrors = [];
+            foreach ($data['error']['details'] ?? [] as $detail) {
+                foreach ($detail['errors'] ?? [] as $fe) {
+                    $code  = $fe['errorCode'] ?? [];
+                    $field = $fe['trigger']['stringValue'] ?? ($fe['location']['fieldPathElements'][0]['fieldName'] ?? '');
+                    $fieldErrors[] = json_encode($code) . ($field ? " (field: $field)" : '');
+                }
+            }
+            if ($fieldErrors) $msg .= ' | Detail: ' . implode('; ', $fieldErrors);
 
             if (!$msg) {
-                $snippet = mb_substr((string)$raw, 0, 400);
-                $msg = 'HTTP ' . $httpCode . ' at ' . $url . ' — response: ' . $snippet;
+                $msg = 'HTTP ' . $httpCode . ' at ' . $url . ' — ' . mb_substr((string)$raw, 0, 400);
             }
 
-            // Detect test-mode developer token attempting to access a real account
             if ($httpCode === 403
-                || str_contains($msg, 'DEVELOPER_TOKEN')
-                || str_contains($msg, 'developer token')
-                || str_contains($msg, 'TEST_ACCOUNT')) {
-                $msg .= ' — Your Google Ads developer token may still be in TEST mode. '
-                      . 'Go to Google Ads → Tools → API Center to apply for Basic Access.';
+                || str_contains((string)$msg, 'DEVELOPER_TOKEN')
+                || str_contains((string)$msg, 'developer token')
+                || str_contains((string)$msg, 'TEST_ACCOUNT')) {
+                $msg .= ' — Developer token may still be in TEST mode.';
             }
             throw new RuntimeException($msg);
         }
@@ -338,34 +343,12 @@ class GoogleAdsService
 
     public function listCampaigns(): array
     {
-        $rows = $this->gaql(
-            "SELECT campaign.resource_name, campaign.id, campaign.name, campaign.status,
-                    campaign.start_date, campaign.end_date,
-                    campaign.campaign_budget
+        return $this->gaql(
+            "SELECT campaign.resource_name, campaign.id, campaign.name, campaign.status
                FROM campaign
               WHERE campaign.status != 'REMOVED'
               ORDER BY campaign.name ASC"
         );
-
-        // Fetch budgets in a follow-up query (campaign_budget has no status field)
-        if (!empty($rows)) {
-            $budgets = $this->gaql(
-                "SELECT campaign_budget.resource_name, campaign_budget.amount_micros
-                   FROM campaign_budget"
-            );
-            $budgetMap = [];
-            foreach ($budgets as $b) {
-                $rn = $b['campaignBudget']['resourceName'] ?? '';
-                if ($rn) $budgetMap[$rn] = $b['campaignBudget']['amountMicros'] ?? 0;
-            }
-            foreach ($rows as &$row) {
-                $budgetRn = $row['campaign']['campaignBudget'] ?? '';
-                $row['campaignBudget']['amountMicros'] = $budgetMap[$budgetRn] ?? 0;
-            }
-            unset($row);
-        }
-
-        return $rows;
     }
 
     // ── Performance Reporting ─────────────────────────────────────────────
