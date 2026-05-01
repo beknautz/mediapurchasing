@@ -213,7 +213,9 @@ class GoogleAdsService
         $pageToken = null;
 
         do {
-            $body = ['query' => $query, 'pageSize' => 500];
+            // Note: do NOT set pageSize when the query already uses LIMIT —
+            // combining both causes PAGE_SIZE_NOT_SUPPORTED from the API.
+            $body = ['query' => $query];
             if ($pageToken) $body['pageToken'] = $pageToken;
 
             $data = $this->request(
