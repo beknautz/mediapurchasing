@@ -82,6 +82,11 @@ function navActive(string $path): string {
                                 <i class="bi bi-robot me-2"></i>Budget Planner
                             </a>
                         </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/admin/ai-video') ?>" href="/admin/ai-video/index.php">
+                                <i class="bi bi-camera-video-fill me-2 text-danger"></i>AI Video Studio
+                            </a>
+                        </li>
                         <?php endif; ?>
                     </ul>
                 </li>
