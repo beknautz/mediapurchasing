@@ -13,9 +13,10 @@ define('GOOGLE_CLIENT_SECRET', '');   // e.g. GOCSPX-xxxxxxxxxxxxxxx
 define('GOOGLE_REDIRECT_URI',  'https://media.enigmamarketing.com/ad-automation/google-callback.php');
 
 // ── Google Ads ────────────────────────────────────────────────────────────────
-define('GOOGLE_ADS_DEVELOPER_TOKEN', '');  // Google Ads → Tools → API Center
-define('GOOGLE_ADS_CUSTOMER_ID',     '');  // Sub-account (client) ID — digits only, e.g. 3523716554 (BaceBuilt LLC)
-define('GOOGLE_ADS_MANAGER_ID',      '');  // MCC manager account ID — digits only, e.g. 8468743800 (bacebuilt@gmail.com)
+define('GOOGLE_ADS_API_VERSION',     'v20'); // REST API version — update when Google releases a new version
+define('GOOGLE_ADS_DEVELOPER_TOKEN', '');    // Google Ads → Tools → API Center
+define('GOOGLE_ADS_CUSTOMER_ID',     '');    // Sub-account (client) ID — digits only, e.g. 3523716554 (BaceBuilt LLC)
+define('GOOGLE_ADS_MANAGER_ID',      '');    // MCC manager account ID — digits only, e.g. 8468743800 (bacebuilt@gmail.com)
 
 // ── Token storage ─────────────────────────────────────────────────────────────
 define('GOOGLE_TOKENS_PATH', __DIR__ . '/google_tokens.json');
