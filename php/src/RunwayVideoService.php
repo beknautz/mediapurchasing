@@ -16,14 +16,15 @@ class RunwayVideoService extends BaseService
     // Runway only supports 5 or 10 seconds for Gen-3
     private const SUPPORTED_DURATIONS = [5, 10];
 
-    // Map campaign aspect_ratio strings → Runway pixel-ratio strings
+    // Map campaign aspect_ratio strings → Runway gen4.5 ratio strings
+    // gen4.5 only supports "1280:720" (landscape) and "720:1280" (portrait)
     private const RATIO_MAP = [
-        '9:16'  => '768:1344',
-        '16:9'  => '1280:720',
-        '1:1'   => '960:960',
-        '4:3'   => '1024:768',
-        '3:4'   => '768:1024',
-        '21:9'  => '1280:544',
+        '9:16'  => '720:1280',   // portrait — most common for ads
+        '16:9'  => '1280:720',   // landscape
+        '1:1'   => '1280:720',   // closest supported
+        '4:3'   => '1280:720',   // closest supported
+        '3:4'   => '720:1280',   // closest supported
+        '21:9'  => '1280:720',   // closest supported
     ];
 
     // -----------------------------------------------------------------------
@@ -229,7 +230,7 @@ class RunwayVideoService extends BaseService
 
         // Runway caps promptText at 1000 characters
         $textPrompt  = mb_substr($promptData['veo_prompt'] ?? '', 0, 1000);
-        $runwayRatio = self::RATIO_MAP[$aspectRatio] ?? '768:1344';
+        $runwayRatio = self::RATIO_MAP[$aspectRatio] ?? '720:1280';
 
         $requestBody = [
             'model'      => RUNWAY_MODEL,
