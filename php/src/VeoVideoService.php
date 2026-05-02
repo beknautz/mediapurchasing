@@ -312,6 +312,7 @@ class VeoVideoService extends BaseService
                       WHERE id = :id'
                 )->execute([':err' => $debugMsg, ':resp' => $raw, ':id' => $jobId]);
             } else {
+                // Store the signed URL first so the job is marked complete
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
                         SET job_status = "completed", progress_percent = 100,
@@ -324,6 +325,9 @@ class VeoVideoService extends BaseService
                     'UPDATE ai_video_campaigns SET status = "ready_for_review", updated_at = NOW()
                       WHERE id = :cid'
                 )->execute([':cid' => $job['campaign_id']]);
+
+                // Immediately download to local storage — Veo signed URLs expire in ~24 h
+                $this->downloadOrStoreVideo($jobId);
             }
         } else {
             // Still running — update response
