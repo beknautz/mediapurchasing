@@ -134,6 +134,64 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
 
             <?php if ($latest): ?>
+
+            <?php if ($activeProvider === 'runway'): ?>
+            <!-- ── Reference Image — intentionally its own <form>, a SIBLING of
+                 the main prompt form below. Browsers ignore nested <form> tags,
+                 so keeping them separate ensures the file upload only POSTs to
+                 upload-prompt-image.php and never triggers a full prompt save. -->
+            <div class="card-body border-bottom pb-3">
+                <label class="form-label fw-semibold mb-1">
+                    Reference Image
+                    <span class="badge bg-primary ms-1">Runway Image-to-Video</span>
+                </label>
+                <div class="form-text mb-2">
+                    Upload a photo as the starting frame. Runway animates from this image using your prompt.
+                    Leave empty for text-to-video only.
+                </div>
+
+                <div id="image-preview">
+                <?php if (!empty($latest['prompt_image_url'])): ?>
+                    <div class="d-flex align-items-start gap-3 p-3 border rounded bg-light mb-2">
+                        <img src="<?= h($latest['prompt_image_url']) ?>"
+                             alt="Reference image"
+                             style="max-height:140px;max-width:220px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
+                        <div>
+                            <div class="small fw-semibold mb-1">Current reference image</div>
+                            <div class="small text-muted mb-2 text-break"><?= h(basename($latest['prompt_image_url'])) ?></div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePromptImage()">
+                                <i class="bi bi-trash me-1"></i>Remove
+                            </button>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                </div>
+
+                <form id="image-upload-form"
+                      hx-post="/admin/ai-video/actions/upload-prompt-image.php"
+                      hx-encoding="multipart/form-data"
+                      hx-target="#image-preview"
+                      hx-swap="innerHTML"
+                      hx-indicator="#upload-spinner">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="btn btn-outline-secondary btn-sm mb-0">
+                            <i class="bi bi-image me-1"></i>
+                            <?= !empty($latest['prompt_image_url']) ? 'Replace Image' : 'Upload Image' ?>
+                            <input type="file" name="image" id="image-file-input"
+                                   accept="image/jpeg,image/png,image/webp"
+                                   style="display:none"
+                                   onchange="this.form.requestSubmit()">
+                        </label>
+                        <span class="text-muted small">JPG, PNG, WebP — max 10 MB</span>
+                        <span id="upload-spinner" class="htmx-indicator">
+                            <span class="spinner-border spinner-border-sm text-secondary"></span>
+                        </span>
+                    </div>
+                </form>
+            </div>
+            <?php endif; ?>
+
+            <!-- ── Main prompt form — starts AFTER the image upload form above ── -->
             <form method="POST" id="prompt-form">
                 <input type="hidden" name="save_prompt" value="1">
                 <input type="hidden" name="prompt_id" value="<?= (int)$latest['id'] ?>">
@@ -155,61 +213,6 @@ require_once __DIR__ . '/../../includes/header.php';
                         <textarea name="negative_prompt" class="form-control" rows="3"><?= h($latest['negative_prompt'] ?? '') ?></textarea>
                         <div class="form-text">What to avoid generating.</div>
                     </div>
-
-                    <!-- Reference Image (Runway only) -->
-                    <?php if ($activeProvider === 'runway'): ?>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">
-                            Reference Image
-                            <span class="badge bg-primary ms-1">Runway Image-to-Video</span>
-                        </label>
-                        <div class="form-text mb-2">
-                            Upload a photo as the starting frame. Runway animates from this image using your prompt above.
-                            Leave empty for text-to-video only.
-                        </div>
-
-                        <!-- Existing image preview -->
-                        <div id="image-preview">
-                        <?php if (!empty($latest['prompt_image_url'])): ?>
-                            <div class="d-flex align-items-start gap-3 p-3 border rounded bg-light mb-2">
-                                <img src="<?= h($latest['prompt_image_url']) ?>"
-                                     alt="Reference image"
-                                     style="max-height:140px;max-width:220px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
-                                <div>
-                                    <div class="small fw-semibold mb-1">Current reference image</div>
-                                    <div class="small text-muted mb-2 text-break"><?= h(basename($latest['prompt_image_url'])) ?></div>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePromptImage()">
-                                        <i class="bi bi-trash me-1"></i>Remove
-                                    </button>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                        </div>
-
-                        <!-- Upload form -->
-                        <form id="image-upload-form"
-                              hx-post="/admin/ai-video/actions/upload-prompt-image.php"
-                              hx-encoding="multipart/form-data"
-                              hx-target="#image-preview"
-                              hx-swap="innerHTML"
-                              hx-indicator="#upload-spinner">
-                            <div class="d-flex align-items-center gap-2">
-                                <label class="btn btn-outline-secondary btn-sm mb-0">
-                                    <i class="bi bi-image me-1"></i>
-                                    <?= !empty($latest['prompt_image_url']) ? 'Replace Image' : 'Upload Image' ?>
-                                    <input type="file" name="image" id="image-file-input"
-                                           accept="image/jpeg,image/png,image/webp"
-                                           style="display:none"
-                                           onchange="this.closest('form').requestSubmit()">
-                                </label>
-                                <span class="text-muted small">JPG, PNG, WebP — max 10 MB</span>
-                                <span id="upload-spinner" class="htmx-indicator">
-                                    <span class="spinner-border spinner-border-sm text-secondary"></span>
-                                </span>
-                            </div>
-                        </form>
-                    </div>
-                    <?php endif; ?>
 
                     <!-- Style / Camera / etc -->
                     <div class="row g-2 mb-3">
