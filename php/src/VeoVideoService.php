@@ -219,10 +219,11 @@ class VeoVideoService extends BaseService
 
         $veoPrompt   = $promptData['veo_prompt'] ?? '';
         $requestBody = [
-            'instances'  => [['prompt' => $veoPrompt]],
-            'parameters' => [
+            'prompt'           => ['text' => $veoPrompt],
+            'generationConfig' => [
                 'aspectRatio'     => $aspectRatio,
                 'durationSeconds' => $durationSecs,
+                'numberOfVideos'  => 1,
             ],
         ];
 
@@ -288,7 +289,10 @@ class VeoVideoService extends BaseService
         $data    = json_decode($raw, true) ?? [];
 
         if (!empty($data['done'])) {
-            $videoUrl  = $data['response']['videos'][0]['uri'] ?? null;
+            // Veo returns the video under response.generateVideoResponse.generatedSamples[0].video.uri
+            $videoUrl = $data['response']['generateVideoResponse']['generatedSamples'][0]['video']['uri']
+                     ?? $data['response']['videos'][0]['uri']   // fallback for older format
+                     ?? null;
             $hasError  = !empty($data['error']);
             $errMsg    = $hasError ? ($data['error']['message'] ?? 'Unknown Veo error') : null;
 
@@ -333,11 +337,18 @@ class VeoVideoService extends BaseService
     // -----------------------------------------------------------------------
     private function callVeoApi(string $method, string $url, array $body = []): string
     {
+        // Google AI Studio API key auth (default) uses x-goog-api-key header.
+        // Vertex AI uses OAuth Bearer token — set VEO_AUTH_TYPE = 'oauth' in config.
+        $authType = defined('VEO_AUTH_TYPE') ? VEO_AUTH_TYPE : 'api_key';
+        $authHeader = $authType === 'oauth'
+            ? 'Authorization: Bearer ' . VEO_API_KEY
+            : 'x-goog-api-key: '       . VEO_API_KEY;
+
         $ch = curl_init($url);
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . VEO_API_KEY,
+                $authHeader,
                 'Content-Type: application/json',
             ],
             CURLOPT_TIMEOUT => 60,

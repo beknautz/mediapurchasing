@@ -11,6 +11,9 @@ defined('CLAUDE_API_KEY')    || define('CLAUDE_API_KEY',    $_ENV['CLAUDE_API_KE
 defined('CLAUDE_MODEL')      || define('CLAUDE_MODEL',      $_ENV['CLAUDE_MODEL']      ?? 'claude-opus-4-5');
 defined('VEO_API_KEY')       || define('VEO_API_KEY',       $_ENV['VEO_API_KEY']       ?? '');
 defined('VEO_MODEL')         || define('VEO_MODEL',         $_ENV['VEO_MODEL']         ?? 'veo-2.0-generate-001');
+// 'api_key' = Google AI Studio key — uses x-goog-api-key header (simplest, default)
+// 'oauth'   = Vertex AI service account — uses Authorization: Bearer header
+defined('VEO_AUTH_TYPE')     || define('VEO_AUTH_TYPE',     $_ENV['VEO_AUTH_TYPE']     ?? 'api_key');
 
 defined('VIDEO_STORAGE_PATH')
     || define('VIDEO_STORAGE_PATH', $_ENV['VIDEO_STORAGE_PATH'] ?? __DIR__ . '/../uploads/ai-videos');
