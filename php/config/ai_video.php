@@ -36,7 +36,7 @@ defined('VEO_PROJECT_ID')
     || define('VEO_PROJECT_ID', $_ENV['VEO_PROJECT_ID'] ?? '');
 
 defined('VEO_SERVICE_ACCOUNT_JSON_PATH')
-    || define('VEO_SERVICE_ACCOUNT_JSON_PATH', $_ENV['VEO_SERVICE_ACCOUNT_JSON_PATH'] ?? '');
+    || define('VEO_SERVICE_ACCOUNT_JSON_PATH', $_ENV['VEO_SERVICE_ACCOUNT_JSON_PATH'] ?? __DIR__ . '/veo-service-account.json');
 
 defined('VEO_MODEL')
     || define('VEO_MODEL', $_ENV['VEO_MODEL'] ?? 'veo-2.0-generate-001');
