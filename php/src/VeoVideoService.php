@@ -218,12 +218,14 @@ class VeoVideoService extends BaseService
         }
 
         $veoPrompt   = $promptData['veo_prompt'] ?? '';
+
+        // Correct format for generativelanguage.googleapis.com :predictLongRunning
         $requestBody = [
-            'prompt'           => ['text' => $veoPrompt],
-            'generationConfig' => [
+            'instances'  => [['prompt' => $veoPrompt]],
+            'parameters' => [
                 'aspectRatio'     => $aspectRatio,
                 'durationSeconds' => $durationSecs,
-                'numberOfVideos'  => 1,
+                'sampleCount'     => 1,
             ],
         ];
 
@@ -289,20 +291,24 @@ class VeoVideoService extends BaseService
         $data    = json_decode($raw, true) ?? [];
 
         if (!empty($data['done'])) {
-            // Veo returns the video under response.generateVideoResponse.generatedSamples[0].video.uri
-            $videoUrl = $data['response']['generateVideoResponse']['generatedSamples'][0]['video']['uri']
-                     ?? $data['response']['videos'][0]['uri']   // fallback for older format
+            // Try every known response shape across Veo API versions
+            $videoUrl = $data['response']['videos'][0]['uri']                                               // predictLongRunning v1beta
+                     ?? $data['response']['videos'][0]['videoUri']                                          // alternate field name
+                     ?? $data['response']['generateVideoResponse']['generatedSamples'][0]['video']['uri']   // generateVideo format
+                     ?? $data['response']['predictions'][0]['videoUri']                                     // Vertex AI format
                      ?? null;
             $hasError  = !empty($data['error']);
             $errMsg    = $hasError ? ($data['error']['message'] ?? 'Unknown Veo error') : null;
 
             if ($hasError || !$videoUrl) {
+                // Store full response so admin can see exactly what came back
+                $debugMsg = $errMsg ?? ('done=true but no video URI found. Response: ' . substr($raw, 0, 500));
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
                         SET job_status = "failed", error_message = :err,
                             provider_response_json = :resp, failed_at = NOW()
                       WHERE id = :id'
-                )->execute([':err' => $errMsg, ':resp' => $raw, ':id' => $jobId]);
+                )->execute([':err' => $debugMsg, ':resp' => $raw, ':id' => $jobId]);
             } else {
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
