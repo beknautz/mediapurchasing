@@ -170,24 +170,16 @@ class ClaudeVideoService extends BaseService
     // -----------------------------------------------------------------------
     private function callClaude(string $userPrompt): array
     {
-        // Prefer the key stored in workflow_settings (shared with Budget Planner),
-        // fall back to the CLAUDE_API_KEY constant in config/ai_video.php.
+        // Uses the same key as Budget Planner — stored in workflow_settings.
         $apiKey = $this->getSetting('anthropic_api_key');
         if ($apiKey === '') {
-            $apiKey = defined('CLAUDE_API_KEY') ? CLAUDE_API_KEY : '';
-        }
-        if ($apiKey === '') {
             throw new RuntimeException(
-                'Claude API key is not configured. ' .
-                'Add it under Admin → Settings → anthropic_api_key, ' .
-                'or set CLAUDE_API_KEY in config/ai_video.php.'
+                'Claude API key is not set. Go to Admin → Settings and add anthropic_api_key ' .
+                '(the same key already used by Budget Planner).'
             );
         }
 
-        $model = $this->getSetting('anthropic_model');
-        if ($model === '') {
-            $model = defined('CLAUDE_MODEL') ? CLAUDE_MODEL : 'claude-opus-4-5';
-        }
+        $model = $this->getSetting('anthropic_model') ?: 'claude-opus-4-5';
 
         $payload = json_encode([
             'model'      => $model,
