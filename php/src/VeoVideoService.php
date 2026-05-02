@@ -21,7 +21,9 @@ class VeoVideoService extends BaseService
         int   $createdBy
     ): array {
         $aspectRatio    = $promptData['aspect_ratio']      ?? '9:16';
-        $durationSecs   = (int)($promptData['duration_seconds'] ?? 15);
+        $durationSecs   = (int)($promptData['duration_seconds'] ?? 8);
+        // Veo 2 only supports 5–8 seconds. Clamp silently so the job never 400s.
+        $durationSecs   = max(5, min(8, $durationSecs));
         $estimatedCost  = DEFAULT_PROVIDER_COST_PER_GENERATION
                         + ($durationSecs * DEFAULT_PROVIDER_COST_PER_SECOND);
 
