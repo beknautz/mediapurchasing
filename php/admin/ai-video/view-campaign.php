@@ -425,9 +425,14 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <tr><th>#</th><th>Status</th><th>Provider</th><th>Duration</th><th>Ratio</th><th>Cost</th><th>Created</th><th>Video</th><th></th></tr>
                             </thead>
                             <tbody>
-                            <?php foreach ($jobs as $j): ?>
-                            <tr>
-                                <td><?= (int)$j['id'] ?></td>
+                            <?php foreach ($jobs as $ji => $j): ?>
+                            <tr id="job-row-<?= (int)$j['id'] ?>">
+                                <td>
+                                    <?php if ($ji === 0): ?>
+                                        <span class="badge bg-primary me-1" title="Most recent">Latest</span>
+                                    <?php endif; ?>
+                                    #<?= (int)$j['id'] ?>
+                                </td>
                                 <td>
                                     <?php
                                     $jmap = ['queued'=>'warning','processing'=>'info','completed'=>'success','failed'=>'danger'];
@@ -450,12 +455,13 @@ require_once __DIR__ . '/../../includes/header.php';
                                         </a>
                                     <?php else: ?>—<?php endif; ?>
                                 </td>
-                                <td>
+                                <td class="text-nowrap">
                                     <?php if (in_array($j['job_status'], ['queued','processing'])): ?>
                                     <button class="btn btn-sm btn-outline-warning py-0 px-1"
                                             hx-get="/admin/ai-video/actions/poll-video-status.php?job_id=<?= (int)$j['id'] ?>"
                                             hx-target="#action-result"
-                                            hx-swap="innerHTML">
+                                            hx-swap="innerHTML"
+                                            title="Check status">
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
                                     <?php endif; ?>
@@ -468,6 +474,17 @@ require_once __DIR__ . '/../../includes/header.php';
                                             title="Rerender">
                                         <i class="bi bi-arrow-clockwise"></i>
                                     </button>
+                                    <?php if (!in_array($j['job_status'], ['queued','processing'])): ?>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                            hx-post="/admin/ai-video/actions/delete-job.php"
+                                            hx-vals='{"job_id": "<?= (int)$j['id'] ?>"}'
+                                            hx-target="#job-row-<?= (int)$j['id'] ?>"
+                                            hx-swap="outerHTML"
+                                            hx-confirm="Delete job #<?= (int)$j['id'] ?>? This cannot be undone."
+                                            title="Delete job">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>

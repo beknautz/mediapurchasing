@@ -65,10 +65,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     <th>Completed</th>
                     <th>Video</th>
                     <th>Actions</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($jobs as $j): ?>
+            <?php foreach ($jobs as $ji => $j): ?>
             <?php
                 $jmap = ['queued'=>'warning','processing'=>'info','completed'=>'success','failed'=>'danger'];
                 $jc   = $jmap[$j['job_status']] ?? 'secondary';
@@ -76,6 +77,9 @@ require_once __DIR__ . '/../../includes/header.php';
             ?>
             <tr id="job-row-<?= (int)$j['id'] ?>">
                 <td class="<?= $isParent ?>">
+                    <?php if ($ji === 0): ?>
+                        <span class="badge bg-primary me-1">Latest</span>
+                    <?php endif; ?>
                     <?php if ($j['parent_job_id']): ?>
                         <span class="text-muted small"><i class="bi bi-arrow-return-right me-1"></i></span>
                     <?php endif; ?>
@@ -132,6 +136,19 @@ require_once __DIR__ . '/../../includes/header.php';
                         <i class="bi bi-arrow-clockwise me-1"></i>Rerender
                     </button>
                     <div id="poll-result-<?= (int)$j['id'] ?>" class="mt-1"></div>
+                </td>
+                <td>
+                    <?php if (!in_array($j['job_status'], ['queued','processing'])): ?>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                            hx-post="/admin/ai-video/actions/delete-job.php"
+                            hx-vals='{"job_id": "<?= (int)$j['id'] ?>"}'
+                            hx-target="#job-row-<?= (int)$j['id'] ?>"
+                            hx-swap="outerHTML"
+                            hx-confirm="Delete job #<?= (int)$j['id'] ?>? This cannot be undone."
+                            title="Delete job">
+                        <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                    <?php endif; ?>
                 </td>
             </tr>
             <?php endforeach; ?>
