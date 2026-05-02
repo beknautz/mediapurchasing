@@ -3,6 +3,9 @@ require_once __DIR__ . '/../../bootstrap.php';
 require_once __DIR__ . '/../../config/ai_video.php';
 requireRole(['admin', 'buyer']);
 
+// ── Active provider ──────────────────────────────────────────────────────────
+$activeProvider = strtolower($GLOBALS['appSettings']['video_provider'] ?? 'runway');
+
 // ── Stats ────────────────────────────────────────────────────────────────────
 $db = new BaseService();
 $pdo = (function() {
@@ -53,7 +56,7 @@ $pageTitle = 'AI Video Studio — MediaBuy';
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h1 class="h3 mb-0 fw-bold">
             <i class="bi bi-camera-video-fill me-2 text-danger"></i>AI Video Studio
@@ -69,6 +72,49 @@ require_once __DIR__ . '/../../includes/header.php';
         <i class="bi bi-plus-circle me-1"></i>New Campaign
     </a>
 </div>
+
+<!-- Video Provider Toggle -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-2 px-3 d-flex align-items-center gap-3 flex-wrap">
+        <span class="small fw-semibold text-muted">Video Provider:</span>
+        <div id="provider-toggle" class="btn-group btn-group-sm" role="group">
+            <button type="button"
+                    class="btn <?= $activeProvider === 'runway' ? 'btn-primary' : 'btn-outline-primary' ?>"
+                    hx-post="/admin/ai-video/actions/set-video-provider.php"
+                    hx-vals='{"provider":"runway"}'
+                    hx-target="#provider-status"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="updateProviderButtons('runway')">
+                <i class="bi bi-camera-reels me-1"></i>Runway
+            </button>
+            <button type="button"
+                    class="btn <?= $activeProvider === 'veo' ? 'btn-danger' : 'btn-outline-danger' ?>"
+                    hx-post="/admin/ai-video/actions/set-video-provider.php"
+                    hx-vals='{"provider":"veo"}'
+                    hx-target="#provider-status"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="updateProviderButtons('veo')">
+                <i class="bi bi-google me-1"></i>Google Veo
+            </button>
+        </div>
+        <span id="provider-status">
+            <?php if ($activeProvider === 'veo'): ?>
+                <span class="badge bg-danger fs-6"><i class="bi bi-google me-1"></i>Google Veo</span>
+                <?= (defined('ENABLE_MOCK_VEO_MODE') && ENABLE_MOCK_VEO_MODE) ? '<span class="badge bg-warning text-dark ms-1">Mock</span>' : '<span class="badge bg-success ms-1">Live</span>' ?>
+            <?php else: ?>
+                <span class="badge bg-primary fs-6"><i class="bi bi-camera-reels me-1"></i>Runway Gen-4.5</span>
+                <?= (defined('ENABLE_MOCK_RUNWAY_MODE') && ENABLE_MOCK_RUNWAY_MODE) ? '<span class="badge bg-warning text-dark ms-1">Mock</span>' : '<span class="badge bg-success ms-1">Live</span>' ?>
+            <?php endif; ?>
+        </span>
+    </div>
+</div>
+<script>
+function updateProviderButtons(selected) {
+    const btns = document.querySelectorAll('#provider-toggle button');
+    btns[0].className = 'btn ' + (selected === 'runway' ? 'btn-primary' : 'btn-outline-primary');
+    btns[1].className = 'btn ' + (selected === 'veo'    ? 'btn-danger'  : 'btn-outline-danger');
+}
+</script>
 
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">

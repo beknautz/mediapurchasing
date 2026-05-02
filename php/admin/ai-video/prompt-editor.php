@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prompt'])) {
                 $scriptStmt->execute([':cid' => $campaignId]);
                 $latestScriptId = (int)($scriptStmt->fetchColumn() ?: 0);
 
-                $svc = new RunwayVideoService();
+                $svc = VideoServiceFactory::make();
                 $queuedJob = $svc->queueVideoJob(
                     $promptRow, $campaignId, $latestScriptId,
                     $promptId, (int)($_SESSION['user']['id'] ?? 0)

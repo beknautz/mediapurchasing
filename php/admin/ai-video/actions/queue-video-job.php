@@ -48,7 +48,7 @@ $latestScriptId = (int)($scriptStmt->fetchColumn() ?: 0);
 $createdBy = (int)($_SESSION['user']['id'] ?? 0);
 
 try {
-    $svc = new RunwayVideoService();
+    $svc = VideoServiceFactory::make();
     $job = $svc->queueVideoJob($prompt, $campaignId, $latestScriptId, (int)$prompt['id'], $createdBy);
 
     // Update campaign status
@@ -56,9 +56,10 @@ try {
         'UPDATE ai_video_campaigns SET status = "video_queued", updated_at = NOW() WHERE id = :id'
     )->execute([':id' => $campaignId]);
 
-    $mockBadge = ENABLE_MOCK_RUNWAY_MODE
+    $providerLabel = VideoServiceFactory::activeProvider() === 'veo' ? 'Google Veo' : 'Runway Gen-4.5';
+    $mockBadge = VideoServiceFactory::isMockMode()
         ? '<span class="badge bg-warning text-dark ms-2">Mock Mode</span>'
-        : '<span class="badge bg-success ms-2">Live Runway</span>';
+        : '<span class="badge bg-success ms-2">Live — ' . $providerLabel . '</span>';
 
     echo '<div class="alert alert-success">';
     echo '<h5 class="alert-heading"><i class="bi bi-check-circle-fill me-2"></i>Video Job Queued! ' . $mockBadge . '</h5>';
