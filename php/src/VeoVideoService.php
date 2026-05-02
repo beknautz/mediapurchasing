@@ -387,14 +387,24 @@ class VeoVideoService extends BaseService
             return $job;
         }
 
-        // Poll: GET /v1/{operation_name}
-        $pollUrl = self::API_BASE . '/' . ltrim($operationName, '/');
+        // Poll: POST :fetchPredictOperation with operationName in the body.
+        // Do NOT use GET /v1/{operationName} — that returns a 404 HTML page.
+        // Do NOT append the operation name to the URL path.
+        $projectId = defined('VEO_PROJECT_ID') ? VEO_PROJECT_ID : '';
+        $model     = VEO_MODEL;
+        $pollUrl   = self::API_BASE
+                   . '/projects/' . rawurlencode($projectId)
+                   . '/locations/' . self::LOCATION
+                   . '/publishers/google/models/' . rawurlencode($model)
+                   . ':fetchPredictOperation';
+
+        $pollBody  = ['operationName' => $operationName];
 
         // Retry once on 401 (expired OAuth token)
         $retried = false;
         retry:
         try {
-            $raw = $this->callVertexApi('GET', $pollUrl);
+            $raw = $this->callVertexApi('POST', $pollUrl, $pollBody);
         } catch (RuntimeException $e) {
             if (!$retried && str_contains($e->getMessage(), 'HTTP 401')) {
                 $this->makeOAuth()->clearCache();
