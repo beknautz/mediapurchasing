@@ -23,11 +23,24 @@ defined('ENABLE_MOCK_RUNWAY_MODE')
     || define('ENABLE_MOCK_RUNWAY_MODE', (bool)($_ENV['ENABLE_MOCK_RUNWAY_MODE'] ?? true));
 
 // -----------------------------------------------------------------------
-// Google Veo — reserved for future use
+// Google Veo — Vertex AI (aiplatform.googleapis.com)
+//
+// DO NOT use an API key here. Veo requires OAuth2 service account auth.
+// 1. Create a GCP project (personal Gmail account, outside bacebuilt-org)
+// 2. Enable the Vertex AI API on that project
+// 3. Create a service account with the "Vertex AI User" role
+// 4. Download the JSON key and set VEO_SERVICE_ACCOUNT_JSON_PATH
+// 5. Set VEO_PROJECT_ID to your GCP project ID (e.g. gen-lang-client-XXXXXXXXX)
 // -----------------------------------------------------------------------
-defined('VEO_API_KEY')       || define('VEO_API_KEY',       $_ENV['VEO_API_KEY']       ?? '');
-defined('VEO_MODEL')         || define('VEO_MODEL',         $_ENV['VEO_MODEL']         ?? 'veo-2.0-generate-001');
-defined('VEO_AUTH_TYPE')     || define('VEO_AUTH_TYPE',     $_ENV['VEO_AUTH_TYPE']     ?? 'api_key');
+defined('VEO_PROJECT_ID')
+    || define('VEO_PROJECT_ID', $_ENV['VEO_PROJECT_ID'] ?? '');
+
+defined('VEO_SERVICE_ACCOUNT_JSON_PATH')
+    || define('VEO_SERVICE_ACCOUNT_JSON_PATH', $_ENV['VEO_SERVICE_ACCOUNT_JSON_PATH'] ?? '');
+
+defined('VEO_MODEL')
+    || define('VEO_MODEL', $_ENV['VEO_MODEL'] ?? 'veo-2.0-generate-001');
+
 defined('ENABLE_MOCK_VEO_MODE')
     || define('ENABLE_MOCK_VEO_MODE', (bool)($_ENV['ENABLE_MOCK_VEO_MODE'] ?? true));
 

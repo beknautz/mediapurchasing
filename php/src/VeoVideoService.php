@@ -1,17 +1,29 @@
 <?php
 /**
  * src/VeoVideoService.php
- * AI Video Studio — Google Veo video generation service.
- * Supports mock mode (for development) and real Veo API calls.
+ * AI Video Studio — Google Veo 2 video generation via Vertex AI.
+ *
+ * Auth:     OAuth2 service account Bearer token (NOT an API key)
+ * Endpoint: https://us-central1-aiplatform.googleapis.com/v1/
+ *
+ * WHY Vertex AI and not Gemini API (generativelanguage.googleapis.com):
+ *   Veo is a Vertex AI product. API keys are rejected. The Gemini API
+ *   endpoint routes through Google's org-level infrastructure project and
+ *   is blocked by Google Workspace org policies. Vertex AI bypasses this
+ *   entirely — it uses your own GCP project with OAuth2 service account auth.
+ *
+ * Video output: Veo returns video inline as Base64-encoded bytes
+ *   (response.videos[0].bytesBase64Encoded). This MUST be decoded and saved
+ *   to disk. Never log, echo, or store the raw Base64 payload in the database.
  */
 
 class VeoVideoService extends BaseService
 {
+    private const API_BASE = 'https://us-central1-aiplatform.googleapis.com/v1';
+    private const LOCATION = 'us-central1';
+
     // -----------------------------------------------------------------------
     // queueVideoJob()
-    // Creates a new video generation job.
-    // If ENABLE_MOCK_VEO_MODE is true, returns a mock job immediately.
-    // Returns the saved job row.
     // -----------------------------------------------------------------------
     public function queueVideoJob(
         array $promptData,
@@ -20,12 +32,13 @@ class VeoVideoService extends BaseService
         int   $promptId,
         int   $createdBy
     ): array {
-        $aspectRatio    = $promptData['aspect_ratio']      ?? '9:16';
-        $durationSecs   = (int)($promptData['duration_seconds'] ?? 8);
-        // Veo 2 only supports 5–8 seconds. Clamp silently so the job never 400s.
-        $durationSecs   = max(5, min(8, $durationSecs));
-        $estimatedCost  = DEFAULT_PROVIDER_COST_PER_GENERATION
-                        + ($durationSecs * DEFAULT_PROVIDER_COST_PER_SECOND);
+        $aspectRatio  = $promptData['aspect_ratio']      ?? '9:16';
+        $durationSecs = (int)($promptData['duration_seconds'] ?? 8);
+        // Veo 2 supports 5–8 seconds
+        $durationSecs = max(5, min(8, $durationSecs));
+
+        $estimatedCost = DEFAULT_PROVIDER_COST_PER_GENERATION
+                       + ($durationSecs * DEFAULT_PROVIDER_COST_PER_SECOND);
 
         if (ENABLE_MOCK_VEO_MODE) {
             return $this->queueMockJob(
@@ -42,8 +55,6 @@ class VeoVideoService extends BaseService
 
     // -----------------------------------------------------------------------
     // getJobStatus()
-    // Fetches the current job state. In mock mode, auto-advances state.
-    // Returns updated job row.
     // -----------------------------------------------------------------------
     public function getJobStatus(int $jobId): array
     {
@@ -64,8 +75,8 @@ class VeoVideoService extends BaseService
 
     // -----------------------------------------------------------------------
     // downloadOrStoreVideo()
-    // Downloads the video from the provider URL to VIDEO_STORAGE_PATH.
-    // Returns true on success.
+    // For Veo, videos are already saved to disk during pollRealJob().
+    // This is a no-op if the file already exists locally.
     // -----------------------------------------------------------------------
     public function downloadOrStoreVideo(int $jobId): bool
     {
@@ -77,11 +88,12 @@ class VeoVideoService extends BaseService
             return false;
         }
 
-        // In mock mode the video_url is already a local public path — no download needed
-        if (ENABLE_MOCK_VEO_MODE || str_starts_with($job['video_url'], '/')) {
+        // Already stored locally
+        if (str_starts_with($job['video_url'], '/') || ENABLE_MOCK_VEO_MODE) {
             return true;
         }
 
+        // Remote URL fallback — download if somehow not yet local
         if (!is_dir(VIDEO_STORAGE_PATH)) {
             mkdir(VIDEO_STORAGE_PATH, 0755, true);
         }
@@ -97,7 +109,7 @@ class VeoVideoService extends BaseService
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_TIMEOUT        => 300,
         ]);
-        $result  = curl_exec($ch);
+        $result   = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         fclose($fp);
@@ -108,12 +120,95 @@ class VeoVideoService extends BaseService
             return false;
         }
 
-        $upd = $this->db->prepare(
+        $this->db->prepare(
             'UPDATE ai_video_jobs SET local_file_path = :path, video_url = :url WHERE id = :id'
-        );
-        $upd->execute([':path' => $localPath, ':url' => $publicUrl, ':id' => $jobId]);
+        )->execute([':path' => $localPath, ':url' => $publicUrl, ':id' => $jobId]);
 
         return true;
+    }
+
+    // -----------------------------------------------------------------------
+    // saveCompletedVideo()
+    // Decodes and saves video from a completed Veo operation response.
+    //
+    // Veo Vertex AI may return the generated video inline as Base64 bytes.
+    // This must be decoded and written to an MP4 file.
+    // Do not display or log the raw Base64 video payload.
+    //
+    // Handles three possible response shapes:
+    //   1. videos[0].bytesBase64Encoded — inline Base64 (most common)
+    //   2. videos[0].gcsUri             — Google Cloud Storage URI
+    //   3. videos[0].uri                — hosted download URL
+    // -----------------------------------------------------------------------
+    public function saveCompletedVideo(array $operation, string $outputDir, string $publicBaseUrl): array
+    {
+        if (empty($operation['done'])) {
+            throw new RuntimeException('saveCompletedVideo called but operation is not done yet.');
+        }
+
+        $videos = $operation['response']['videos'] ?? [];
+        if (empty($videos)) {
+            throw new RuntimeException(
+                'Veo operation is done but response contains no videos array. ' .
+                'Keys present: ' . implode(', ', array_keys($operation['response'] ?? []))
+            );
+        }
+
+        $video = $videos[0];
+
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir, 0755, true);
+        }
+
+        $fileName  = 'veo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.mp4';
+        $filePath  = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR . $fileName;
+        $publicUrl = rtrim($publicBaseUrl, '/') . '/' . $fileName;
+
+        // ── Shape 1: inline Base64 ──────────────────────────────────────────
+        if (!empty($video['bytesBase64Encoded'])) {
+            $videoData = base64_decode($video['bytesBase64Encoded'], true);
+            if ($videoData === false) {
+                throw new RuntimeException('Failed to base64_decode Veo video payload.');
+            }
+            if (file_put_contents($filePath, $videoData) === false) {
+                throw new RuntimeException('Failed to write Veo video to disk: ' . $filePath);
+            }
+            return ['file_path' => $filePath, 'public_url' => $publicUrl, 'source' => 'base64'];
+        }
+
+        // ── Shape 2: GCS URI ────────────────────────────────────────────────
+        // GCS URIs require authenticated download via the Storage API.
+        // Store the URI as video_url for now — a future job can download it.
+        if (!empty($video['gcsUri'])) {
+            return ['file_path' => null, 'public_url' => $video['gcsUri'], 'source' => 'gcs_uri'];
+        }
+
+        // ── Shape 3: hosted URI ─────────────────────────────────────────────
+        if (!empty($video['uri'])) {
+            $ch = curl_init($video['uri']);
+            $fp = fopen($filePath, 'wb');
+            curl_setopt_array($ch, [
+                CURLOPT_FILE           => $fp,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => 300,
+            ]);
+            $ok   = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            fclose($fp);
+
+            if (!$ok || $code !== 200) {
+                @unlink($filePath);
+                throw new RuntimeException('Failed to download Veo video from URI (HTTP ' . $code . ')');
+            }
+            return ['file_path' => $filePath, 'public_url' => $publicUrl, 'source' => 'uri'];
+        }
+
+        throw new RuntimeException(
+            'Veo operation completed but no video output found. ' .
+            'Expected bytesBase64Encoded, gcsUri, or uri in response.videos[0]. ' .
+            'Keys present: ' . implode(', ', array_keys($video))
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -124,10 +219,10 @@ class VeoVideoService extends BaseService
         array $promptData, string $aspectRatio, int $durationSecs, float $estimatedCost
     ): array {
         $requestJson = json_encode([
-            'mock'      => true,
-            'prompt'    => $promptData['veo_prompt'] ?? '',
-            'aspect'    => $aspectRatio,
-            'duration'  => $durationSecs,
+            'mock'     => true,
+            'prompt'   => $promptData['veo_prompt'] ?? '',
+            'aspect'   => $aspectRatio,
+            'duration' => $durationSecs,
         ]);
 
         $ins = $this->db->prepare(
@@ -143,24 +238,23 @@ class VeoVideoService extends BaseService
                  :created_by, NOW(), NOW())'
         );
         $ins->execute([
-            ':campaign_id'      => $campaignId,
-            ':script_id'        => $scriptId ?: null,
-            ':prompt_id'        => $promptId ?: null,
-            ':provider'         => 'veo_mock',
-            ':provider_job_id'  => 'mock_' . uniqid(),
-            ':status'           => 'queued',
-            ':duration'         => $durationSecs,
-            ':aspect'           => $aspectRatio,
-            ':req_json'         => $requestJson,
-            ':est_cost'         => $estimatedCost,
-            ':total_ai_cost'    => $estimatedCost,
-            ':created_by'       => $createdBy,
+            ':campaign_id'     => $campaignId,
+            ':script_id'       => $scriptId ?: null,
+            ':prompt_id'       => $promptId ?: null,
+            ':provider'        => 'veo_mock',
+            ':provider_job_id' => 'mock_' . uniqid(),
+            ':status'          => 'queued',
+            ':duration'        => $durationSecs,
+            ':aspect'          => $aspectRatio,
+            ':req_json'        => $requestJson,
+            ':est_cost'        => $estimatedCost,
+            ':total_ai_cost'   => $estimatedCost,
+            ':created_by'      => $createdBy,
         ]);
         $jobId = $this->lastInsertId();
 
-        // Log estimated provider cost
         $costSvc = new AiVideoCostService();
-        $costSvc->logProviderCost($campaignId, $jobId, $estimatedCost, 'veo_mock', 'Mock video generation queued');
+        $costSvc->logProviderCost($campaignId, $jobId, $estimatedCost, 'veo_mock', 'Mock Veo job queued');
 
         $stmt = $this->db->prepare('SELECT * FROM ai_video_jobs WHERE id = :id');
         $stmt->execute([':id' => $jobId]);
@@ -169,7 +263,7 @@ class VeoVideoService extends BaseService
 
     private function advanceMockJob(array $job): array
     {
-        $jobId     = (int)$job['id'];
+        $jobId      = (int)$job['id'];
         $campaignId = (int)$job['campaign_id'];
 
         switch ($job['job_status']) {
@@ -182,25 +276,20 @@ class VeoVideoService extends BaseService
                 break;
 
             case 'processing':
-                // Use a publicly accessible sample video so mock mode works without
-                // any local file. Swap this for your own URL once real Veo is live.
                 $videoUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
                         SET job_status = "completed", progress_percent = 100,
-                            video_url = :video_url, actual_provider_cost = estimated_provider_cost,
+                            video_url = :url, actual_provider_cost = estimated_provider_cost,
                             completed_at = NOW()
                       WHERE id = :id'
-                )->execute([':video_url' => $videoUrl, ':id' => $jobId]);
+                )->execute([':url' => $videoUrl, ':id' => $jobId]);
 
-                // Update campaign status to ready_for_review
                 $this->db->prepare(
                     'UPDATE ai_video_campaigns SET status = "ready_for_review", updated_at = NOW()
                       WHERE id = :cid'
                 )->execute([':cid' => $campaignId]);
                 break;
-
-            // completed / failed — no changes needed
         }
 
         $stmt = $this->db->prepare('SELECT * FROM ai_video_jobs WHERE id = :id');
@@ -209,37 +298,47 @@ class VeoVideoService extends BaseService
     }
 
     // -----------------------------------------------------------------------
-    // PRIVATE — Real Veo API
+    // PRIVATE — Real Vertex AI
     // -----------------------------------------------------------------------
     private function queueRealJob(
         int   $campaignId, int $scriptId, int $promptId, int $createdBy,
         array $promptData, string $aspectRatio, int $durationSecs, float $estimatedCost
     ): array {
-        if (VEO_API_KEY === '') {
-            throw new RuntimeException('VEO_API_KEY is not configured.');
+        $projectId = defined('VEO_PROJECT_ID') ? VEO_PROJECT_ID : '';
+        if (!$projectId) {
+            throw new RuntimeException('VEO_PROJECT_ID is not configured.');
         }
 
-        $veoPrompt   = $promptData['veo_prompt'] ?? '';
+        $model    = VEO_MODEL; // e.g. veo-2.0-generate-001
+        $endpoint = self::API_BASE
+                  . '/projects/' . $projectId
+                  . '/locations/' . self::LOCATION
+                  . '/publishers/google/models/' . $model
+                  . ':predictLongRunning';
 
-        // Correct format for generativelanguage.googleapis.com :predictLongRunning
         $requestBody = [
-            'instances'  => [['prompt' => $veoPrompt]],
+            'instances'  => [[
+                'prompt' => $promptData['veo_prompt'] ?? '',
+            ]],
             'parameters' => [
                 'aspectRatio'     => $aspectRatio,
-                'durationSeconds' => $durationSecs,
                 'sampleCount'     => 1,
+                'durationSeconds' => $durationSecs,
             ],
         ];
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-             . VEO_MODEL . ':predictLongRunning';
+        if (!empty($promptData['negative_prompt'])) {
+            $requestBody['instances'][0]['negativePrompt'] = $promptData['negative_prompt'];
+        }
 
-        $raw  = $this->callVeoApi('POST', $url, $requestBody);
+        $raw  = $this->callVertexApi('POST', $endpoint, $requestBody);
         $data = json_decode($raw, true) ?? [];
 
         $operationName = $data['name'] ?? null;
         if (!$operationName) {
-            throw new RuntimeException('Veo API did not return an operation name. Response: ' . substr($raw, 0, 300));
+            throw new RuntimeException(
+                'Veo Vertex AI did not return an operation name. Response: ' . substr($raw, 0, 300)
+            );
         }
 
         $ins = $this->db->prepare(
@@ -257,23 +356,23 @@ class VeoVideoService extends BaseService
                  :created_by, NOW(), NOW())'
         );
         $ins->execute([
-            ':campaign_id'    => $campaignId,
-            ':script_id'      => $scriptId ?: null,
-            ':prompt_id'      => $promptId ?: null,
-            ':provider'       => 'veo',
-            ':provider_job_id'=> $operationName,
-            ':duration'       => $durationSecs,
-            ':aspect'         => $aspectRatio,
-            ':req_json'       => json_encode($requestBody),
-            ':resp_json'      => $raw,
-            ':est_cost'       => $estimatedCost,
-            ':total_ai_cost'  => $estimatedCost,
-            ':created_by'     => $createdBy,
+            ':campaign_id'     => $campaignId,
+            ':script_id'       => $scriptId ?: null,
+            ':prompt_id'       => $promptId ?: null,
+            ':provider'        => 'veo',
+            ':provider_job_id' => $operationName,
+            ':duration'        => $durationSecs,
+            ':aspect'          => $aspectRatio,
+            ':req_json'        => json_encode($requestBody),
+            ':resp_json'       => $raw,
+            ':est_cost'        => $estimatedCost,
+            ':total_ai_cost'   => $estimatedCost,
+            ':created_by'      => $createdBy,
         ]);
         $jobId = $this->lastInsertId();
 
         $costSvc = new AiVideoCostService();
-        $costSvc->logProviderCost($campaignId, $jobId, $estimatedCost, 'veo', 'Veo video generation queued');
+        $costSvc->logProviderCost($campaignId, $jobId, $estimatedCost, 'veo', 'Veo Vertex AI video generation queued');
 
         $stmt = $this->db->prepare('SELECT * FROM ai_video_jobs WHERE id = :id');
         $stmt->execute([':id' => $jobId]);
@@ -288,55 +387,86 @@ class VeoVideoService extends BaseService
             return $job;
         }
 
-        $pollUrl = 'https://generativelanguage.googleapis.com/v1beta/' . $operationName;
-        $raw     = $this->callVeoApi('GET', $pollUrl);
-        $data    = json_decode($raw, true) ?? [];
+        // Poll: GET /v1/{operation_name}
+        $pollUrl = self::API_BASE . '/' . ltrim($operationName, '/');
 
-        if (!empty($data['done'])) {
-            // Try every known response shape across Veo API versions
-            $videoUrl = $data['response']['videos'][0]['uri']                                               // predictLongRunning v1beta
-                     ?? $data['response']['videos'][0]['videoUri']                                          // alternate field name
-                     ?? $data['response']['generateVideoResponse']['generatedSamples'][0]['video']['uri']   // generateVideo format
-                     ?? $data['response']['predictions'][0]['videoUri']                                     // Vertex AI format
-                     ?? null;
-            $hasError  = !empty($data['error']);
-            $errMsg    = $hasError ? ($data['error']['message'] ?? 'Unknown Veo error') : null;
+        // Retry once on 401 (expired OAuth token)
+        $retried = false;
+        retry:
+        try {
+            $raw = $this->callVertexApi('GET', $pollUrl);
+        } catch (RuntimeException $e) {
+            if (!$retried && str_contains($e->getMessage(), 'HTTP 401')) {
+                $this->makeOAuth()->clearCache();
+                $retried = true;
+                goto retry;
+            }
+            throw $e;
+        }
 
-            if ($hasError || !$videoUrl) {
-                // Store full response so admin can see exactly what came back
-                $debugMsg = $errMsg ?? ('done=true but no video URI found. Response: ' . substr($raw, 0, 500));
+        $data = json_decode($raw, true) ?? [];
+
+        // ── Error response ──────────────────────────────────────────────────
+        if (!empty($data['error'])) {
+            $errMsg = $data['error']['message'] ?? 'Unknown Veo error';
+            $this->db->prepare(
+                'UPDATE ai_video_jobs
+                    SET job_status = "failed", error_message = :err,
+                        provider_response_json = :resp, failed_at = NOW()
+                  WHERE id = :id'
+            )->execute([':err' => $errMsg, ':resp' => substr($raw, 0, 2000), ':id' => $jobId]);
+
+        // ── Operation complete ──────────────────────────────────────────────
+        } elseif (!empty($data['done'])) {
+            try {
+                $saved = $this->saveCompletedVideo($data, VIDEO_STORAGE_PATH, VIDEO_PUBLIC_URL_BASE);
+            } catch (RuntimeException $e) {
                 $this->db->prepare(
                     'UPDATE ai_video_jobs
                         SET job_status = "failed", error_message = :err,
                             provider_response_json = :resp, failed_at = NOW()
                       WHERE id = :id'
-                )->execute([':err' => $debugMsg, ':resp' => $raw, ':id' => $jobId]);
-            } else {
-                // Store the signed URL first so the job is marked complete
-                $this->db->prepare(
-                    'UPDATE ai_video_jobs
-                        SET job_status = "completed", progress_percent = 100,
-                            video_url = :url, actual_provider_cost = estimated_provider_cost,
-                            provider_response_json = :resp, completed_at = NOW()
-                      WHERE id = :id'
-                )->execute([':url' => $videoUrl, ':resp' => $raw, ':id' => $jobId]);
+                )->execute([
+                    ':err'  => 'Video save failed: ' . $e->getMessage(),
+                    ':resp' => $this->stripBase64FromResponse($raw),
+                    ':id'   => $jobId,
+                ]);
 
-                $this->db->prepare(
-                    'UPDATE ai_video_campaigns SET status = "ready_for_review", updated_at = NOW()
-                      WHERE id = :cid'
-                )->execute([':cid' => $job['campaign_id']]);
-
-                // Immediately download to local storage — Veo signed URLs expire in ~24 h
-                $this->downloadOrStoreVideo($jobId);
+                $stmt = $this->db->prepare('SELECT * FROM ai_video_jobs WHERE id = :id');
+                $stmt->execute([':id' => $jobId]);
+                return $stmt->fetch() ?: [];
             }
-        } else {
-            // Still running — update response
+
+            // Store path + public URL — NEVER the raw Base64 in the DB
             $this->db->prepare(
                 'UPDATE ai_video_jobs
-                    SET job_status = "processing", progress_percent = 50, started_at = COALESCE(started_at, NOW()),
+                    SET job_status = "completed", progress_percent = 100,
+                        video_url = :url, local_file_path = :path,
+                        actual_provider_cost = estimated_provider_cost,
+                        provider_response_json = :resp,
+                        completed_at = NOW()
+                  WHERE id = :id'
+            )->execute([
+                ':url'  => $saved['public_url'],
+                ':path' => $saved['file_path'] ?? '',
+                ':resp' => $this->stripBase64FromResponse($raw),
+                ':id'   => $jobId,
+            ]);
+
+            $this->db->prepare(
+                'UPDATE ai_video_campaigns SET status = "ready_for_review", updated_at = NOW()
+                  WHERE id = :cid'
+            )->execute([':cid' => $job['campaign_id']]);
+
+        // ── Still running ───────────────────────────────────────────────────
+        } else {
+            $this->db->prepare(
+                'UPDATE ai_video_jobs
+                    SET job_status = "processing", progress_percent = 50,
+                        started_at = COALESCE(started_at, NOW()),
                         provider_response_json = :resp
                   WHERE id = :id'
-            )->execute([':resp' => $raw, ':id' => $jobId]);
+            )->execute([':resp' => substr($raw, 0, 2000), ':id' => $jobId]);
         }
 
         $stmt = $this->db->prepare('SELECT * FROM ai_video_jobs WHERE id = :id');
@@ -345,25 +475,55 @@ class VeoVideoService extends BaseService
     }
 
     // -----------------------------------------------------------------------
-    // callVeoApi() — internal cURL helper
+    // stripBase64FromResponse()
+    // Replaces bytesBase64Encoded with a placeholder before storing in MySQL.
+    // The raw video payload can be tens of MB — never put it in the DB.
     // -----------------------------------------------------------------------
-    private function callVeoApi(string $method, string $url, array $body = []): string
+    private function stripBase64FromResponse(string $raw): string
     {
-        // Google AI Studio API key auth (default) uses x-goog-api-key header.
-        // Vertex AI uses OAuth Bearer token — set VEO_AUTH_TYPE = 'oauth' in config.
-        $authType = defined('VEO_AUTH_TYPE') ? VEO_AUTH_TYPE : 'api_key';
-        $authHeader = $authType === 'oauth'
-            ? 'Authorization: Bearer ' . VEO_API_KEY
-            : 'x-goog-api-key: '       . VEO_API_KEY;
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return substr($raw, 0, 2000);
+        }
+        foreach ($data['response']['videos'] ?? [] as &$v) {
+            if (!empty($v['bytesBase64Encoded'])) {
+                $v['bytesBase64Encoded'] = '[base64_video_stripped_saved_to_disk]';
+            }
+        }
+        unset($v);
+        return json_encode($data);
+    }
 
-        $ch = curl_init($url);
+    // -----------------------------------------------------------------------
+    // makeOAuth() — returns a GoogleOAuthService instance
+    // -----------------------------------------------------------------------
+    private function makeOAuth(): GoogleOAuthService
+    {
+        $jsonPath = defined('VEO_SERVICE_ACCOUNT_JSON_PATH') ? VEO_SERVICE_ACCOUNT_JSON_PATH : '';
+        if (!$jsonPath) {
+            throw new RuntimeException(
+                'VEO_SERVICE_ACCOUNT_JSON_PATH is not configured. ' .
+                'Download a service account JSON key from GCP Console and set this constant.'
+            );
+        }
+        return new GoogleOAuthService($jsonPath);
+    }
+
+    // -----------------------------------------------------------------------
+    // callVertexApi() — internal cURL helper using OAuth2 Bearer token
+    // -----------------------------------------------------------------------
+    private function callVertexApi(string $method, string $url, array $body = []): string
+    {
+        $token = $this->makeOAuth()->getAccessToken();
+
+        $ch   = curl_init($url);
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => [
-                $authHeader,
+                'Authorization: Bearer ' . $token,
                 'Content-Type: application/json',
             ],
-            CURLOPT_TIMEOUT => 60,
+            CURLOPT_TIMEOUT => 120,
         ];
 
         if ($method === 'POST') {
@@ -380,10 +540,21 @@ class VeoVideoService extends BaseService
         curl_close($ch);
 
         if ($raw === false || $err !== '') {
-            throw new RuntimeException('cURL error calling Veo API: ' . $err);
+            throw new RuntimeException('cURL error calling Vertex AI: ' . $err);
         }
+
+        // Safety net: detect wrong-endpoint org routing
+        if (str_contains((string)$raw, '542708778979')) {
+            throw new RuntimeException(
+                'Request routed through org infrastructure project 542708778979. ' .
+                'Verify VEO_PROJECT_ID and VEO_SERVICE_ACCOUNT_JSON_PATH are correct.'
+            );
+        }
+
         if ($code >= 400) {
-            throw new RuntimeException('Veo API returned HTTP ' . $code . ': ' . substr($raw, 0, 300));
+            throw new RuntimeException(
+                'Vertex AI returned HTTP ' . $code . ': ' . substr($raw, 0, 500)
+            );
         }
 
         return $raw;
