@@ -14,7 +14,8 @@ $campaign->execute([':id' => $campaignId]);
 $campaign = $campaign->fetch();
 if (!$campaign) redirect('/admin/ai-video/index.php');
 
-$savedMsg = '';
+$savedMsg  = '';
+$queuedJob = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prompt'])) {
     $promptId = (int)($_POST['prompt_id'] ?? 0);
     if ($promptId) {
@@ -39,6 +40,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prompt'])) {
             ':cid'   => $campaignId,
         ]);
         $savedMsg = 'Prompt saved.';
+
+        // If "Save & Queue Video" was clicked, queue a new job immediately
+        if (!empty($_POST['queue_after_save'])) {
+            try {
+                $promptRow = $pdo->prepare('SELECT * FROM ai_video_prompts WHERE id = :id');
+                $promptRow->execute([':id' => $promptId]);
+                $promptRow = $promptRow->fetch();
+
+                $scriptStmt = $pdo->prepare(
+                    'SELECT id FROM ai_video_scripts WHERE campaign_id = :cid ORDER BY version_number DESC LIMIT 1'
+                );
+                $scriptStmt->execute([':cid' => $campaignId]);
+                $latestScriptId = (int)($scriptStmt->fetchColumn() ?: 0);
+
+                $svc = new RunwayVideoService();
+                $queuedJob = $svc->queueVideoJob(
+                    $promptRow, $campaignId, $latestScriptId,
+                    $promptId, (int)($_SESSION['user']['id'] ?? 0)
+                );
+
+                $pdo->prepare(
+                    'UPDATE ai_video_campaigns SET status = "video_queued", updated_at = NOW() WHERE id = :id'
+                )->execute([':id' => $campaignId]);
+
+                $savedMsg = 'Prompt saved and new video job queued!';
+            } catch (Throwable $e) {
+                $savedMsg = 'Prompt saved, but video queue failed: ' . $e->getMessage();
+            }
+        }
     }
 }
 
@@ -65,7 +95,17 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php if ($savedMsg): ?>
-<div class="alert alert-success"><i class="bi bi-check-circle-fill me-2"></i><?= h($savedMsg) ?></div>
+<div class="alert alert-success">
+    <i class="bi bi-check-circle-fill me-2"></i><?= h($savedMsg) ?>
+    <?php if ($queuedJob): ?>
+    <div class="mt-2">
+        <strong>Job #<?= (int)$queuedJob['id'] ?></strong> queued —
+        <a href="/admin/ai-video/view-campaign.php?id=<?= (int)$campaignId ?>#tab-jobs" class="alert-link">
+            View Jobs
+        </a>
+    </div>
+    <?php endif; ?>
+</div>
 <?php endif; ?>
 
 <div class="row g-3">
@@ -135,10 +175,15 @@ require_once __DIR__ . '/../../includes/header.php';
                         </div>
                     </div>
                 </div>
-                <div class="card-footer bg-white">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Save Changes</button>
-                    <a href="/admin/ai-video/view-campaign.php?id=<?= (int)$campaignId ?>" class="btn btn-outline-secondary ms-2">
-                        <i class="bi bi-arrow-left me-1"></i>Back
+                <div class="card-footer bg-white d-flex flex-wrap gap-2 align-items-center">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-save me-1"></i>Save Changes
+                    </button>
+                    <button type="submit" name="queue_after_save" value="1" class="btn btn-success">
+                        <i class="bi bi-film me-1"></i>Save &amp; Queue New Video
+                    </button>
+                    <a href="/admin/ai-video/view-campaign.php?id=<?= (int)$campaignId ?>" class="btn btn-outline-secondary ms-auto">
+                        <i class="bi bi-arrow-left me-1"></i>Back to Campaign
                     </a>
                 </div>
             </form>
