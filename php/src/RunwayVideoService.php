@@ -231,15 +231,14 @@ class RunwayVideoService extends BaseService
         $runwayRatio = self::RATIO_MAP[$aspectRatio] ?? '768:1344';
 
         $requestBody = [
-            'taskType'   => 'text_to_video',
             'model'      => RUNWAY_MODEL,
-            'textPrompt' => $textPrompt,
+            'promptText' => $textPrompt,
             'ratio'      => $runwayRatio,
             'duration'   => $durationSecs,
             'watermark'  => false,
         ];
 
-        $raw  = $this->callRunwayApi('POST', self::API_BASE . '/tasks', $requestBody);
+        $raw  = $this->callRunwayApi('POST', self::API_BASE . '/text_to_video', $requestBody);
         $data = json_decode($raw, true) ?? [];
 
         $taskId = $data['id'] ?? null;
