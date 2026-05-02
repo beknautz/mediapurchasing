@@ -117,12 +117,21 @@ require_once __DIR__ . '/../../includes/header.php';
                             hx-swap="innerHTML">
                         <i class="bi bi-arrow-repeat me-1"></i>Check
                     </button>
-                    <div id="poll-result-<?= (int)$j['id'] ?>" class="mt-1"></div>
                     <?php elseif ($j['job_status'] === 'failed' && $j['error_message']): ?>
                     <span class="text-danger small" title="<?= h($j['error_message']) ?>">
                         <i class="bi bi-exclamation-circle me-1"></i>Error
                     </span>
                     <?php endif; ?>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 mt-1"
+                            hx-post="/admin/ai-video/actions/rerender-job.php"
+                            hx-vals='{"job_id": "<?= (int)$j['id'] ?>"}'
+                            hx-target="#poll-result-<?= (int)$j['id'] ?>"
+                            hx-swap="innerHTML"
+                            hx-confirm="Queue a new render using the same prompt?"
+                            title="Rerender with current Veo settings">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Rerender
+                    </button>
+                    <div id="poll-result-<?= (int)$j['id'] ?>" class="mt-1"></div>
                 </td>
             </tr>
             <?php endforeach; ?>

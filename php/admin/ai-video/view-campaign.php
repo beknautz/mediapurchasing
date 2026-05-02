@@ -459,6 +459,15 @@ require_once __DIR__ . '/../../includes/header.php';
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
                                     <?php endif; ?>
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                            hx-post="/admin/ai-video/actions/rerender-job.php"
+                                            hx-vals='{"job_id": "<?= (int)$j['id'] ?>"}'
+                                            hx-target="#action-result"
+                                            hx-swap="innerHTML"
+                                            hx-confirm="Queue a new render using the same prompt?"
+                                            title="Rerender">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
