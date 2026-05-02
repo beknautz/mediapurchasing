@@ -24,7 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prompt'])) {
                 SET veo_prompt = :veo, negative_prompt = :neg,
                     visual_style = :style, camera_direction = :cam,
                     lighting = :light, pacing = :pacing,
-                    aspect_ratio = :ratio, duration_seconds = :dur
+                    aspect_ratio = :ratio, duration_seconds = :dur,
+                    prompt_image_url = :img
               WHERE id = :id AND campaign_id = :cid'
         );
         $upd->execute([
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prompt'])) {
             ':pacing'=> trim($_POST['pacing'] ?? ''),
             ':ratio' => trim($_POST['aspect_ratio'] ?? ''),
             ':dur'   => (int)($_POST['duration_seconds'] ?? 0),
+            ':img'   => trim($_POST['prompt_image_url'] ?? '') ?: null,
             ':id'    => $promptId,
             ':cid'   => $campaignId,
         ]);
@@ -78,12 +80,14 @@ $prompts = $prompts->fetchAll();
 
 $latest = $prompts[0] ?? null;
 
+$activeProvider = strtolower($GLOBALS['appSettings']['video_provider'] ?? 'runway');
+
 $pageTitle = 'Prompt Editor — ' . h($campaign['campaign_name']);
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="mb-4">
-    <h1 class="h3 fw-bold mb-0"><i class="bi bi-magic me-2 text-primary"></i>Veo Prompt Editor</h1>
+    <h1 class="h3 fw-bold mb-0"><i class="bi bi-magic me-2 text-primary"></i>Video Prompt Editor</h1>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0 small">
             <li class="breadcrumb-item"><a href="/dashboard.php">Dashboard</a></li>
@@ -130,20 +134,84 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
 
             <?php if ($latest): ?>
-            <form method="POST">
+            <form method="POST" id="prompt-form">
                 <input type="hidden" name="save_prompt" value="1">
                 <input type="hidden" name="prompt_id" value="<?= (int)$latest['id'] ?>">
+                <input type="hidden" name="prompt_image_url" id="prompt_image_url"
+                       value="<?= h($latest['prompt_image_url'] ?? '') ?>">
+
                 <div class="card-body">
+
+                    <!-- Main Prompt -->
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Veo Prompt</label>
+                        <label class="form-label fw-semibold">Video Prompt</label>
                         <textarea name="veo_prompt" class="form-control" rows="8"><?= h($latest['veo_prompt'] ?? '') ?></textarea>
-                        <div class="form-text">This is the main prompt sent to the Veo video generation model. Be detailed and visual.</div>
+                        <div class="form-text">Detailed visual description sent to the video generation model.</div>
                     </div>
+
+                    <!-- Negative Prompt -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Negative Prompt</label>
                         <textarea name="negative_prompt" class="form-control" rows="3"><?= h($latest['negative_prompt'] ?? '') ?></textarea>
                         <div class="form-text">What to avoid generating.</div>
                     </div>
+
+                    <!-- Reference Image (Runway only) -->
+                    <?php if ($activeProvider === 'runway'): ?>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Reference Image
+                            <span class="badge bg-primary ms-1">Runway Image-to-Video</span>
+                        </label>
+                        <div class="form-text mb-2">
+                            Upload a photo as the starting frame. Runway animates from this image using your prompt above.
+                            Leave empty for text-to-video only.
+                        </div>
+
+                        <!-- Existing image preview -->
+                        <div id="image-preview">
+                        <?php if (!empty($latest['prompt_image_url'])): ?>
+                            <div class="d-flex align-items-start gap-3 p-3 border rounded bg-light mb-2">
+                                <img src="<?= h($latest['prompt_image_url']) ?>"
+                                     alt="Reference image"
+                                     style="max-height:140px;max-width:220px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
+                                <div>
+                                    <div class="small fw-semibold mb-1">Current reference image</div>
+                                    <div class="small text-muted mb-2 text-break"><?= h(basename($latest['prompt_image_url'])) ?></div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePromptImage()">
+                                        <i class="bi bi-trash me-1"></i>Remove
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        </div>
+
+                        <!-- Upload form -->
+                        <form id="image-upload-form"
+                              hx-post="/admin/ai-video/actions/upload-prompt-image.php"
+                              hx-encoding="multipart/form-data"
+                              hx-target="#image-preview"
+                              hx-swap="innerHTML"
+                              hx-indicator="#upload-spinner">
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="btn btn-outline-secondary btn-sm mb-0">
+                                    <i class="bi bi-image me-1"></i>
+                                    <?= !empty($latest['prompt_image_url']) ? 'Replace Image' : 'Upload Image' ?>
+                                    <input type="file" name="image" id="image-file-input"
+                                           accept="image/jpeg,image/png,image/webp"
+                                           style="display:none"
+                                           onchange="this.closest('form').requestSubmit()">
+                                </label>
+                                <span class="text-muted small">JPG, PNG, WebP — max 10 MB</span>
+                                <span id="upload-spinner" class="htmx-indicator">
+                                    <span class="spinner-border spinner-border-sm text-secondary"></span>
+                                </span>
+                            </div>
+                        </form>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Style / Camera / etc -->
                     <div class="row g-2 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Visual Style</label>
@@ -171,10 +239,12 @@ require_once __DIR__ . '/../../includes/header.php';
                         </div>
                         <div class="col-md-2">
                             <label class="form-label fw-semibold">Duration (s)</label>
-                            <input type="number" name="duration_seconds" class="form-control" value="<?= (int)($latest['duration_seconds'] ?? 15) ?>" min="5" max="120">
+                            <input type="number" name="duration_seconds" class="form-control"
+                                   value="<?= (int)($latest['duration_seconds'] ?? 15) ?>" min="5" max="120">
                         </div>
                     </div>
                 </div>
+
                 <div class="card-footer bg-white d-flex flex-wrap gap-2 align-items-center">
                     <button type="submit" class="btn btn-outline-primary">
                         <i class="bi bi-save me-1"></i>Save Changes
@@ -187,10 +257,23 @@ require_once __DIR__ . '/../../includes/header.php';
                     </a>
                 </div>
             </form>
+
+            <script>
+            // When an image is uploaded via HTMX, update the hidden field in the main form
+            document.body.addEventListener('promptImageUploaded', function (evt) {
+                document.getElementById('prompt_image_url').value = evt.detail.url;
+            });
+
+            function removePromptImage() {
+                document.getElementById('prompt_image_url').value = '';
+                document.getElementById('image-preview').innerHTML = '';
+            }
+            </script>
+
             <?php else: ?>
             <div class="card-body text-center py-5 text-muted">
                 <i class="bi bi-magic display-4 d-block mb-3"></i>
-                No Veo prompt yet. Generate a script first, then generate the Veo prompt.
+                No prompt yet. Generate a script first, then generate the video prompt.
             </div>
             <?php endif; ?>
             <div id="regen-result" class="p-3"></div>
@@ -213,6 +296,10 @@ require_once __DIR__ . '/../../includes/header.php';
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
                                 <strong>v<?= (int)$p['version_number'] ?></strong>
+                                <?php if (!empty($p['prompt_image_url'])): ?>
+                                <i class="bi bi-image ms-1 text-<?= ($latest && $p['id'] === $latest['id']) ? 'light' : 'primary' ?>"
+                                   title="Has reference image"></i>
+                                <?php endif; ?>
                                 <div class="text-<?= ($latest && $p['id'] === $latest['id']) ? 'light' : 'muted' ?>">
                                     <?= h(date('M j, Y g:ia', strtotime($p['created_at']))) ?>
                                 </div>

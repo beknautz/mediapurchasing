@@ -240,6 +240,13 @@ class RunwayVideoService extends BaseService
             'watermark'  => false,
         ];
 
+        // Image-to-video: if a reference image URL is set, pass it as promptImage.
+        // Runway will use it as the first frame / visual inspiration for the video.
+        // The URL must be publicly accessible.
+        if (!empty($promptData['prompt_image_url'])) {
+            $requestBody['promptImage'] = $promptData['prompt_image_url'];
+        }
+
         $raw  = $this->callRunwayApi('POST', self::API_BASE . '/text_to_video', $requestBody);
         $data = json_decode($raw, true) ?? [];
 
