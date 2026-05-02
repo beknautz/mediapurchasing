@@ -341,6 +341,16 @@ class VeoVideoService extends BaseService
             );
         }
 
+        // Confirm Vertex returned a full operation path, not a short/mock ID
+        if (!str_starts_with($operationName, 'projects/')) {
+            throw new RuntimeException(
+                'Veo Vertex AI returned an unexpected operation name format: "' . $operationName . '". ' .
+                'Expected: projects/{PROJECT}/locations/.../operations/{ID}'
+            );
+        }
+
+        error_log('[VeoVideoService] Veo create job response: ' . $raw);
+
         $ins = $this->db->prepare(
             'INSERT INTO ai_video_jobs
                 (campaign_id, script_id, prompt_id, provider, provider_job_id,
@@ -385,6 +395,22 @@ class VeoVideoService extends BaseService
         $operationName = $job['provider_job_id'] ?? '';
         if (!$operationName) {
             return $job;
+        }
+
+        // Guard: mock job IDs cannot be polled against live Vertex AI
+        if (str_starts_with($operationName, 'mock_')) {
+            throw new RuntimeException(
+                'Job #' . $jobId . ' has a mock Veo ID ("' . $operationName . '") and cannot be polled against live Vertex AI. ' .
+                'Create a new Veo job with mock mode disabled.'
+            );
+        }
+
+        // Guard: live Veo operation names must start with "projects/"
+        if (!str_starts_with($operationName, 'projects/')) {
+            throw new RuntimeException(
+                'Invalid Veo operation name for job #' . $jobId . '. ' .
+                'Expected full Vertex operation name beginning with "projects/". Got: ' . $operationName
+            );
         }
 
         // Poll: POST :fetchPredictOperation with operationName in the body.
