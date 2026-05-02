@@ -59,7 +59,7 @@ if (!$prompt) {
 }
 
 try {
-    $svc    = new VeoVideoService();
+    $svc    = new RunwayVideoService();
     $newJob = $svc->queueVideoJob($prompt, $campaignId, $scriptId, (int)$prompt['id'], $createdBy);
 
     // Link new job back to original as parent
@@ -70,9 +70,9 @@ try {
     $pdo->prepare("UPDATE ai_video_campaigns SET status = 'video_queued', updated_at = NOW() WHERE id = :id")
         ->execute([':id' => $campaignId]);
 
-    $mockBadge = ENABLE_MOCK_VEO_MODE
+    $mockBadge = ENABLE_MOCK_RUNWAY_MODE
         ? '<span class="badge bg-warning text-dark ms-1">Mock</span>'
-        : '<span class="badge bg-success ms-1">Live Veo</span>';
+        : '<span class="badge bg-success ms-1">Live Runway</span>';
 
     echo '<div class="alert alert-success mt-2">';
     echo '<strong><i class="bi bi-arrow-clockwise me-1"></i>Rerender queued!</strong> ' . $mockBadge . '<br>';

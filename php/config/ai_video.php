@@ -11,20 +11,31 @@
 // anthropic_api_key / anthropic_model) — the same values used by Budget Planner.
 // No separate key needed here; do not add one.
 
+// -----------------------------------------------------------------------
+// Runway ML — primary video generation provider
+// Get your API key at: https://app.runwayml.com/settings/api-keys
+// Models: gen3a_turbo (fast/default), gen3a (higher quality)
+// -----------------------------------------------------------------------
+defined('RUNWAY_API_KEY')  || define('RUNWAY_API_KEY',  $_ENV['RUNWAY_API_KEY']  ?? '');
+defined('RUNWAY_MODEL')    || define('RUNWAY_MODEL',    $_ENV['RUNWAY_MODEL']    ?? 'gen3a_turbo');
+
+defined('ENABLE_MOCK_RUNWAY_MODE')
+    || define('ENABLE_MOCK_RUNWAY_MODE', (bool)($_ENV['ENABLE_MOCK_RUNWAY_MODE'] ?? true));
+
+// -----------------------------------------------------------------------
+// Google Veo — reserved for future use
+// -----------------------------------------------------------------------
 defined('VEO_API_KEY')       || define('VEO_API_KEY',       $_ENV['VEO_API_KEY']       ?? '');
 defined('VEO_MODEL')         || define('VEO_MODEL',         $_ENV['VEO_MODEL']         ?? 'veo-2.0-generate-001');
-// 'api_key' = Google AI Studio key — uses x-goog-api-key header (simplest, default)
-// 'oauth'   = Vertex AI service account — uses Authorization: Bearer header
 defined('VEO_AUTH_TYPE')     || define('VEO_AUTH_TYPE',     $_ENV['VEO_AUTH_TYPE']     ?? 'api_key');
+defined('ENABLE_MOCK_VEO_MODE')
+    || define('ENABLE_MOCK_VEO_MODE', (bool)($_ENV['ENABLE_MOCK_VEO_MODE'] ?? true));
 
 defined('VIDEO_STORAGE_PATH')
     || define('VIDEO_STORAGE_PATH', $_ENV['VIDEO_STORAGE_PATH'] ?? __DIR__ . '/../uploads/ai-videos');
 
 defined('VIDEO_PUBLIC_URL_BASE')
     || define('VIDEO_PUBLIC_URL_BASE', $_ENV['VIDEO_PUBLIC_URL_BASE'] ?? '/uploads/ai-videos');
-
-defined('ENABLE_MOCK_VEO_MODE')
-    || define('ENABLE_MOCK_VEO_MODE', (bool)($_ENV['ENABLE_MOCK_VEO_MODE'] ?? true));
 
 defined('DEFAULT_PROVIDER_COST_PER_GENERATION')
     || define('DEFAULT_PROVIDER_COST_PER_GENERATION', (float)($_ENV['DEFAULT_PROVIDER_COST_PER_GENERATION'] ?? 0.35));

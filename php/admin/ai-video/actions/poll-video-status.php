@@ -10,7 +10,7 @@ if (!$jobId) {
 }
 
 try {
-    $svc = new VeoVideoService();
+    $svc = new RunwayVideoService();
     $job = $svc->getJobStatus($jobId);
 
     $statusMap = ['queued'=>'warning','processing'=>'info','completed'=>'success','failed'=>'danger'];
