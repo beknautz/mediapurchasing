@@ -99,7 +99,7 @@ class ClaudeVideoService extends BaseService
             throw new RuntimeException('Claude returned invalid JSON for Veo prompt generation. Raw: ' . substr($content, 0, 500));
         }
 
-        $model = CLAUDE_MODEL;
+        $model = $this->getSetting('anthropic_model') ?: (defined('CLAUDE_MODEL') ? CLAUDE_MODEL : 'claude-opus-4-5');
         $cost  = $this->estimateClaudeCost($inputTokens, $outputTokens, $model);
 
         $stmt = $this->db->prepare(
