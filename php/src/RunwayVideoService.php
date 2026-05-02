@@ -227,7 +227,8 @@ class RunwayVideoService extends BaseService
             throw new RuntimeException('RUNWAY_API_KEY is not configured.');
         }
 
-        $textPrompt  = $promptData['veo_prompt'] ?? '';
+        // Runway caps promptText at 1000 characters
+        $textPrompt  = mb_substr($promptData['veo_prompt'] ?? '', 0, 1000);
         $runwayRatio = self::RATIO_MAP[$aspectRatio] ?? '768:1344';
 
         $requestBody = [
