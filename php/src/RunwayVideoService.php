@@ -11,7 +11,7 @@
 class RunwayVideoService extends BaseService
 {
     private const API_BASE    = 'https://api.dev.runwayml.com/v1';
-    private const API_VERSION = '2024-11-06';
+    private const API_VERSION = '2024-11-06';  // keep updated per Runway changelog
 
     // Runway only supports 5 or 10 seconds for Gen-3
     private const SUPPORTED_DURATIONS = [5, 10];
