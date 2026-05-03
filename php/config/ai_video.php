@@ -19,6 +19,8 @@
 defined('RUNWAY_API_KEY')  || define('RUNWAY_API_KEY',  $_ENV['RUNWAY_API_KEY']  ?? '');
 defined('RUNWAY_MODEL')    || define('RUNWAY_MODEL',    $_ENV['RUNWAY_MODEL']    ?? 'gen4.5');
 
+// ENABLE_MOCK_RUNWAY_MODE covers video, audio (TTS/SFX), and character performance.
+// Set to false and provide a real RUNWAY_API_KEY to use live Runway APIs.
 defined('ENABLE_MOCK_RUNWAY_MODE')
     || define('ENABLE_MOCK_RUNWAY_MODE', (bool)($_ENV['ENABLE_MOCK_RUNWAY_MODE'] ?? true));
 

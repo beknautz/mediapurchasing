@@ -35,6 +35,21 @@ $reviews = $pdo->prepare('SELECT * FROM ai_video_reviews WHERE campaign_id = :ci
 $reviews->execute([':cid' => $id]);
 $reviews = $reviews->fetchAll();
 
+// Audio + character jobs (tables may not exist yet — guard with try/catch)
+$audioJobs     = [];
+$characterJobs = [];
+try {
+    $audioStmt = $pdo->prepare('SELECT * FROM ai_video_audio_jobs WHERE campaign_id = :cid ORDER BY created_at DESC LIMIT 20');
+    $audioStmt->execute([':cid' => $id]);
+    $audioJobs = $audioStmt->fetchAll();
+
+    $charStmt = $pdo->prepare('SELECT * FROM ai_video_character_jobs WHERE campaign_id = :cid ORDER BY created_at DESC LIMIT 20');
+    $charStmt->execute([':cid' => $id]);
+    $characterJobs = $charStmt->fetchAll();
+} catch (PDOException $e) {
+    // Migration not yet run — tables don't exist yet
+}
+
 $latestJob = $jobs[0] ?? null;
 
 // Cost summary
@@ -310,7 +325,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
 
-        <!-- Tabs: Script / Prompt / Jobs / Reviews -->
+        <!-- Tabs: Script / Prompt / Jobs / Audio / Character / Reviews -->
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white p-0">
                 <ul class="nav nav-tabs border-bottom-0 px-3 pt-2" id="campaignTabs" role="tablist">
@@ -321,12 +336,28 @@ require_once __DIR__ . '/../../includes/header.php';
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-prompt" type="button">
-                            <i class="bi bi-magic me-1"></i>Veo Prompt
+                            <i class="bi bi-magic me-1"></i>Prompt
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-jobs" type="button">
-                            <i class="bi bi-film me-1"></i>Jobs <span class="badge bg-secondary ms-1"><?= count($jobs) ?></span>
+                            <i class="bi bi-film me-1"></i>Video <span class="badge bg-secondary ms-1"><?= count($jobs) ?></span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-audio" type="button">
+                            <i class="bi bi-music-note me-1"></i>Audio
+                            <?php if (count($audioJobs) > 0): ?>
+                            <span class="badge bg-secondary ms-1"><?= count($audioJobs) ?></span>
+                            <?php endif; ?>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-character" type="button">
+                            <i class="bi bi-person-bounding-box me-1"></i>Character
+                            <?php if (count($characterJobs) > 0): ?>
+                            <span class="badge bg-secondary ms-1"><?= count($characterJobs) ?></span>
+                            <?php endif; ?>
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -490,6 +521,172 @@ require_once __DIR__ . '/../../includes/header.php';
                             <?php endforeach; ?>
                             </tbody>
                         </table>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Audio Tab -->
+                <div class="tab-pane fade" id="tab-audio">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="mb-0 small text-muted">Generate voiceover narration and background sound effects using Runway's ElevenLabs-powered audio models.</p>
+                        <a href="/admin/ai-video/audio-editor.php?campaign_id=<?= (int)$id ?>" class="btn btn-sm btn-danger">
+                            <i class="bi bi-mic me-1"></i>Open Audio Editor
+                        </a>
+                    </div>
+                    <?php if (empty($audioJobs)): ?>
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-music-note-list display-5 d-block mb-2"></i>
+                        No audio jobs yet. <a href="/admin/ai-video/audio-editor.php?campaign_id=<?= (int)$id ?>">Generate voiceover or sound effects →</a>
+                    </div>
+                    <?php else: ?>
+                    <div class="list-group list-group-flush">
+                        <?php foreach ($audioJobs as $aj): ?>
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="small">
+                                    <span class="badge bg-<?= $aj['job_type'] === 'tts' ? 'danger' : 'warning text-dark' ?> me-1">
+                                        <?= strtoupper(h($aj['job_type'])) ?>
+                                    </span>
+                                    #<?= (int)$aj['id'] ?>
+                                    <?php if ($aj['voice_preset']): ?>
+                                    <span class="text-muted"><?= h($aj['voice_preset']) ?></span>
+                                    <?php endif; ?>
+                                </span>
+                                <span class="badge bg-<?= $aj['job_status'] === 'completed' ? 'success' : ($aj['job_status'] === 'failed' ? 'danger' : 'warning') ?>">
+                                    <?= h(ucfirst($aj['job_status'])) ?>
+                                </span>
+                            </div>
+                            <?php if ($aj['job_status'] === 'completed' && $aj['audio_url']): ?>
+                            <audio controls class="w-100 mt-1" style="height:32px;">
+                                <source src="<?= h($aj['audio_url']) ?>" type="audio/mpeg">
+                            </audio>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Character Tab -->
+                <div class="tab-pane fade" id="tab-character">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="mb-0 small text-muted">Animate a character image using Runway Act Two — drive facial expressions and body movement from a reference performance video.</p>
+                    </div>
+
+                    <!-- Queue a new character job inline -->
+                    <div class="card border mb-3">
+                        <div class="card-header bg-white fw-semibold small py-2">
+                            <i class="bi bi-person-bounding-box me-2 text-primary"></i>Queue Character Performance
+                        </div>
+                        <div class="card-body">
+                            <form hx-post="/admin/ai-video/actions/queue-character-job.php"
+                                  hx-target="#char-queue-result"
+                                  hx-swap="innerHTML"
+                                  hx-indicator="#char-spinner">
+                                <input type="hidden" name="campaign_id" value="<?= (int)$id ?>">
+                                <?php if ($latestJob): ?>
+                                <input type="hidden" name="video_job_id" value="<?= (int)$latestJob['id'] ?>">
+                                <?php endif; ?>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold">Character Image/Video URL</label>
+                                        <input type="url" name="character_url" class="form-control form-control-sm"
+                                               placeholder="https://… (face or full-body image)">
+                                        <div class="form-text" style="font-size:.7rem;">Publicly accessible URL. JPG/PNG/MP4.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold">Character Type</label>
+                                        <select name="character_type" class="form-select form-select-sm">
+                                            <option value="image">Image</option>
+                                            <option value="video">Video</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-semibold">Reference Performance Video URL</label>
+                                    <input type="url" name="reference_video_url" class="form-control form-control-sm"
+                                           placeholder="https://… (video showing the performance to copy)">
+                                    <div class="form-text" style="font-size:.7rem;">Act Two copies the facial expressions and body movement from this video onto your character.</div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold">Expression Intensity</label>
+                                        <select name="expression_intensity" class="form-select form-select-sm">
+                                            <?php for ($i = 1; $i <= 5; $i++): ?>
+                                            <option value="<?= $i ?>" <?= $i === 3 ? 'selected' : '' ?>><?= $i ?> <?= $i === 1 ? '(Subtle)' : ($i === 5 ? '(Exaggerated)' : '') ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold">Aspect Ratio</label>
+                                        <select name="aspect_ratio" class="form-select form-select-sm">
+                                            <option value="9:16">9:16 Portrait</option>
+                                            <option value="16:9">16:9 Landscape</option>
+                                            <option value="1:1">1:1 Square</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end pb-1">
+                                        <div class="form-check">
+                                            <input type="checkbox" name="body_control" id="body_control_tab" class="form-check-input" value="1" checked>
+                                            <label class="form-check-label small" for="body_control_tab">Body Control</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-person-bounding-box me-1"></i>Queue Act Two
+                                    </button>
+                                    <span id="char-spinner" class="htmx-indicator">
+                                        <span class="spinner-border spinner-border-sm text-primary me-1"></span>Queueing…
+                                    </span>
+                                </div>
+                            </form>
+                            <div id="char-queue-result" class="mt-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Job History -->
+                    <?php if (empty($characterJobs)): ?>
+                    <div class="text-center text-muted py-3 small">
+                        <i class="bi bi-person-bounding-box display-5 d-block mb-2"></i>
+                        No character jobs yet.
+                    </div>
+                    <?php else: ?>
+                    <div class="list-group list-group-flush">
+                        <?php foreach ($characterJobs as $cj): ?>
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="small fw-semibold">Act Two #<?= (int)$cj['id'] ?></span>
+                                <span class="badge bg-<?= $cj['job_status'] === 'completed' ? 'success' : ($cj['job_status'] === 'failed' ? 'danger' : 'warning') ?>">
+                                    <?= h(ucfirst($cj['job_status'])) ?>
+                                </span>
+                            </div>
+                            <div class="small text-muted">
+                                Expression: <?= (int)$cj['expression_intensity'] ?>/5
+                                &middot; <?= h($cj['ratio']) ?>
+                                &middot; <?= h(date('M j, g:ia', strtotime($cj['created_at']))) ?>
+                            </div>
+                            <?php if ($cj['job_status'] === 'completed' && $cj['output_video_url']): ?>
+                            <div class="mt-1">
+                                <a href="<?= h($cj['output_video_url']) ?>" target="_blank" class="btn btn-xs btn-sm btn-outline-primary">
+                                    <i class="bi bi-play-circle me-1"></i>View Output
+                                </a>
+                                <a href="<?= h($cj['output_video_url']) ?>" download class="btn btn-xs btn-sm btn-outline-secondary ms-1">
+                                    <i class="bi bi-download me-1"></i>Download
+                                </a>
+                            </div>
+                            <?php elseif ($cj['job_status'] !== 'failed'): ?>
+                            <button class="btn btn-xs btn-sm btn-outline-secondary mt-1"
+                                    hx-get="/admin/ai-video/actions/poll-character-status.php?job_id=<?= (int)$cj['id'] ?>"
+                                    hx-target="#char-inline-<?= (int)$cj['id'] ?>"
+                                    hx-swap="outerHTML">
+                                <i class="bi bi-arrow-repeat me-1"></i>Check Status
+                            </button>
+                            <span id="char-inline-<?= (int)$cj['id'] ?>"></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
                 </div>
