@@ -2,32 +2,10 @@
     proposals/agency-agreement-pdf.cfm
     Adobe ColdFusion 2023 — generates a downloadable Agency Agreement PDF.
 
-    Called from PHP with a signed URL:
-        /proposals/agency-agreement-pdf.cfm?id=42&ts=1715000000&tok=<hmac>
-
-    Security: HMAC-SHA256 token signed by PHP (bootstrap.php::pdfToken()) and
-    verified here. Token expires after 2 hours. The shared secret must match
-    PDF_HMAC_SECRET in config/config.php.
+    Called from PHP:
+        /proposals/agency-agreement-pdf.cfm?id=42
 --->
-<cfparam name="url.id"  default="0"  type="integer">
-<cfparam name="url.ts"  default="0"  type="string">
-<cfparam name="url.tok" default=""   type="string">
-
-<!--- ── Auth ────────────────────────────────────────────────────────────── --->
-<cfset hmacSecret = "enigma-pdf-hmac-v1-2024!"><!--- MUST match PDF_HMAC_SECRET in config.php --->
-
-<cfset expectedTok = lcase(hmac(url.id & "|" & url.ts, hmacSecret, "HMACSHA256"))>
-
-<!--- Token freshness: convert Unix ts to CF datetime (UTC) --->
-<cfset issued  = dateAdd("s", val(url.ts), createDateTime(1970, 1, 1, 0, 0, 0))>
-<cfset nowUTC  = dateConvert("local2UTC", now())>
-<cfset ageSecs = dateDiff("s", issued, nowUTC)>
-
-<cfif url.tok neq expectedTok or ageSecs gt 7200 or ageSecs lt -60>
-    <cfheader statusCode="403" statusText="Forbidden">
-    <cfoutput>Access denied — invalid or expired token.</cfoutput>
-    <cfabort>
-</cfif>
+<cfparam name="url.id" default="0" type="integer">
 
 <!--- ── Load agreement ───────────────────────────────────────────────────── --->
 <cfquery name="qAg" datasource="mediapurchasing">
