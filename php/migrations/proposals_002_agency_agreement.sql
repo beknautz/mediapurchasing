@@ -61,75 +61,59 @@ CREATE TABLE IF NOT EXISTS agency_agreements (
 -- -----------------------------------------------------------------------
 -- Agency branding settings
 -- These appear in Admin → Settings under the "Agency Branding" group.
+-- Columns: setting_key, setting_value, label, description, setting_group
 -- -----------------------------------------------------------------------
-INSERT INTO workflow_settings (setting_key, setting_value, setting_label, setting_type, setting_group, help_text, sort_order)
+INSERT INTO workflow_settings (setting_key, setting_value, label, description, setting_group)
 VALUES
     ('agency_name',
      'Enigma, Inc. DBA Enigma Marketing',
      'Agency Name',
-     'text',
-     'Agency Branding',
      'Full legal name shown on all contracts and documents.',
-     100),
+     'Agency Branding'),
 
     ('agency_dba',
      'Enigma Marketing',
      'DBA / Trade Name',
-     'text',
-     'Agency Branding',
      'Doing-business-as name used in short references.',
-     101),
+     'Agency Branding'),
 
     ('agency_address',
      '3601 W Washington STE 130',
      'Street Address',
-     'text',
-     'Agency Branding',
      'Agency street address printed on contracts.',
-     102),
+     'Agency Branding'),
 
     ('agency_city_state_zip',
      'Yakima, WA 98903',
      'City, State, Zip',
-     'text',
-     'Agency Branding',
      '',
-     103),
+     'Agency Branding'),
 
     ('agency_phone',
      '509-452-3733',
      'Phone Number',
-     'text',
-     'Agency Branding',
      '',
-     104),
+     'Agency Branding'),
 
     ('agency_signer_name',
      'Duane Gordon',
      'Authorized Signer Name',
-     'text',
-     'Agency Branding',
      'Name printed on contract signature lines.',
-     105),
+     'Agency Branding'),
 
     ('agency_signer_title',
      'Managing Partner',
      'Authorized Signer Title',
-     'text',
-     'Agency Branding',
      '',
-     106),
+     'Agency Branding'),
 
     ('agency_logo_url',
      '',
      'Logo URL',
-     'text',
-     'Agency Branding',
      'Publicly accessible URL or server path to your logo (e.g. /uploads/logo.png). Shown at the top of printed documents. Leave blank to use text-only header.',
-     107)
+     'Agency Branding')
 
 ON DUPLICATE KEY UPDATE
-    setting_label = VALUES(setting_label),
-    setting_group = VALUES(setting_group),
-    help_text     = VALUES(help_text),
-    sort_order    = VALUES(sort_order);
+    label         = VALUES(label),
+    description   = VALUES(description),
+    setting_group = VALUES(setting_group);
