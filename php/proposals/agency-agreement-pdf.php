@@ -3,12 +3,18 @@
  * proposals/agency-agreement-pdf.php
  * Generate a downloadable PDF of an Agency Agreement via Dompdf.
  *
- * Requires: composer require dompdf/dompdf  (then deploy vendor/)
- * Falls back to a print-optimised browser page if Dompdf is unavailable.
+ * Dompdf is loaded from lib/dompdf/ (extracted from dompdf-master.zip)
+ * via a custom autoloader — no Composer required.
  */
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/config.php';
 requireRole(['admin', 'buyer']);
+
+// ── Load Dompdf from bundled zip extraction ───────────────────────────────────
+$dompdfAutoload = __DIR__ . '/../lib/dompdf-autoload.php';
+if (file_exists($dompdfAutoload)) {
+    require_once $dompdfAutoload;
+}
 
 $svc = new AgencyAgreementService();
 $id  = (int)($_GET['id'] ?? 0);
@@ -30,11 +36,8 @@ $fmtDate = function(?string $d): string {
 };
 
 // ── Check for Dompdf ─────────────────────────────────────────────────────────
-$hasDompdf = class_exists('Dompdf\Dompdf');
-
-if (!$hasDompdf) {
-    // Fallback: redirect to print view with a notice
-    flash('error', 'PDF library not installed. Run: composer require dompdf/dompdf — showing print view instead.');
+if (!class_exists('Dompdf\Dompdf')) {
+    flash('error', 'Dompdf not found. Ensure lib/dompdf/ exists (extracted from dompdf-master.zip).');
     redirect('/proposals/agency-agreement-view.php?id=' . $id);
 }
 
@@ -377,13 +380,25 @@ $html .= '</body></html>';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
+// Bundled fonts directory (DejaVu, Helvetica AFM files pre-packaged in the zip)
+$dompdfFontDir = realpath(__DIR__ . '/../lib/dompdf/lib/fonts');
+
 $options = new Options();
-$options->set('isRemoteEnabled', true);         // allow logo img from URL
-$options->set('isHtml5ParserEnabled', true);
-$options->set('defaultFont', 'serif');
-$webRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__));
+$options->setIsRemoteEnabled(true);          // allow logo img from URL
+$options->setIsHtml5ParserEnabled(false);    // use DOMDocument — avoids Masterminds dependency
+$options->setDefaultFont('dejavu serif');    // built-in TTF font from bundled lib/fonts/
+$options->setDpi(96);
+
+// Tell Dompdf where bundled fonts live so it finds the .ufm metric files
+if ($dompdfFontDir && is_dir($dompdfFontDir)) {
+    $options->setFontDir($dompdfFontDir);
+    $options->setFontCache($dompdfFontDir);
+}
+
+// Allow Dompdf to read local logo files (e.g. /uploads/logos/...)
+$webRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? __DIR__ . '/..');
 if ($webRoot) {
-    $options->set('chroot', $webRoot);          // allow local file paths
+    $options->setChroot($webRoot);
 }
 
 $dompdf = new Dompdf($options);
