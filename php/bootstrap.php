@@ -90,6 +90,21 @@ if (!function_exists('requireRole')) {
 }
 
 // ---------------------------------------------------------------------------
+// pdfToken() — generate a signed URL query string for agency-agreement-pdf.cfm
+// ---------------------------------------------------------------------------
+if (!function_exists('pdfToken')) {
+    /**
+     * Returns a query string like "?id=42&ts=1715000000&tok=abc123..."
+     * ColdFusion verifies the HMAC before generating the PDF.
+     */
+    function pdfToken(int $id): string {
+        $ts  = time();
+        $tok = hash_hmac('sha256', $id . '|' . $ts, PDF_HMAC_SECRET);
+        return '?id=' . $id . '&ts=' . $ts . '&tok=' . rawurlencode($tok);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // flash() — store or retrieve one-time flash messages via the session
 // ---------------------------------------------------------------------------
 if (!function_exists('flash')) {

@@ -29,6 +29,12 @@ defined('SMTP_FROM_NAME') || define('SMTP_FROM_NAME', $_ENV['SMTP_FROM_NAME'] ??
 defined('APP_NAME')    || define('APP_NAME',    'Media Buying Platform');
 defined('APP_VERSION') || define('APP_VERSION', '1.0.0');
 
+// ---------------------------------------------------------------------------
+// PDF token secret — shared with agency-agreement-pdf.cfm for HMAC signing.
+// Change this to any long random string; update the matching value in the CFM.
+// ---------------------------------------------------------------------------
+defined('PDF_HMAC_SECRET') || define('PDF_HMAC_SECRET', $_ENV['PDF_HMAC_SECRET'] ?? 'enigma-pdf-hmac-v1-2024!');
+
 defined('PAGE_SIZE')    || define('PAGE_SIZE',    25);
 defined('MAX_UPLOAD_MB')|| define('MAX_UPLOAD_MB', 20);
 defined('ALLOWED_EXTS') || define('ALLOWED_EXTS', serialize(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'png', 'jpg', 'jpeg', 'gif']));

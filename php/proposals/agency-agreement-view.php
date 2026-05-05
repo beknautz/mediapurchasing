@@ -402,7 +402,7 @@ require_once __DIR__ . '/../includes/header.php';
         <button onclick="window.print()" class="btn btn-success btn-sm">
             <i class="bi bi-printer me-1"></i>Print
         </button>
-        <a href="/proposals/agency-agreement-pdf.php?id=<?= $id ?>" class="btn btn-danger btn-sm">
+        <a href="/proposals/agency-agreement-pdf.cfm<?= pdfToken($id) ?>" class="btn btn-danger btn-sm">
             <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
         </a>
         <span class="badge bg-<?= $statusColor ?> ms-1"><?= h($statusLabel) ?></span>
