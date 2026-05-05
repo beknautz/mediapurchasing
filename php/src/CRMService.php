@@ -183,6 +183,7 @@ class CRMService extends BaseService
     {
         $sql    = 'SELECT id, company_name, contact_name,
                           email, phone, address, billing_email, media_category,
+                          coverage_area, service_options,
                           demographics, media_kit,
                           is_active, created_at, updated_at
                      FROM vendors';
@@ -199,8 +200,18 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Decode JSON columns so callers get arrays
+        foreach ($rows as &$row) {
+            $row['coverage_area']   = !empty($row['coverage_area'])
+                ? json_decode($row['coverage_area'], true) : [];
+            $row['service_options'] = !empty($row['service_options'])
+                ? json_decode($row['service_options'], true) : [];
+        }
+        unset($row);
+
+        return $rows;
     }
 
     // -----------------------------------------------------------------------
@@ -255,6 +266,14 @@ class CRMService extends BaseService
         $mediaKit      = trim($data['media_kit']        ?? '');
         $isActive      = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
 
+        // JSON columns — accept array or already-encoded string
+        $coverageArea   = $data['coverage_area']   ?? [];
+        $serviceOptions = $data['service_options'] ?? [];
+        if (is_string($coverageArea))   $coverageArea   = json_decode($coverageArea, true) ?? [];
+        if (is_string($serviceOptions)) $serviceOptions = json_decode($serviceOptions, true) ?? [];
+        $coverageAreaJson   = !empty($coverageArea)   ? json_encode(array_values($coverageArea))   : null;
+        $serviceOptionsJson = !empty($serviceOptions) ? json_encode(array_values($serviceOptions)) : null;
+
         if ($companyName === '') {
             return ['success' => false, 'id' => 0, 'message' => 'Company name is required.'];
         }
@@ -263,24 +282,30 @@ class CRMService extends BaseService
             $stmt = $this->db->prepare(
                 'INSERT INTO vendors
                      (company_name, contact_name, email, phone,
-                      address, billing_email, media_category, demographics, media_kit,
+                      address, billing_email, media_category,
+                      coverage_area, service_options,
+                      demographics, media_kit,
                       is_active, created_at, updated_at)
                  VALUES
                      (:company_name, :contact_name, :email, :phone,
-                      :address, :billing_email, :media_category, :demographics, :media_kit,
+                      :address, :billing_email, :media_category,
+                      :coverage_area, :service_options,
+                      :demographics, :media_kit,
                       :is_active, NOW(), NOW())'
             );
             $stmt->execute([
-                ':company_name'   => $companyName,
-                ':contact_name'   => $contactName,
-                ':email'          => $email,
-                ':phone'          => $phone,
-                ':address'        => $address,
-                ':billing_email'  => $billingEmail,
-                ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
-                ':demographics'   => $demographics !== '' ? $demographics : null,
-                ':media_kit'      => $mediaKit !== '' ? $mediaKit : null,
-                ':is_active'      => $isActive,
+                ':company_name'    => $companyName,
+                ':contact_name'    => $contactName,
+                ':email'           => $email,
+                ':phone'           => $phone,
+                ':address'         => $address,
+                ':billing_email'   => $billingEmail,
+                ':media_category'  => $mediaCategory !== '' ? $mediaCategory : null,
+                ':coverage_area'   => $coverageAreaJson,
+                ':service_options' => $serviceOptionsJson,
+                ':demographics'    => $demographics !== '' ? $demographics : null,
+                ':media_kit'       => $mediaKit !== '' ? $mediaKit : null,
+                ':is_active'       => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -291,31 +316,35 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE vendors
-                SET company_name   = :company_name,
-                    contact_name   = :contact_name,
-                    email          = :email,
-                    phone          = :phone,
-                    address        = :address,
-                    billing_email  = :billing_email,
-                    media_category = :media_category,
-                    demographics   = :demographics,
-                    media_kit      = :media_kit,
-                    is_active      = :is_active,
-                    updated_at     = NOW()
+                SET company_name    = :company_name,
+                    contact_name    = :contact_name,
+                    email           = :email,
+                    phone           = :phone,
+                    address         = :address,
+                    billing_email   = :billing_email,
+                    media_category  = :media_category,
+                    coverage_area   = :coverage_area,
+                    service_options = :service_options,
+                    demographics    = :demographics,
+                    media_kit       = :media_kit,
+                    is_active       = :is_active,
+                    updated_at      = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':company_name'   => $companyName,
-            ':contact_name'   => $contactName,
-            ':email'          => $email,
-            ':phone'          => $phone,
-            ':address'        => $address,
-            ':billing_email'  => $billingEmail,
-            ':media_category' => $mediaCategory !== '' ? $mediaCategory : null,
-            ':demographics'   => $demographics !== '' ? $demographics : null,
-            ':media_kit'      => $mediaKit !== '' ? $mediaKit : null,
-            ':is_active'      => $isActive,
-            ':id'             => $id,
+            ':company_name'    => $companyName,
+            ':contact_name'    => $contactName,
+            ':email'           => $email,
+            ':phone'           => $phone,
+            ':address'         => $address,
+            ':billing_email'   => $billingEmail,
+            ':media_category'  => $mediaCategory !== '' ? $mediaCategory : null,
+            ':coverage_area'   => $coverageAreaJson,
+            ':service_options' => $serviceOptionsJson,
+            ':demographics'    => $demographics !== '' ? $demographics : null,
+            ':media_kit'       => $mediaKit !== '' ? $mediaKit : null,
+            ':is_active'       => $isActive,
+            ':id'              => $id,
         ]);
 
         $this->auditLog('update_vendor', 'vendor', $id, "Updated: {$companyName}");
