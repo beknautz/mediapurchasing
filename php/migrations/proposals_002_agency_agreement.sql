@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS agency_agreements (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- -----------------------------------------------------------------------
+-- Patch existing table: add budget_json if missing (idempotent).
+-- Needed when the table was created before the budget redesign.
+-- -----------------------------------------------------------------------
+ALTER TABLE agency_agreements
+    ADD COLUMN IF NOT EXISTS budget_json TEXT NULL
+        COMMENT 'JSON: [{"label":"TV","rows":[{"name":"KIMA","amount":850}]}]'
+        AFTER total_amount;
 
 -- -----------------------------------------------------------------------
 -- Agency branding settings
