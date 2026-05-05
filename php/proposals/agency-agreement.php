@@ -2,7 +2,7 @@
 /**
  * proposals/agency-agreement.php
  * Fast-fill Agency Agreement creator/editor.
- * Fill in client, services, pricing and budget — the legal boilerplate is fixed.
+ * Budget categories are fully dynamic — serialized to/from budget_json.
  */
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/config.php';
@@ -18,14 +18,11 @@ $ag     = [
     'client_city_state_zip' => '', 'client_phone' => '',
     'client_representative' => '', 'client_title' => '',
     'contract_start' => '', 'contract_end' => '',
-    'services' => AgencyAgreementService::DEFAULT_SERVICES,
+    'services'           => AgencyAgreementService::DEFAULT_SERVICES,
+    'budget_categories'  => AgencyAgreementService::DEFAULT_BUDGET_CATEGORIES,
     'deposit_amount' => '', 'deposit_due_description' => '',
     'balance_amount' => '', 'balance_due_description' => '',
-    'total_amount' => '',
-    'budget_tv'     => [['name'=>'','amount'=>'']],
-    'budget_radio'  => [['name'=>'','amount'=>'']],
-    'budget_news'   => [['name'=>'','amount'=>'']],
-    'budget_social' => [['name'=>'','amount'=>'']],
+    'total_amount'   => '',
     'contingency_monthly' => '', 'mileage_rate' => '0.60',
     'hourly_rate' => '80.00', 'additional_notes' => '',
 ];
@@ -48,20 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         array_map('trim', (array)($_POST['services'] ?? []))
     ));
 
-    // Parse budget rows [{name,amount}]
-    $parseBudget = function(string $key): array {
-        $names   = (array)($_POST[$key . '_name']   ?? []);
-        $amounts = (array)($_POST[$key . '_amount']  ?? []);
-        $rows = [];
-        foreach ($names as $i => $name) {
-            $name = trim($name);
-            $amt  = (float)($amounts[$i] ?? 0);
-            if ($name !== '' || $amt > 0) {
-                $rows[] = ['name' => $name, 'amount' => $amt];
-            }
-        }
-        return $rows;
-    };
+    // Parse dynamic budget categories from the JSON hidden field
+    $budgetCats = json_decode(trim($_POST['budget_json'] ?? '[]'), true);
+    if (!is_array($budgetCats)) $budgetCats = [];
 
     $postData = [
         'id'                     => $id,
@@ -77,15 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'contract_start'         => trim($_POST['contract_start']          ?? ''),
         'contract_end'           => trim($_POST['contract_end']            ?? ''),
         'services'               => $services,
+        'budget_categories'      => $budgetCats,
         'deposit_amount'         => trim($_POST['deposit_amount']          ?? ''),
         'deposit_due_description'=> trim($_POST['deposit_due_description'] ?? ''),
         'balance_amount'         => trim($_POST['balance_amount']          ?? ''),
         'balance_due_description'=> trim($_POST['balance_due_description'] ?? ''),
         'total_amount'           => trim($_POST['total_amount']            ?? ''),
-        'budget_tv'              => $parseBudget('budget_tv'),
-        'budget_radio'           => $parseBudget('budget_radio'),
-        'budget_news'            => $parseBudget('budget_news'),
-        'budget_social'          => $parseBudget('budget_social'),
         'contingency_monthly'    => trim($_POST['contingency_monthly']     ?? ''),
         'mileage_rate'           => trim($_POST['mileage_rate']            ?? '0.60'),
         'hourly_rate'            => trim($_POST['hourly_rate']             ?? '80.00'),
@@ -124,6 +107,24 @@ require_once __DIR__ . '/../includes/header.php';
     font-size: .7rem; font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: #6c757d; margin-bottom: .75rem;
 }
+.budget-category {
+    border: 1px solid #dee2e6;
+    border-radius: .5rem;
+    padding: .75rem;
+    margin-bottom: .75rem;
+    background: #fafbff;
+}
+.budget-category .cat-header {
+    display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem;
+}
+.budget-category .cat-label-input {
+    font-weight: 600;
+    font-size: .9rem;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    padding: .25rem .5rem;
+    flex: 1;
+}
 </style>
 
 <div class="mb-4">
@@ -145,8 +146,9 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endforeach; ?>
 
 <form method="POST" id="ag-form" autocomplete="off">
-<input type="hidden" name="id"     value="<?= (int)$ag['id'] ?>">
-<input type="hidden" name="status" value="<?= h($ag['status'] ?? 'draft') ?>">
+<input type="hidden" name="id"          value="<?= (int)$ag['id'] ?>">
+<input type="hidden" name="status"      id="status_hidden" value="<?= h($ag['status'] ?? 'draft') ?>">
+<input type="hidden" name="budget_json" id="budget_json_input" value="">
 
 <div class="row g-4">
 
@@ -166,7 +168,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Status</label>
-                        <select name="status" class="form-select" onchange="this.form.status.value=this.value">
+                        <select class="form-select" id="status_select">
                             <?php foreach (AgencyAgreementService::STATUS_LABELS as $val => $lbl): ?>
                             <option value="<?= h($val) ?>" <?= ($ag['status'] ?? 'draft') === $val ? 'selected' : '' ?>><?= h($lbl) ?></option>
                             <?php endforeach; ?>
@@ -340,48 +342,54 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Budget Breakdown -->
+        <!-- Budget Breakdown — dynamic categories -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="form-section-title mb-0">Budget Breakdown</div>
-                    <span class="fw-bold text-success small" id="budget-total-display">
-                        Budget Total: $<span id="budget-total">0.00</span>
-                    </span>
-                </div>
-
-                <?php
-                $budgetCats = [
-                    'budget_tv'     => ['TV',          'bi-tv-fill',          'primary'],
-                    'budget_radio'  => ['Radio',        'bi-broadcast',        'info'],
-                    'budget_news'   => ['Newspaper',    'bi-newspaper',        'secondary'],
-                    'budget_social' => ['Social Media', 'bi-share-fill',       'success'],
-                ];
-                foreach ($budgetCats as $catKey => [$catLabel, $catIcon, $catColor]):
-                    $rows = $ag[$catKey] ?? [['name'=>'','amount'=>'']];
-                    if (empty($rows)) $rows = [['name'=>'','amount'=>'']];
-                ?>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label fw-semibold mb-0">
-                            <i class="bi <?= $catIcon ?> me-1 text-<?= $catColor ?>"></i><?= $catLabel ?>
-                        </label>
-                        <button type="button" class="btn btn-xs btn-outline-secondary btn-sm"
-                                onclick="addBudgetRow('<?= $catKey ?>')">
-                            <i class="bi bi-plus"></i> Add Row
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="fw-bold text-success small">
+                            Total: $<span id="budget-total">0.00</span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addBudgetCategory()">
+                            <i class="bi bi-plus-circle me-1"></i>Add Category
                         </button>
                     </div>
-                    <div id="<?= $catKey ?>-rows">
-                    <?php foreach ($rows as $row): ?>
+                </div>
+
+                <div id="budget-categories-container">
+                <?php
+                $budgetCats = $ag['budget_categories'] ?? AgencyAgreementService::DEFAULT_BUDGET_CATEGORIES;
+                foreach ($budgetCats as $catIdx => $cat):
+                    $catLabel = $cat['label'] ?? '';
+                    $catRows  = $cat['rows']  ?? [['name'=>'','amount'=>0]];
+                    if (empty($catRows)) $catRows = [['name'=>'','amount'=>0]];
+                ?>
+                <div class="budget-category" data-cat-idx="<?= $catIdx ?>">
+                    <div class="cat-header">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                        <input type="text" class="cat-label-input"
+                               value="<?= h($catLabel) ?>"
+                               placeholder="Category name (e.g. TV, Radio)">
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1"
+                                onclick="addBudgetRow(this)">
+                            <i class="bi bi-plus"></i> Add Row
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-1"
+                                onclick="removeBudgetCategory(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="cat-rows">
+                    <?php foreach ($catRows as $row): ?>
                     <div class="budget-row">
-                        <input type="text"   name="<?= $catKey ?>_name[]"
-                               class="form-control form-control-sm"
-                               value="<?= h($row['name'] ?? '') ?>" placeholder="Station/Platform name">
-                        <div class="input-group input-group-sm" style="width:130px;">
+                        <input type="text" class="form-control form-control-sm row-name"
+                               value="<?= h($row['name'] ?? '') ?>"
+                               placeholder="Station / Platform name">
+                        <div class="input-group input-group-sm" style="width:140px;">
                             <span class="input-group-text">$</span>
-                            <input type="number" name="<?= $catKey ?>_amount[]"
-                                   class="form-control budget-amount"
-                                   value="<?= h($row['amount'] ?? '') ?>"
+                            <input type="number" class="form-control row-amount"
+                                   value="<?= h($row['amount'] ?? 0) ?>"
                                    step="0.01" min="0" placeholder="0.00"
                                    oninput="calcBudgetTotal()">
                         </div>
@@ -394,6 +402,8 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
                 <?php endforeach; ?>
+                </div><!-- /budget-categories-container -->
+
             </div>
         </div>
 
@@ -473,6 +483,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <dd class="col-7 fw-bold text-success" id="summary-total">—</dd>
                     <dt class="col-5 text-muted">Budget</dt>
                     <dd class="col-7" id="summary-budget">—</dd>
+                    <dt class="col-5 text-muted">Categories</dt>
+                    <dd class="col-7" id="summary-categories">—</dd>
                 </dl>
             </div>
         </div>
@@ -486,7 +498,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <li class="mb-1">Agency Agreement cover page with your filled details</li>
                     <li class="mb-1">Standard Terms (Contract Duration, Payment, Scope, Cancellation Policy)</li>
                     <li class="mb-1">Memorandum of Understanding with full legal terms</li>
-                    <li class="mb-1">Dual signature blocks (Enigma + Client)</li>
+                    <li class="mb-1">Dual signature blocks (Agency + Client)</li>
                     <li class="mb-1">Print-ready layout — use browser Print → Save as PDF</li>
                 </ul>
             </div>
@@ -522,34 +534,93 @@ function reindexServices() {
     updateSummary();
 }
 
-// ── Budget rows ─────────────────────────────────────────────────────────────
-function addBudgetRow(key) {
-    const container = document.getElementById(key + '-rows');
-    const div = document.createElement('div');
-    div.className = 'budget-row';
-    div.innerHTML = `
-        <input type="text"   name="${key}_name[]"   class="form-control form-control-sm" placeholder="Station/Platform name">
-        <div class="input-group input-group-sm" style="width:130px;">
+// ── Dynamic budget categories ───────────────────────────────────────────────
+function makeBudgetRowHTML() {
+    return `<div class="budget-row">
+        <input type="text" class="form-control form-control-sm row-name" placeholder="Station / Platform name">
+        <div class="input-group input-group-sm" style="width:140px;">
             <span class="input-group-text">$</span>
-            <input type="number" name="${key}_amount[]" class="form-control budget-amount"
-                   step="0.01" min="0" placeholder="0.00" oninput="calcBudgetTotal()">
+            <input type="number" class="form-control row-amount" step="0.01" min="0" placeholder="0.00" oninput="calcBudgetTotal()">
         </div>
         <button type="button" class="btn btn-sm btn-outline-danger"
                 onclick="this.closest('.budget-row').remove(); calcBudgetTotal()">
             <i class="bi bi-x"></i>
-        </button>`;
+        </button>
+    </div>`;
+}
+
+function addBudgetRow(btn) {
+    const cat = btn.closest('.budget-category');
+    const rowsDiv = cat.querySelector('.cat-rows');
+    const div = document.createElement('div');
+    div.innerHTML = makeBudgetRowHTML();
+    rowsDiv.appendChild(div.firstElementChild);
+    rowsDiv.querySelector('.row-name:last-of-type')?.focus();
+    calcBudgetTotal();
+}
+
+function addBudgetCategory() {
+    const container = document.getElementById('budget-categories-container');
+    const div = document.createElement('div');
+    div.className = 'budget-category';
+    div.innerHTML = `
+        <div class="cat-header">
+            <i class="bi bi-grip-vertical text-muted"></i>
+            <input type="text" class="cat-label-input" placeholder="Category name (e.g. TV, Radio)">
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="addBudgetRow(this)">
+                <i class="bi bi-plus"></i> Add Row
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-1" onclick="removeBudgetCategory(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="cat-rows">${makeBudgetRowHTML()}</div>`;
     container.appendChild(div);
-    div.querySelector('input').focus();
+    div.querySelector('.cat-label-input').focus();
+    updateSummary();
+}
+
+function removeBudgetCategory(btn) {
+    const cats = document.querySelectorAll('.budget-category');
+    if (cats.length <= 1) {
+        alert('You need at least one budget category.');
+        return;
+    }
+    btn.closest('.budget-category').remove();
+    calcBudgetTotal();
+}
+
+// ── Serialize budget to JSON hidden field ───────────────────────────────────
+function serializeBudgetToJSON() {
+    const cats = [];
+    document.querySelectorAll('.budget-category').forEach(catEl => {
+        const label = catEl.querySelector('.cat-label-input')?.value.trim() || '';
+        const rows  = [];
+        catEl.querySelectorAll('.budget-row').forEach(rowEl => {
+            const name = rowEl.querySelector('.row-name')?.value.trim() || '';
+            const amt  = parseFloat(rowEl.querySelector('.row-amount')?.value) || 0;
+            rows.push({ name, amount: amt });
+        });
+        if (label !== '') {
+            cats.push({ label, rows });
+        }
+    });
+    document.getElementById('budget_json_input').value = JSON.stringify(cats);
 }
 
 // ── Totals ──────────────────────────────────────────────────────────────────
 function calcBudgetTotal() {
     let t = 0;
-    document.querySelectorAll('.budget-amount').forEach(el => {
+    document.querySelectorAll('.row-amount').forEach(el => {
         t += parseFloat(el.value) || 0;
     });
     document.getElementById('budget-total').textContent = t.toFixed(2);
-    document.getElementById('summary-budget').textContent = '$' + t.toLocaleString('en-US', {minimumFractionDigits:2});
+    document.getElementById('summary-budget').textContent =
+        '$' + t.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    const cats = document.querySelectorAll('.budget-category').length;
+    document.getElementById('summary-categories').textContent =
+        cats + ' categor' + (cats === 1 ? 'y' : 'ies');
 }
 
 function calcTotal() {
@@ -565,11 +636,12 @@ function updateSummary() {
 
     const svcs = [...document.querySelectorAll('[name="services[]"]')]
         .map(i => i.value.trim()).filter(Boolean);
-    document.getElementById('summary-services').textContent = svcs.length ? svcs.length + ' services' : '—';
+    document.getElementById('summary-services').textContent =
+        svcs.length ? svcs.length + ' service' + (svcs.length === 1 ? '' : 's') : '—';
 
     const total = document.getElementById('total_amount')?.value;
     document.getElementById('summary-total').textContent =
-        total ? '$' + parseFloat(total).toLocaleString('en-US', {minimumFractionDigits:2}) : '—';
+        total ? '$' + parseFloat(total).toLocaleString('en-US', {minimumFractionDigits: 2}) : '—';
 
     calcBudgetTotal();
 }
@@ -583,14 +655,17 @@ document.getElementById('client-picker')?.addEventListener('change', function() 
     updateSummary();
 });
 
+// ── Form submit — serialize budget + sync status ────────────────────────────
+document.getElementById('ag-form').addEventListener('submit', function() {
+    serializeBudgetToJSON();
+    document.getElementById('status_hidden').value =
+        document.getElementById('status_select').value;
+});
+
 // ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     updateSummary();
     calcBudgetTotal();
-    // Mirror status select to hidden field
-    document.querySelector('select[name=status]')?.addEventListener('change', function() {
-        document.querySelector('input[name=status]').value = this.value;
-    });
 });
 </script>
 

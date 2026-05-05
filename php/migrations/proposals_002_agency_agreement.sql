@@ -1,7 +1,10 @@
 -- Migration: proposals_002_agency_agreement.sql
--- Adds agency_agreements table for the fast-fill Agency Agreement document type.
+-- Adds agency_agreements table and agency branding settings to workflow_settings.
 -- Run once against the production database.
 
+-- -----------------------------------------------------------------------
+-- Agency Agreements table
+-- -----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS agency_agreements (
     id                      INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
     title                   VARCHAR(255)  NOT NULL DEFAULT '',
@@ -22,7 +25,6 @@ CREATE TABLE IF NOT EXISTS agency_agreements (
     contract_end            DATE          NULL,
 
     -- Marketing services (JSON array of strings)
-    -- e.g. ["Graphic Design","TV/Radio Production","Social Media Creative(s)","Media Buying"]
     services_json           TEXT          NULL,
 
     -- Pricing
@@ -32,18 +34,14 @@ CREATE TABLE IF NOT EXISTS agency_agreements (
     balance_due_description VARCHAR(500)  NOT NULL DEFAULT '',
     total_amount            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
 
-    -- Budget breakdown — JSON arrays of {"name":"KIMA","amount":850}
-    budget_tv_json          TEXT          NULL,
-    budget_radio_json       TEXT          NULL,
-    budget_newspaper_json   TEXT          NULL,
-    budget_social_json      TEXT          NULL,
+    -- Budget breakdown — fully dynamic categories
+    -- JSON: [{"label":"TV","rows":[{"name":"KIMA","amount":850}]}, ...]
+    budget_json             TEXT          NULL,
 
-    -- Additional line items (contingency, mileage note, etc.)
+    -- Additional terms
     contingency_monthly     DECIMAL(10,2) NULL,
     mileage_rate            DECIMAL(5,2)  NOT NULL DEFAULT 0.60,
     hourly_rate             DECIMAL(10,2) NOT NULL DEFAULT 80.00,
-
-    -- Free-text notes appended before terms
     additional_notes        TEXT          NULL,
 
     -- Tracking
@@ -58,3 +56,80 @@ CREATE TABLE IF NOT EXISTS agency_agreements (
     INDEX idx_aa_created   (created_at)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------
+-- Agency branding settings
+-- These appear in Admin → Settings under the "Agency Branding" group.
+-- -----------------------------------------------------------------------
+INSERT INTO workflow_settings (setting_key, setting_value, setting_label, setting_type, setting_group, help_text, sort_order)
+VALUES
+    ('agency_name',
+     'Enigma, Inc. DBA Enigma Marketing',
+     'Agency Name',
+     'text',
+     'Agency Branding',
+     'Full legal name shown on all contracts and documents.',
+     100),
+
+    ('agency_dba',
+     'Enigma Marketing',
+     'DBA / Trade Name',
+     'text',
+     'Agency Branding',
+     'Doing-business-as name used in short references.',
+     101),
+
+    ('agency_address',
+     '3601 W Washington STE 130',
+     'Street Address',
+     'text',
+     'Agency Branding',
+     'Agency street address printed on contracts.',
+     102),
+
+    ('agency_city_state_zip',
+     'Yakima, WA 98903',
+     'City, State, Zip',
+     'text',
+     'Agency Branding',
+     '',
+     103),
+
+    ('agency_phone',
+     '509-452-3733',
+     'Phone Number',
+     'text',
+     'Agency Branding',
+     '',
+     104),
+
+    ('agency_signer_name',
+     'Duane Gordon',
+     'Authorized Signer Name',
+     'text',
+     'Agency Branding',
+     'Name printed on contract signature lines.',
+     105),
+
+    ('agency_signer_title',
+     'Managing Partner',
+     'Authorized Signer Title',
+     'text',
+     'Agency Branding',
+     '',
+     106),
+
+    ('agency_logo_url',
+     '',
+     'Logo URL',
+     'text',
+     'Agency Branding',
+     'Publicly accessible URL or server path to your logo (e.g. /uploads/logo.png). Shown at the top of printed documents. Leave blank to use text-only header.',
+     107)
+
+ON DUPLICATE KEY UPDATE
+    setting_label = VALUES(setting_label),
+    setting_group = VALUES(setting_group),
+    help_text     = VALUES(help_text),
+    sort_order    = VALUES(sort_order);

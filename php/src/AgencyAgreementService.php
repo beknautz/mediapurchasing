@@ -3,10 +3,11 @@
  * src/AgencyAgreementService.php
  * CRUD for the Agency Agreement document type.
  *
- * Each agreement stores client details, a list of marketing services,
- * a pricing section, and a four-category budget breakdown table.
- * The heavy legal boilerplate (Terms + MOU) is rendered statically in the
- * view; only the variable fields are stored in the DB.
+ * Budget categories are fully dynamic — stored as a single budget_json column:
+ *   [{"label":"TV","rows":[{"name":"KIMA","amount":850}]}, ...]
+ *
+ * Agency branding (name, logo, address, signer) is read from workflow_settings
+ * via $GLOBALS['appSettings'] and falls back to sensible defaults.
  */
 class AgencyAgreementService extends BaseService
 {
@@ -31,6 +32,32 @@ class AgencyAgreementService extends BaseService
         'Social Media Creative(s)',
         'Media Buying and Placement of all Marketing',
     ];
+
+    // Default budget categories — label + one empty row each
+    const DEFAULT_BUDGET_CATEGORIES = [
+        ['label' => 'TV',           'rows' => [['name' => '', 'amount' => 0]]],
+        ['label' => 'Radio',        'rows' => [['name' => '', 'amount' => 0]]],
+        ['label' => 'Newspaper',    'rows' => [['name' => '', 'amount' => 0]]],
+        ['label' => 'Social Media', 'rows' => [['name' => '', 'amount' => 0]]],
+    ];
+
+    // -----------------------------------------------------------------------
+    // Agency branding helpers — read from workflow_settings with fallbacks
+    // -----------------------------------------------------------------------
+    public function getBranding(): array
+    {
+        $s = $GLOBALS['appSettings'] ?? [];
+        return [
+            'name'         => $s['agency_name']          ?? 'Enigma, Inc. DBA Enigma Marketing',
+            'dba'          => $s['agency_dba']            ?? 'Enigma Marketing',
+            'address'      => $s['agency_address']        ?? '3601 W Washington STE 130',
+            'city_state_zip' => $s['agency_city_state_zip'] ?? 'Yakima, WA 98903',
+            'phone'        => $s['agency_phone']          ?? '509-452-3733',
+            'signer_name'  => $s['agency_signer_name']   ?? 'Duane Gordon',
+            'signer_title' => $s['agency_signer_title']  ?? 'Managing Partner',
+            'logo_url'     => $s['agency_logo_url']       ?? '',
+        ];
+    }
 
     // -----------------------------------------------------------------------
     // List
@@ -62,12 +89,13 @@ class AgencyAgreementService extends BaseService
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
 
-        // Decode JSON columns
-        $row['services']       = json_decode($row['services_json']       ?? '[]', true) ?: [];
-        $row['budget_tv']      = json_decode($row['budget_tv_json']      ?? '[]', true) ?: [];
-        $row['budget_radio']   = json_decode($row['budget_radio_json']   ?? '[]', true) ?: [];
-        $row['budget_news']    = json_decode($row['budget_newspaper_json']?? '[]', true) ?: [];
-        $row['budget_social']  = json_decode($row['budget_social_json']  ?? '[]', true) ?: [];
+        $row['services']          = json_decode($row['services_json'] ?? '[]', true) ?: [];
+        $row['budget_categories'] = json_decode($row['budget_json']   ?? '[]', true) ?: [];
+
+        // Ensure at least default categories if empty
+        if (empty($row['budget_categories'])) {
+            $row['budget_categories'] = self::DEFAULT_BUDGET_CATEGORIES;
+        }
 
         return $row;
     }
@@ -79,6 +107,22 @@ class AgencyAgreementService extends BaseService
     {
         $userId = (int)($_SESSION['user']['id'] ?? 0);
         $id     = (int)($d['id'] ?? 0);
+
+        // Sanitize budget categories
+        $budgetCats = [];
+        foreach ((array)($d['budget_categories'] ?? []) as $cat) {
+            $label = trim($cat['label'] ?? '');
+            if ($label === '') continue;
+            $rows = [];
+            foreach ((array)($cat['rows'] ?? []) as $row) {
+                $name = trim($row['name'] ?? '');
+                $amt  = (float)($row['amount'] ?? 0);
+                if ($name !== '' || $amt > 0) {
+                    $rows[] = ['name' => $name, 'amount' => $amt];
+                }
+            }
+            $budgetCats[] = ['label' => $label, 'rows' => $rows];
+        }
 
         $fields = [
             ':title'                  => trim($d['title']                 ?? ''),
@@ -98,10 +142,7 @@ class AgencyAgreementService extends BaseService
             ':balance_amount'         => (float)($d['balance_amount']     ?? 0),
             ':balance_due_description'=> trim($d['balance_due_description']?? ''),
             ':total_amount'           => (float)($d['total_amount']       ?? 0),
-            ':budget_tv_json'         => json_encode($d['budget_tv']      ?? []),
-            ':budget_radio_json'      => json_encode($d['budget_radio']   ?? []),
-            ':budget_newspaper_json'  => json_encode($d['budget_news']    ?? []),
-            ':budget_social_json'     => json_encode($d['budget_social']  ?? []),
+            ':budget_json'            => json_encode($budgetCats),
             ':contingency_monthly'    => ($d['contingency_monthly'] !== '' && $d['contingency_monthly'] !== null)
                                           ? (float)$d['contingency_monthly'] : null,
             ':mileage_rate'           => (float)($d['mileage_rate']       ?? 0.60),
@@ -151,15 +192,13 @@ class AgencyAgreementService extends BaseService
     }
 
     // -----------------------------------------------------------------------
-    // Helpers
+    // Budget total
     // -----------------------------------------------------------------------
-
-    /** Sum all budget line items across all four categories */
     public function budgetTotal(array $agreement): float
     {
         $total = 0.0;
-        foreach (['budget_tv','budget_radio','budget_news','budget_social'] as $cat) {
-            foreach ($agreement[$cat] ?? [] as $row) {
+        foreach ($agreement['budget_categories'] ?? [] as $cat) {
+            foreach ($cat['rows'] ?? [] as $row) {
                 $total += (float)($row['amount'] ?? 0);
             }
         }
