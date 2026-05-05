@@ -123,10 +123,15 @@ require_once __DIR__ . '/../includes/header.php';
         <h2 class="mb-0"><i class="bi bi-shop me-2 text-primary"></i>Vendors</h2>
         <p class="text-muted mb-0 small">Manage media vendors, contact info, coverage areas, and service options.</p>
     </div>
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vendorModal"
-            onclick="resetVendorForm()">
-        <i class="bi bi-plus-circle-fill me-1"></i>Add Vendor
-    </button>
+    <div class="d-flex gap-2">
+        <a href="/admin/vendors-export.php" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
+        </a>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#vendorModal"
+                onclick="resetVendorForm()">
+            <i class="bi bi-plus-circle-fill me-1"></i>Add Vendor
+        </button>
+    </div>
 </div>
 
 <?php $successMsg = flash('success'); if ($successMsg): ?>
