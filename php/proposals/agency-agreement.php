@@ -512,9 +512,9 @@ require_once __DIR__ . '/../includes/header.php';
                    target="_blank" class="btn btn-outline-success">
                     <i class="bi bi-eye me-1"></i>View / Print
                 </a>
-                <a href="/proposals/agency-agreement-pdf.cfm?id=<?= (int)$id ?>"
+                <a href="/proposals/agency-agreement-view.php?id=<?= (int)$id ?>"
                    target="_blank" class="btn btn-outline-danger">
-                    <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Print / Save PDF
                 </a>
                 <?php endif; ?>
                 <a href="/proposals/index.php" class="btn btn-outline-secondary">

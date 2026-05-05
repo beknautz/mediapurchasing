@@ -399,12 +399,9 @@ require_once __DIR__ . '/../includes/header.php';
         <a href="/proposals/agency-agreement.php?id=<?= $id ?>" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-pencil me-1"></i>Edit
         </a>
-        <button onclick="window.print()" class="btn btn-success btn-sm">
-            <i class="bi bi-printer me-1"></i>Print
+        <button onclick="window.print()" class="btn btn-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Print / Save PDF
         </button>
-        <a href="/proposals/agency-agreement-pdf.cfm?id=<?= (int)$id ?>" class="btn btn-danger btn-sm">
-            <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
-        </a>
         <span class="badge bg-<?= $statusColor ?> ms-1"><?= h($statusLabel) ?></span>
 
         <!-- Status change -->
