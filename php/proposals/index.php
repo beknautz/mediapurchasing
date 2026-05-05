@@ -4,8 +4,10 @@ require_once __DIR__ . '/../config/config.php';
 requireRole(['admin', 'buyer']);
 
 $proposalService = new ProposalService();
+$agreementService = new AgencyAgreementService();
 
 $page      = max(1, (int) ($_GET['page'] ?? 1));
+$tab       = $_GET['tab'] ?? 'proposals';
 $flashMsg  = flash('success');
 $errorMsg  = flash('error');
 
@@ -19,6 +21,14 @@ try {
     $totalPages = 1;
     $total      = 0;
     $errorMsg   = 'Could not load proposals. Run sql/migrate_proposals.sql first. (' . $e->getMessage() . ')';
+}
+
+$agreements = [];
+try {
+    $agResult   = $agreementService->getAll(1, 50);
+    $agreements = $agResult['data'] ?? [];
+} catch (Exception $e) {
+    // Table not yet migrated — silent
 }
 
 $pageTitle = 'Proposals — MediaBuy';
@@ -37,9 +47,12 @@ require_once __DIR__ . '/../includes/header.php';
             </ol>
         </nav>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         <a href="/proposals/templates.php" class="btn btn-outline-secondary">
             <i class="bi bi-file-earmark-text me-1"></i>Templates
+        </a>
+        <a href="/proposals/agency-agreement.php" class="btn btn-outline-primary">
+            <i class="bi bi-file-earmark-ruled me-1"></i>New Agency Agreement
         </a>
         <a href="/proposals/create.php" class="btn btn-primary">
             <i class="bi bi-plus-circle me-1"></i>New Proposal
@@ -59,6 +72,91 @@ require_once __DIR__ . '/../includes/header.php';
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
+
+<!-- Tab selector -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link <?= $tab !== 'agreements' ? 'active' : '' ?>" href="?tab=proposals">
+            <i class="bi bi-file-earmark-richtext me-1"></i>Proposals
+            <span class="badge bg-secondary ms-1"><?= $total ?></span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= $tab === 'agreements' ? 'active' : '' ?>" href="?tab=agreements">
+            <i class="bi bi-file-earmark-ruled me-1"></i>Agency Agreements
+            <?php if (!empty($agreements)): ?>
+            <span class="badge bg-primary ms-1"><?= count($agreements) ?></span>
+            <?php endif; ?>
+        </a>
+    </li>
+</ul>
+
+<?php if ($tab === 'agreements'): ?>
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <?php if (empty($agreements)): ?>
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-file-earmark-ruled fs-2 d-block mb-2 opacity-50"></i>
+            <div class="fw-semibold">No agency agreements yet.</div>
+            <a href="/proposals/agency-agreement.php" class="btn btn-sm btn-outline-primary mt-3">
+                <i class="bi bi-plus-circle me-1"></i>Create First Agreement
+            </a>
+        </div>
+        <?php else: ?>
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Title</th>
+                    <th>Client</th>
+                    <th>Status</th>
+                    <th class="text-end">Total</th>
+                    <th>Contract Start</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($agreements as $ag): ?>
+            <?php
+                $color = AgencyAgreementService::STATUS_COLORS[$ag['status']] ?? 'secondary';
+                $label = AgencyAgreementService::STATUS_LABELS[$ag['status']] ?? $ag['status'];
+            ?>
+            <tr>
+                <td>
+                    <a href="/proposals/agency-agreement-view.php?id=<?= (int)$ag['id'] ?>"
+                       class="fw-semibold text-decoration-none">
+                        <?= h($ag['title']) ?>
+                    </a>
+                </td>
+                <td class="text-muted small"><?= h($ag['client_name'] ?? '—') ?></td>
+                <td><span class="badge bg-<?= $color ?>"><?= h($label) ?></span></td>
+                <td class="text-end fw-semibold">
+                    $<?= number_format((float)$ag['total_amount'], 2) ?>
+                </td>
+                <td class="small text-muted">
+                    <?= $ag['contract_start'] ? h(date('M j, Y', strtotime($ag['contract_start']))) : '—' ?>
+                </td>
+                <td class="small text-muted text-nowrap">
+                    <?= h(date('M j, Y', strtotime($ag['created_at']))) ?>
+                </td>
+                <td class="text-end text-nowrap">
+                    <a href="/proposals/agency-agreement-view.php?id=<?= (int)$ag['id'] ?>"
+                       class="btn btn-sm btn-outline-secondary me-1">
+                        <i class="bi bi-eye me-1"></i>View
+                    </a>
+                    <a href="/proposals/agency-agreement.php?id=<?= (int)$ag['id'] ?>"
+                       class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+    </div>
+</div>
+<?php else: ?>
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -142,5 +240,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php endif; // tab ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
