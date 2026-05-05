@@ -2,13 +2,14 @@
 /**
  * proposals/agency-agreement.php
  * Fast-fill Agency Agreement creator/editor.
- * Budget categories are fully dynamic — serialized to/from budget_json.
+ * Payment schedule and budget categories are fully dynamic (JSON).
  */
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/config.php';
 requireRole(['admin', 'buyer']);
 
-$svc = new AgencyAgreementService();
+$svc      = new AgencyAgreementService();
+$branding = $svc->getBranding();
 
 $id     = (int)($_GET['id'] ?? 0);
 $isEdit = false;
@@ -18,11 +19,13 @@ $ag     = [
     'client_city_state_zip' => '', 'client_phone' => '',
     'client_representative' => '', 'client_title' => '',
     'contract_start' => '', 'contract_end' => '',
-    'services'           => AgencyAgreementService::DEFAULT_SERVICES,
-    'budget_categories'  => AgencyAgreementService::DEFAULT_BUDGET_CATEGORIES,
-    'deposit_amount' => '', 'deposit_due_description' => '',
-    'balance_amount' => '', 'balance_due_description' => '',
-    'total_amount'   => '',
+    'services'          => AgencyAgreementService::DEFAULT_SERVICES,
+    'payment_schedule'  => [
+        ['label' => 'Deposit',  'amount' => '', 'due' => ''],
+        ['label' => 'Balance',  'amount' => '', 'due' => ''],
+    ],
+    'budget_categories' => AgencyAgreementService::DEFAULT_BUDGET_CATEGORIES,
+    'total_amount'      => '',
     'contingency_monthly' => '', 'mileage_rate' => '0.60',
     'hourly_rate' => '80.00', 'additional_notes' => '',
 ];
@@ -40,12 +43,15 @@ $errors  = [];
 // ── POST ──────────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Parse services: array of non-empty strings
     $services = array_values(array_filter(
         array_map('trim', (array)($_POST['services'] ?? []))
     ));
 
-    // Parse dynamic budget categories from the JSON hidden field
+    // Dynamic payment schedule from hidden JSON field
+    $paymentSchedule = json_decode(trim($_POST['payment_schedule_json'] ?? '[]'), true);
+    if (!is_array($paymentSchedule)) $paymentSchedule = [];
+
+    // Dynamic budget categories from hidden JSON field
     $budgetCats = json_decode(trim($_POST['budget_json'] ?? '[]'), true);
     if (!is_array($budgetCats)) $budgetCats = [];
 
@@ -63,16 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'contract_start'         => trim($_POST['contract_start']          ?? ''),
         'contract_end'           => trim($_POST['contract_end']            ?? ''),
         'services'               => $services,
+        'payment_schedule'       => $paymentSchedule,
         'budget_categories'      => $budgetCats,
-        'deposit_amount'         => trim($_POST['deposit_amount']          ?? ''),
-        'deposit_due_description'=> trim($_POST['deposit_due_description'] ?? ''),
-        'balance_amount'         => trim($_POST['balance_amount']          ?? ''),
-        'balance_due_description'=> trim($_POST['balance_due_description'] ?? ''),
         'total_amount'           => trim($_POST['total_amount']            ?? ''),
         'contingency_monthly'    => trim($_POST['contingency_monthly']     ?? ''),
         'mileage_rate'           => trim($_POST['mileage_rate']            ?? '0.60'),
         'hourly_rate'            => trim($_POST['hourly_rate']             ?? '80.00'),
         'additional_notes'       => trim($_POST['additional_notes']        ?? ''),
+        // Legacy fields kept for DB compat
+        'deposit_amount'         => 0,
+        'deposit_due_description'=> '',
+        'balance_amount'         => 0,
+        'balance_due_description'=> '',
     ];
 
     if ($postData['title'] === '')        $errors[] = 'Document title is required.';
@@ -89,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Repopulate on error
     $ag     = $postData + ['id' => $id];
     $isEdit = $id > 0;
 }
@@ -99,32 +106,41 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <style>
-.budget-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .4rem; }
-.budget-row input[type=text]   { flex: 1; }
-.budget-row input[type=number] { width: 110px; }
-.section-divider { border-top: 2px solid #dee2e6; margin: 1.75rem 0 1.25rem; }
 .form-section-title {
     font-size: .7rem; font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: #6c757d; margin-bottom: .75rem;
 }
+/* Payment schedule rows */
+.payment-row {
+    display: grid;
+    grid-template-columns: 1fr 130px 1fr 36px;
+    gap: .4rem;
+    align-items: center;
+    margin-bottom: .4rem;
+}
+/* Budget category card */
 .budget-category {
     border: 1px solid #dee2e6;
     border-radius: .5rem;
-    padding: .75rem;
-    margin-bottom: .75rem;
+    padding: .65rem .75rem;
+    margin-bottom: .6rem;
     background: #fafbff;
 }
 .budget-category .cat-header {
-    display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem;
+    display: flex; gap: .5rem; align-items: center; margin-bottom: .4rem;
 }
-.budget-category .cat-label-input {
-    font-weight: 600;
-    font-size: .9rem;
-    border: 1px solid #ced4da;
-    border-radius: .375rem;
-    padding: .25rem .5rem;
-    flex: 1;
+.cat-label-input {
+    font-weight: 600; font-size: .9rem;
+    border: 1px solid #ced4da; border-radius: .375rem;
+    padding: .25rem .5rem; flex: 1;
 }
+.budget-row {
+    display: grid;
+    grid-template-columns: 1fr 130px 36px;
+    gap: .4rem; align-items: center; margin-bottom: .3rem;
+}
+/* Logo preview */
+#logo-preview-area img { max-height: 60px; }
 </style>
 
 <div class="mb-4">
@@ -146,16 +162,57 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endforeach; ?>
 
 <form method="POST" id="ag-form" autocomplete="off">
-<input type="hidden" name="id"          value="<?= (int)$ag['id'] ?>">
-<input type="hidden" name="status"      id="status_hidden" value="<?= h($ag['status'] ?? 'draft') ?>">
-<input type="hidden" name="budget_json" id="budget_json_input" value="">
+<input type="hidden" name="id"                   value="<?= (int)$ag['id'] ?>">
+<input type="hidden" name="status"               id="status_hidden"          value="<?= h($ag['status'] ?? 'draft') ?>">
+<input type="hidden" name="payment_schedule_json" id="payment_schedule_json" value="">
+<input type="hidden" name="budget_json"           id="budget_json_input"     value="">
 
 <div class="row g-4">
 
     <!-- ── LEFT COLUMN ──────────────────────────────────────────────── -->
     <div class="col-lg-8">
 
-        <!-- Document Title -->
+        <!-- ── Agency Branding / Logo ──────────────────────────────── -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <div class="form-section-title">Agency Logo</div>
+                <div class="d-flex align-items-start gap-3 flex-wrap">
+                    <!-- Current logo or placeholder -->
+                    <div id="logo-preview-area">
+                    <?php if (!empty($branding['logo_url'])): ?>
+                        <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
+                             style="max-height:64px;max-width:200px;object-fit:contain;
+                                    border:1px solid #dee2e6;border-radius:4px;padding:4px;">
+                    <?php else: ?>
+                        <div class="border border-dashed rounded d-flex align-items-center justify-content-center text-muted"
+                             style="width:160px;height:64px;font-size:.8rem;">
+                            <i class="bi bi-image me-1"></i>No logo set
+                        </div>
+                    <?php endif; ?>
+                    </div>
+
+                    <!-- Upload form (separate from main form — HTMX) -->
+                    <div class="flex-grow-1">
+                        <label class="form-label small fw-semibold mb-1">Upload new logo</label>
+                        <input type="file" id="logo-file-input" accept="image/*" class="form-control form-control-sm"
+                               style="max-width:320px;"
+                               hx-post="/proposals/actions/upload-logo.php"
+                               hx-encoding="multipart/form-data"
+                               hx-include="#logo-file-input"
+                               hx-target="#logo-preview-area"
+                               hx-swap="innerHTML"
+                               hx-trigger="change"
+                               name="logo_file">
+                        <div class="form-text">JPEG, PNG, SVG — max 2 MB. Applies globally to all agreements.</div>
+                        <?php if (!empty($branding['logo_url'])): ?>
+                        <div class="small text-muted mt-1 font-monospace"><?= h($branding['logo_url']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Document Title & Status ─────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="form-section-title">Document</div>
@@ -178,7 +235,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Client Info -->
+        <!-- ── Client Info ─────────────────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="form-section-title">Client Information</div>
@@ -189,8 +246,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <select id="client-picker" class="form-select form-select-sm">
                         <option value="">— select to pre-fill fields —</option>
                         <?php foreach ($clients as $c): ?>
-                        <option value="<?= (int)$c['id'] ?>"
-                                data-name="<?= h($c['company_name']) ?>">
+                        <option value="<?= (int)$c['id'] ?>" data-name="<?= h($c['company_name']) ?>">
                             <?= h($c['company_name']) ?>
                         </option>
                         <?php endforeach; ?>
@@ -235,7 +291,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Contract Dates -->
+        <!-- ── Contract Dates ──────────────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="form-section-title">Contract Dates</div>
@@ -249,13 +305,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-semibold">End Date</label>
                         <input type="date" name="contract_end" class="form-control"
                                value="<?= h($ag['contract_end'] ?? '') ?>">
-                        <div class="form-text">Leave blank to use "12 months after signing"</div>
+                        <div class="form-text">Leave blank for "12 months after signing"</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Marketing Services -->
+        <!-- ── Marketing Services ──────────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -282,74 +338,66 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Pricing -->
+        <!-- ── Payment Schedule ────────────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
-                <div class="form-section-title">Pricing</div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Deposit Amount</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" name="deposit_amount" id="deposit_amount"
-                                   class="form-control" step="0.01" min="0"
-                                   value="<?= h($ag['deposit_amount']) ?>"
-                                   oninput="calcTotal()">
-                        </div>
-                    </div>
-                    <div class="col-md-9">
-                        <label class="form-label fw-semibold">Deposit Due</label>
-                        <input type="text" name="deposit_due_description" class="form-control"
-                               value="<?= h($ag['deposit_due_description']) ?>"
-                               placeholder="e.g. due on January 4, 2025">
-                    </div>
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Balance Amount</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" name="balance_amount" id="balance_amount"
-                                   class="form-control" step="0.01" min="0"
-                                   value="<?= h($ag['balance_amount']) ?>"
-                                   oninput="calcTotal()">
-                        </div>
-                    </div>
-                    <div class="col-md-9">
-                        <label class="form-label fw-semibold">Balance Due</label>
-                        <input type="text" name="balance_due_description" class="form-control"
-                               value="<?= h($ag['balance_due_description']) ?>"
-                               placeholder="e.g. upon completion of event, no later than February 21, 2025">
-                    </div>
-                </div>
-                <div class="row g-2 align-items-center">
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Total</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" name="total_amount" id="total_amount"
-                                   class="form-control fw-bold" step="0.01" min="0"
-                                   value="<?= h($ag['total_amount']) ?>">
-                        </div>
-                    </div>
-                    <div class="col-md-9 pt-3">
-                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                onclick="calcTotal()">
-                            <i class="bi bi-calculator me-1"></i>Auto-sum deposit + balance
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="form-section-title mb-0">Payment Schedule</div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="fw-bold text-success small">
+                            Total: $<span id="payment-total">0.00</span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addPaymentRow()">
+                            <i class="bi bi-plus me-1"></i>Add Payment
                         </button>
                     </div>
+                </div>
+                <!-- Column headers -->
+                <div class="payment-row mb-1" style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6c757d;">
+                    <span>Label</span><span>Amount</span><span>Due / Description</span><span></span>
+                </div>
+                <div id="payment-rows">
+                <?php
+                $paySchedule = $ag['payment_schedule'] ?? [
+                    ['label'=>'Deposit','amount'=>'','due'=>''],
+                    ['label'=>'Balance','amount'=>'','due'=>''],
+                ];
+                foreach ($paySchedule as $pi => $pitem): ?>
+                <div class="payment-row">
+                    <input type="text" class="form-control form-control-sm pay-label"
+                           value="<?= h($pitem['label'] ?? '') ?>" placeholder="e.g. Deposit">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control pay-amount"
+                               value="<?= h($pitem['amount'] ?? '') ?>"
+                               step="0.01" min="0" placeholder="0.00"
+                               oninput="calcPaymentTotal()">
+                    </div>
+                    <input type="text" class="form-control form-control-sm pay-due"
+                           value="<?= h($pitem['due'] ?? '') ?>"
+                           placeholder="e.g. due January 4, 2025">
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            onclick="removePaymentRow(this)">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <?php endforeach; ?>
+                </div>
+                <div class="mt-2 small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Total is calculated automatically from the sum of all payment amounts.
                 </div>
             </div>
         </div>
 
-        <!-- Budget Breakdown — dynamic categories -->
+        <!-- ── Budget Breakdown — dynamic categories ────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="form-section-title mb-0">Budget Breakdown</div>
                     <div class="d-flex gap-2 align-items-center">
                         <span class="fw-bold text-success small">
-                            Total: $<span id="budget-total">0.00</span>
+                            Budget: $<span id="budget-total">0.00</span>
                         </span>
                         <button type="button" class="btn btn-sm btn-outline-success" onclick="addBudgetCategory()">
                             <i class="bi bi-plus-circle me-1"></i>Add Category
@@ -360,20 +408,19 @@ require_once __DIR__ . '/../includes/header.php';
                 <div id="budget-categories-container">
                 <?php
                 $budgetCats = $ag['budget_categories'] ?? AgencyAgreementService::DEFAULT_BUDGET_CATEGORIES;
-                foreach ($budgetCats as $catIdx => $cat):
-                    $catLabel = $cat['label'] ?? '';
-                    $catRows  = $cat['rows']  ?? [['name'=>'','amount'=>0]];
+                foreach ($budgetCats as $cat):
+                    $catRows = $cat['rows'] ?? [['name'=>'','amount'=>0]];
                     if (empty($catRows)) $catRows = [['name'=>'','amount'=>0]];
                 ?>
-                <div class="budget-category" data-cat-idx="<?= $catIdx ?>">
+                <div class="budget-category">
                     <div class="cat-header">
                         <i class="bi bi-grip-vertical text-muted"></i>
                         <input type="text" class="cat-label-input"
-                               value="<?= h($catLabel) ?>"
+                               value="<?= h($cat['label'] ?? '') ?>"
                                placeholder="Category name (e.g. TV, Radio)">
                         <button type="button" class="btn btn-sm btn-outline-secondary ms-1"
                                 onclick="addBudgetRow(this)">
-                            <i class="bi bi-plus"></i> Add Row
+                            <i class="bi bi-plus"></i> Row
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-danger ms-1"
                                 onclick="removeBudgetCategory(this)">
@@ -384,9 +431,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php foreach ($catRows as $row): ?>
                     <div class="budget-row">
                         <input type="text" class="form-control form-control-sm row-name"
-                               value="<?= h($row['name'] ?? '') ?>"
-                               placeholder="Station / Platform name">
-                        <div class="input-group input-group-sm" style="width:140px;">
+                               value="<?= h($row['name'] ?? '') ?>" placeholder="Station / Platform">
+                        <div class="input-group input-group-sm">
                             <span class="input-group-text">$</span>
                             <input type="number" class="form-control row-amount"
                                    value="<?= h($row['amount'] ?? 0) ?>"
@@ -402,12 +448,11 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
                 <?php endforeach; ?>
-                </div><!-- /budget-categories-container -->
-
+                </div>
             </div>
         </div>
 
-        <!-- Additional Terms -->
+        <!-- ── Additional Terms ────────────────────────────────────── -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body">
                 <div class="form-section-title">Additional Terms</div>
@@ -467,6 +512,10 @@ require_once __DIR__ . '/../includes/header.php';
                    target="_blank" class="btn btn-outline-success">
                     <i class="bi bi-eye me-1"></i>View / Print
                 </a>
+                <a href="/proposals/agency-agreement-pdf.php?id=<?= (int)$id ?>"
+                   target="_blank" class="btn btn-outline-danger">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                </a>
                 <?php endif; ?>
                 <a href="/proposals/index.php" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left me-1"></i>Back
@@ -479,12 +528,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <dd class="col-7" id="summary-client">—</dd>
                     <dt class="col-5 text-muted">Services</dt>
                     <dd class="col-7" id="summary-services">—</dd>
+                    <dt class="col-5 text-muted">Payments</dt>
+                    <dd class="col-7" id="summary-payments">—</dd>
                     <dt class="col-5 text-muted">Total</dt>
                     <dd class="col-7 fw-bold text-success" id="summary-total">—</dd>
                     <dt class="col-5 text-muted">Budget</dt>
                     <dd class="col-7" id="summary-budget">—</dd>
-                    <dt class="col-5 text-muted">Categories</dt>
-                    <dd class="col-7" id="summary-categories">—</dd>
                 </dl>
             </div>
         </div>
@@ -495,11 +544,11 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="card-body small text-muted">
                 <ul class="ps-3 mb-0">
-                    <li class="mb-1">Agency Agreement cover page with your filled details</li>
-                    <li class="mb-1">Standard Terms (Contract Duration, Payment, Scope, Cancellation Policy)</li>
-                    <li class="mb-1">Memorandum of Understanding with full legal terms</li>
-                    <li class="mb-1">Dual signature blocks (Agency + Client)</li>
-                    <li class="mb-1">Print-ready layout — use browser Print → Save as PDF</li>
+                    <li class="mb-1">Branded letterhead with logo on all 3 pages</li>
+                    <li class="mb-1">Agency Agreement cover with services &amp; payment schedule</li>
+                    <li class="mb-1">Standard Terms and signature blocks</li>
+                    <li class="mb-1">Memorandum of Understanding</li>
+                    <li class="mb-1">Print or download as PDF</li>
                 </ul>
             </div>
         </div>
@@ -509,7 +558,7 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
-// ── Service list ───────────────────────────────────────────────────────────
+// ── Services ───────────────────────────────────────────────────────────────
 function addService() {
     const list = document.getElementById('services-list');
     const idx  = list.querySelectorAll('.service-row').length + 1;
@@ -525,7 +574,6 @@ function addService() {
     list.appendChild(div);
     div.querySelector('input').focus();
 }
-
 function reindexServices() {
     document.querySelectorAll('.service-row').forEach((row, i) => {
         const num = row.querySelector('span');
@@ -534,11 +582,55 @@ function reindexServices() {
     updateSummary();
 }
 
-// ── Dynamic budget categories ───────────────────────────────────────────────
+// ── Payment Schedule ────────────────────────────────────────────────────────
+function addPaymentRow() {
+    const container = document.getElementById('payment-rows');
+    const div = document.createElement('div');
+    div.className = 'payment-row';
+    div.innerHTML = `
+        <input type="text" class="form-control form-control-sm pay-label" placeholder="e.g. Second Payment">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control pay-amount" step="0.01" min="0" placeholder="0.00" oninput="calcPaymentTotal()">
+        </div>
+        <input type="text" class="form-control form-control-sm pay-due" placeholder="e.g. due February 1, 2025">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePaymentRow(this)">
+            <i class="bi bi-x"></i>
+        </button>`;
+    container.appendChild(div);
+    div.querySelector('.pay-label').focus();
+}
+function removePaymentRow(btn) {
+    const rows = document.querySelectorAll('#payment-rows .payment-row');
+    if (rows.length <= 1) { alert('At least one payment row is required.'); return; }
+    btn.closest('.payment-row').remove();
+    calcPaymentTotal();
+}
+function calcPaymentTotal() {
+    let total = 0;
+    document.querySelectorAll('.pay-amount').forEach(el => total += parseFloat(el.value) || 0);
+    document.getElementById('payment-total').textContent = total.toFixed(2);
+    document.getElementById('summary-total').textContent =
+        '$' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('summary-payments').textContent =
+        document.querySelectorAll('#payment-rows .payment-row').length + ' item(s)';
+}
+function serializePaymentSchedule() {
+    const items = [];
+    document.querySelectorAll('#payment-rows .payment-row').forEach(row => {
+        const label  = row.querySelector('.pay-label')?.value.trim()  || '';
+        const amount = parseFloat(row.querySelector('.pay-amount')?.value) || 0;
+        const due    = row.querySelector('.pay-due')?.value.trim()    || '';
+        items.push({ label, amount, due });
+    });
+    document.getElementById('payment_schedule_json').value = JSON.stringify(items);
+}
+
+// ── Budget categories ───────────────────────────────────────────────────────
 function makeBudgetRowHTML() {
     return `<div class="budget-row">
-        <input type="text" class="form-control form-control-sm row-name" placeholder="Station / Platform name">
-        <div class="input-group input-group-sm" style="width:140px;">
+        <input type="text" class="form-control form-control-sm row-name" placeholder="Station / Platform">
+        <div class="input-group input-group-sm">
             <span class="input-group-text">$</span>
             <input type="number" class="form-control row-amount" step="0.01" min="0" placeholder="0.00" oninput="calcBudgetTotal()">
         </div>
@@ -548,17 +640,13 @@ function makeBudgetRowHTML() {
         </button>
     </div>`;
 }
-
 function addBudgetRow(btn) {
-    const cat = btn.closest('.budget-category');
-    const rowsDiv = cat.querySelector('.cat-rows');
+    const rowsDiv = btn.closest('.budget-category').querySelector('.cat-rows');
     const div = document.createElement('div');
     div.innerHTML = makeBudgetRowHTML();
     rowsDiv.appendChild(div.firstElementChild);
-    rowsDiv.querySelector('.row-name:last-of-type')?.focus();
     calcBudgetTotal();
 }
-
 function addBudgetCategory() {
     const container = document.getElementById('budget-categories-container');
     const div = document.createElement('div');
@@ -568,7 +656,7 @@ function addBudgetCategory() {
             <i class="bi bi-grip-vertical text-muted"></i>
             <input type="text" class="cat-label-input" placeholder="Category name (e.g. TV, Radio)">
             <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="addBudgetRow(this)">
-                <i class="bi bi-plus"></i> Add Row
+                <i class="bi bi-plus"></i> Row
             </button>
             <button type="button" class="btn btn-sm btn-outline-danger ms-1" onclick="removeBudgetCategory(this)">
                 <i class="bi bi-trash"></i>
@@ -577,76 +665,50 @@ function addBudgetCategory() {
         <div class="cat-rows">${makeBudgetRowHTML()}</div>`;
     container.appendChild(div);
     div.querySelector('.cat-label-input').focus();
-    updateSummary();
 }
-
 function removeBudgetCategory(btn) {
-    const cats = document.querySelectorAll('.budget-category');
-    if (cats.length <= 1) {
-        alert('You need at least one budget category.');
-        return;
+    if (document.querySelectorAll('.budget-category').length <= 1) {
+        alert('At least one budget category is required.'); return;
     }
     btn.closest('.budget-category').remove();
     calcBudgetTotal();
 }
-
-// ── Serialize budget to JSON hidden field ───────────────────────────────────
-function serializeBudgetToJSON() {
+function calcBudgetTotal() {
+    let t = 0;
+    document.querySelectorAll('.row-amount').forEach(el => t += parseFloat(el.value) || 0);
+    document.getElementById('budget-total').textContent = t.toFixed(2);
+    document.getElementById('summary-budget').textContent =
+        '$' + t.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function serializeBudget() {
     const cats = [];
     document.querySelectorAll('.budget-category').forEach(catEl => {
         const label = catEl.querySelector('.cat-label-input')?.value.trim() || '';
         const rows  = [];
         catEl.querySelectorAll('.budget-row').forEach(rowEl => {
-            const name = rowEl.querySelector('.row-name')?.value.trim() || '';
-            const amt  = parseFloat(rowEl.querySelector('.row-amount')?.value) || 0;
-            rows.push({ name, amount: amt });
+            rows.push({
+                name:   rowEl.querySelector('.row-name')?.value.trim() || '',
+                amount: parseFloat(rowEl.querySelector('.row-amount')?.value) || 0,
+            });
         });
-        if (label !== '') {
-            cats.push({ label, rows });
-        }
+        if (label) cats.push({ label, rows });
     });
     document.getElementById('budget_json_input').value = JSON.stringify(cats);
 }
 
-// ── Totals ──────────────────────────────────────────────────────────────────
-function calcBudgetTotal() {
-    let t = 0;
-    document.querySelectorAll('.row-amount').forEach(el => {
-        t += parseFloat(el.value) || 0;
-    });
-    document.getElementById('budget-total').textContent = t.toFixed(2);
-    document.getElementById('summary-budget').textContent =
-        '$' + t.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-
-    const cats = document.querySelectorAll('.budget-category').length;
-    document.getElementById('summary-categories').textContent =
-        cats + ' categor' + (cats === 1 ? 'y' : 'ies');
-}
-
-function calcTotal() {
-    const dep = parseFloat(document.getElementById('deposit_amount').value)  || 0;
-    const bal = parseFloat(document.getElementById('balance_amount').value) || 0;
-    document.getElementById('total_amount').value = (dep + bal).toFixed(2);
-    updateSummary();
-}
-
+// ── Summary ─────────────────────────────────────────────────────────────────
 function updateSummary() {
-    const client = document.querySelector('[name=client_name]')?.value || '—';
-    document.getElementById('summary-client').textContent = client || '—';
-
+    document.getElementById('summary-client').textContent =
+        document.querySelector('[name=client_name]')?.value || '—';
     const svcs = [...document.querySelectorAll('[name="services[]"]')]
         .map(i => i.value.trim()).filter(Boolean);
     document.getElementById('summary-services').textContent =
         svcs.length ? svcs.length + ' service' + (svcs.length === 1 ? '' : 's') : '—';
-
-    const total = document.getElementById('total_amount')?.value;
-    document.getElementById('summary-total').textContent =
-        total ? '$' + parseFloat(total).toLocaleString('en-US', {minimumFractionDigits: 2}) : '—';
-
+    calcPaymentTotal();
     calcBudgetTotal();
 }
 
-// ── Client quick-fill ───────────────────────────────────────────────────────
+// ── Client quick-fill ────────────────────────────────────────────────────────
 document.getElementById('client-picker')?.addEventListener('change', function() {
     const opt = this.options[this.selectedIndex];
     if (!opt.value) return;
@@ -655,18 +717,16 @@ document.getElementById('client-picker')?.addEventListener('change', function() 
     updateSummary();
 });
 
-// ── Form submit — serialize budget + sync status ────────────────────────────
+// ── Form submit: serialize all JSON + sync status ────────────────────────────
 document.getElementById('ag-form').addEventListener('submit', function() {
-    serializeBudgetToJSON();
+    serializePaymentSchedule();
+    serializeBudget();
     document.getElementById('status_hidden').value =
         document.getElementById('status_select').value;
 });
 
-// ── Init ────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    updateSummary();
-    calcBudgetTotal();
-});
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => { updateSummary(); });
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

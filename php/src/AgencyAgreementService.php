@@ -89,12 +89,33 @@ class AgencyAgreementService extends BaseService
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
 
-        $row['services']          = json_decode($row['services_json'] ?? '[]', true) ?: [];
-        $row['budget_categories'] = json_decode($row['budget_json']   ?? '[]', true) ?: [];
+        $row['services']          = json_decode($row['services_json']          ?? '[]', true) ?: [];
+        $row['budget_categories'] = json_decode($row['budget_json']            ?? '[]', true) ?: [];
+        $row['payment_schedule']  = json_decode($row['payment_schedule_json']  ?? '[]', true) ?: [];
 
         // Ensure at least default categories if empty
         if (empty($row['budget_categories'])) {
             $row['budget_categories'] = self::DEFAULT_BUDGET_CATEGORIES;
+        }
+
+        // Back-fill payment schedule from legacy deposit/balance fields if empty
+        if (empty($row['payment_schedule'])) {
+            $schedule = [];
+            if ((float)($row['deposit_amount'] ?? 0) > 0) {
+                $schedule[] = [
+                    'label'  => 'Deposit',
+                    'amount' => (float)$row['deposit_amount'],
+                    'due'    => $row['deposit_due_description'] ?? '',
+                ];
+            }
+            if ((float)($row['balance_amount'] ?? 0) > 0) {
+                $schedule[] = [
+                    'label'  => 'Balance',
+                    'amount' => (float)$row['balance_amount'],
+                    'due'    => $row['balance_due_description'] ?? '',
+                ];
+            }
+            $row['payment_schedule'] = $schedule;
         }
 
         return $row;
@@ -124,6 +145,24 @@ class AgencyAgreementService extends BaseService
             $budgetCats[] = ['label' => $label, 'rows' => $rows];
         }
 
+        // Sanitize payment schedule
+        $paymentSchedule = [];
+        foreach ((array)($d['payment_schedule'] ?? []) as $item) {
+            $label  = trim($item['label']  ?? '');
+            $amount = (float)($item['amount'] ?? 0);
+            $due    = trim($item['due']    ?? '');
+            if ($label !== '' || $amount > 0) {
+                $paymentSchedule[] = ['label' => $label, 'amount' => $amount, 'due' => $due];
+            }
+        }
+
+        // Auto-compute total from payment schedule if provided; otherwise use explicit total
+        if (!empty($paymentSchedule)) {
+            $totalAmount = array_sum(array_column($paymentSchedule, 'amount'));
+        } else {
+            $totalAmount = (float)($d['total_amount'] ?? 0);
+        }
+
         $fields = [
             ':title'                  => trim($d['title']                 ?? ''),
             ':status'                 => $d['status']                     ?? 'draft',
@@ -137,11 +176,12 @@ class AgencyAgreementService extends BaseService
             ':contract_start'         => $d['contract_start']             ?: null,
             ':contract_end'           => $d['contract_end']               ?: null,
             ':services_json'          => json_encode($d['services']       ?? []),
+            ':payment_schedule_json'  => json_encode($paymentSchedule),
             ':deposit_amount'         => (float)($d['deposit_amount']     ?? 0),
             ':deposit_due_description'=> trim($d['deposit_due_description']?? ''),
             ':balance_amount'         => (float)($d['balance_amount']     ?? 0),
             ':balance_due_description'=> trim($d['balance_due_description']?? ''),
-            ':total_amount'           => (float)($d['total_amount']       ?? 0),
+            ':total_amount'           => $totalAmount,
             ':budget_json'            => json_encode($budgetCats),
             ':contingency_monthly'    => ($d['contingency_monthly'] !== '' && $d['contingency_monthly'] !== null)
                                           ? (float)$d['contingency_monthly'] : null,
@@ -203,6 +243,16 @@ class AgencyAgreementService extends BaseService
             }
         }
         return $total;
+    }
+
+    // -----------------------------------------------------------------------
+    // Update agency logo URL in workflow_settings
+    // -----------------------------------------------------------------------
+    public function updateLogoUrl(string $url): void
+    {
+        $this->db->prepare(
+            "UPDATE workflow_settings SET setting_value = :v WHERE setting_key = 'agency_logo_url'"
+        )->execute([':v' => $url]);
     }
 
     public function getClients(): array

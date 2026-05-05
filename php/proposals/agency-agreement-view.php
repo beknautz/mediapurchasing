@@ -176,7 +176,9 @@ require_once __DIR__ . '/../includes/header.php';
 .parties-box .party-detail { color: #555; line-height: 1.45; }
 
 /* ════════════════════════════════════════════════════
-   PRICING BOX
+   PAYMENT SCHEDULE / PRICING BOX
+   Handles any number of payment columns.
+   Last column always gets the dark "total" treatment.
    ════════════════════════════════════════════════════ */
 .pricing-box {
     display: flex;
@@ -185,36 +187,44 @@ require_once __DIR__ . '/../includes/header.php';
     border-radius: 6px;
     overflow: hidden;
     margin: 10px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .pricing-box .price-col {
     flex: 1;
-    padding: 10px 14px;
+    min-width: 0;           /* allow shrink when many cols */
+    padding: 10px 12px;
     border-right: 1px solid #dde2f0;
 }
 .pricing-box .price-col:last-child { border-right: none; }
 .pricing-box .price-label {
-    font-size: 7.5pt;
+    font-size: 7pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .07em;
     color: #888;
     margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .pricing-box .price-amount {
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: 700;
     color: #1a1a2e;
+    white-space: nowrap;
 }
 .pricing-box .price-due {
-    font-size: 8.5pt;
+    font-size: 7.5pt;
     color: #555;
     margin-top: 2px;
+    line-height: 1.3;
 }
 .pricing-box .price-col.total-col {
     background: #1a1a2e;
     color: #fff;
 }
-.pricing-box .total-col .price-label { color: #aab; }
+.pricing-box .total-col .price-label  { color: #aab; }
 .pricing-box .total-col .price-amount { color: #fff; }
 
 /* ════════════════════════════════════════════════════
@@ -353,7 +363,8 @@ require_once __DIR__ . '/../includes/header.php';
     .agency-header         { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .budget-cat-label      { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .budget-grand-total    { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .pricing-box .total-col{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pricing-box .total-col { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pricing-box { break-inside: avoid; page-break-inside: avoid; }
     .budget-cat-row:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .budget-cat-subtotal   { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .parties-box           { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -389,8 +400,11 @@ require_once __DIR__ . '/../includes/header.php';
             <i class="bi bi-pencil me-1"></i>Edit
         </a>
         <button onclick="window.print()" class="btn btn-success btn-sm">
-            <i class="bi bi-printer me-1"></i>Print / Save PDF
+            <i class="bi bi-printer me-1"></i>Print
         </button>
+        <a href="/proposals/agency-agreement-pdf.php?id=<?= $id ?>" class="btn btn-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+        </a>
         <span class="badge bg-<?= $statusColor ?> ms-1"><?= h($statusLabel) ?></span>
 
         <!-- Status change -->
@@ -510,32 +524,34 @@ require_once __DIR__ . '/../includes/header.php';
     </ol>
 
     <div class="section-heading">Pricing</div>
-    <?php if ($ag['deposit_amount'] > 0 || $ag['balance_amount'] > 0 || $ag['total_amount'] > 0): ?>
+    <?php
+    $paySchedule = $ag['payment_schedule'] ?? [];
+    $hasPayments = !empty($paySchedule);
+    ?>
+    <?php if ($hasPayments): ?>
     <div class="pricing-box">
-        <?php if ($ag['deposit_amount'] > 0): ?>
-        <div class="price-col">
-            <div class="price-label">Deposit</div>
-            <div class="price-amount"><?= $money($ag['deposit_amount']) ?></div>
-            <?php if ($ag['deposit_due_description']): ?>
-            <div class="price-due"><?= h($ag['deposit_due_description']) ?></div>
+        <?php foreach ($paySchedule as $pIdx => $pItem):
+            $isLast = $pIdx === count($paySchedule) - 1;
+        ?>
+        <div class="price-col <?= $isLast ? 'total-col' : '' ?>">
+            <div class="price-label"><?= h($pItem['label'] ?: 'Payment ' . ($pIdx + 1)) ?></div>
+            <div class="price-amount"><?= $money($pItem['amount'] ?? 0) ?></div>
+            <?php if (!empty($pItem['due'])): ?>
+            <div class="price-due"><?= h($pItem['due']) ?></div>
             <?php endif; ?>
         </div>
-        <?php endif; ?>
-        <?php if ($ag['balance_amount'] > 0): ?>
-        <div class="price-col">
-            <div class="price-label">Balance</div>
-            <div class="price-amount"><?= $money($ag['balance_amount']) ?></div>
-            <?php if ($ag['balance_due_description']): ?>
-            <div class="price-due"><?= h($ag['balance_due_description']) ?></div>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-        <div class="price-col total-col">
-            <div class="price-label">Total Due</div>
-            <div class="price-amount"><?= $money($ag['total_amount']) ?></div>
-            <div class="price-due">All marketing services</div>
-        </div>
+        <?php endforeach; ?>
     </div>
+    <p style="font-size:9pt;margin-top:4px;">
+        <strong>Total: <?= $money($ag['total_amount']) ?></strong>
+        &mdash; Client agrees to pay for the marketing services provided by Agency in
+        accordance with the payment schedule above.
+    </p>
+    <?php elseif ($ag['total_amount'] > 0): ?>
+    <p>
+        Client agrees to pay <strong><?= $money($ag['total_amount']) ?></strong> for the
+        marketing services provided.
+    </p>
     <?php else: ?>
     <p>Pricing to be determined per addendum.</p>
     <?php endif; ?>
