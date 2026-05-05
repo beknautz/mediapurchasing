@@ -48,6 +48,17 @@ const SERVICE_OPTIONS = [
 // Handle POST — add or edit vendor
 // ---------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    // ── Delete ──────────────────────────────────────────────────────────────
+    if (isset($_POST['action']) && $_POST['action'] === 'delete') {
+        $deleteId = (int)($_POST['id'] ?? 0);
+        if ($deleteId > 0) {
+            $crmService->deleteVendor($deleteId);
+            flash('success', 'Vendor deleted.');
+        }
+        redirect('/admin/vendors.php');
+    }
+
     $id            = !empty($_POST['id']) ? (int)$_POST['id'] : null;
     $company_name  = trim($_POST['company_name']  ?? '');
     $contact_name  = trim($_POST['contact_name']  ?? '');
@@ -219,17 +230,54 @@ require_once __DIR__ . '/../includes/header.php';
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                                            data-bs-toggle="modal" data-bs-target="#vendorModal"
-                                            onclick="editVendor(<?= (int)$vendor['id'] ?>, <?= htmlspecialchars(json_encode($vendor), ENT_QUOTES, 'UTF-8') ?>)">
-                                        <i class="bi bi-pencil-square"></i> Edit
-                                    </button>
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                data-bs-toggle="modal" data-bs-target="#vendorModal"
+                                                onclick="editVendor(<?= (int)$vendor['id'] ?>, <?= htmlspecialchars(json_encode($vendor), ENT_QUOTES, 'UTF-8') ?>)">
+                                            <i class="bi bi-pencil-square"></i> Edit
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                onclick="confirmDelete(<?= (int)$vendor['id'] ?>, <?= htmlspecialchars(json_encode($vendor['company_name']), ENT_QUOTES, 'UTF-8') ?>)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     Delete Confirmation Modal
+     ========================================================= -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content shadow">
+            <form method="post" action="/admin/vendors.php" id="deleteForm">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="id" id="deleteVendorId">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteModalLabel">
+                        <i class="bi bi-trash me-2"></i>Delete Vendor
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">Permanently delete:</p>
+                    <p class="fw-semibold" id="deleteVendorName"></p>
+                    <p class="text-muted small mb-0">This cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -429,6 +477,15 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+// ---------------------------------------------------------------------------
+// Delete confirmation
+// ---------------------------------------------------------------------------
+function confirmDelete(id, name) {
+    document.getElementById('deleteVendorId').value = id;
+    document.getElementById('deleteVendorName').textContent = name;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
+}
+
 // ---------------------------------------------------------------------------
 // Toggle the "Other" text field
 // ---------------------------------------------------------------------------

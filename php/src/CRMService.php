@@ -352,6 +352,17 @@ class CRMService extends BaseService
         return ['success' => true, 'id' => $id, 'message' => 'Vendor updated successfully.'];
     }
 
+    // -----------------------------------------------------------------------
+    // deleteVendor()
+    // Permanently removes a vendor by ID.
+    // -----------------------------------------------------------------------
+    public function deleteVendor(int $id): void
+    {
+        $stmt = $this->db->prepare('DELETE FROM vendors WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        $this->auditLog('delete_vendor', 'vendor', $id, "Deleted vendor id={$id}");
+    }
+
     // =========================================================================
     // EMAIL TEMPLATES
     // =========================================================================
