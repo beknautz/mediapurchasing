@@ -40,11 +40,15 @@ spl_autoload_register(function (string $class): void {
         return;
     }
 
-    // Masterminds\HTML5 — only used when isHtml5ParserEnabled = true.
-    // We disable it in Options, so this branch should never be hit.
-    // Guard here just in case to prevent a fatal.
+    // Masterminds\HTML5 — Dompdf calls this unconditionally in loadHtml()
+    // regardless of isHtml5ParserEnabled. Use our DOMDocument-backed stub.
     if (strncmp($class, 'Masterminds\\', 12) === 0) {
-        return; // silently skip — HTML5 parser is disabled
+        $rel  = str_replace('\\', '/', substr($class, 12));
+        $file = __DIR__ . '/dompdf-shims/Masterminds/' . $rel . '.php';
+        if (file_exists($file)) {
+            require_once $file;
+        }
+        return;
     }
 
 }, true, false); // append, non-prepend
