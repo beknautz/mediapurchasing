@@ -1,66 +1,57 @@
 <!---
     proposals/extract-client-pdf.cfm
     Accepts a multipart PDF upload, extracts all text via cfpdf,
-    and returns JSON: { success: true, text: "...", pages: N }
-    Called by admin/clients.php drag-drop PDF parser.
+    returns JSON: { success: true, text: "...", pages: N }
 --->
-<cfheader name="Content-Type" value="application/json; charset=utf-8">
-<cfheader name="X-Content-Type-Options" value="nosniff">
+<cfcontent type="application/json; charset=utf-8">
+<cfsetting showdebugoutput="false" enablecfoutputonly="true">
 
 <cftry>
-    <!--- Must be a file upload --->
-    <cfif NOT structKeyExists(form, "pdf") OR form.pdf EQ "">
+
+    <!--- Must have a file field --->
+    <cfif NOT structKeyExists(form, "pdf")>
         <cfoutput>{"success":false,"error":"No file received."}</cfoutput>
         <cfabort>
     </cfif>
 
-    <!--- Save to a unique temp path --->
-    <cfset tempDir  = getTempDirectory()>
-    <cfset tempName = "cpdf_" & createUUID() & ".pdf">
-
+    <!--- Upload to CF temp directory --->
     <cffile action="upload"
             fileField="pdf"
-            destination="#tempDir#"
-            nameConflict="makeUnique"
-            accept="application/pdf,application/x-pdf">
+            destination="#getTempDirectory()#"
+            nameConflict="makeUnique">
 
-    <cfset uploadedPath = cffile.serverDirectory & server.separator.file & cffile.serverFile>
+    <cfset uploadedPath = cffile.serverDirectory & "/" & cffile.serverFile>
 
-    <!--- Verify it really is a PDF (magic bytes %PDF) --->
-    <cffile action="readBinary" file="#uploadedPath#" variable="pdfBytes">
-    <cfif left(toString(charsetDecode(pdfBytes, "utf-8")), 4) NEQ "%PDF">
-        <cffile action="delete" file="#uploadedPath#">
-        <cfoutput>{"success":false,"error":"Uploaded file is not a valid PDF."}</cfoutput>
-        <cfabort>
-    </cfif>
-
-    <!--- Extract text from all pages --->
+    <!--- Extract text --->
     <cfpdf action="extractText"
            source="#uploadedPath#"
            name="rawText"
            type="string">
 
-    <!--- Count pages --->
-    <cfpdf action="getInfo"
-           source="#uploadedPath#"
-           name="pdfInfo">
+    <!--- Get page count separately, safely --->
+    <cfset pageCount = 0>
+    <cftry>
+        <cfpdf action="getInfo" source="#uploadedPath#" name="pdfInfo">
+        <cfset pageCount = val(pdfInfo.totalPages)>
+        <cfcatch></cfcatch>
+    </cftry>
 
-    <cfset pageCount = val(pdfInfo.totalPages ?: 0)>
+    <!--- Clean up temp file --->
+    <cftry>
+        <cffile action="delete" file="#uploadedPath#">
+        <cfcatch></cfcatch>
+    </cftry>
 
-    <!--- Clean up --->
-    <cffile action="delete" file="#uploadedPath#">
-
-    <!--- Return result --->
     <cfoutput>{"success":true,"text":#serializeJSON(rawText)#,"pages":#pageCount#}</cfoutput>
 
     <cfcatch type="any">
-        <!--- Try to clean up if file was created --->
+        <!--- Clean up if possible --->
         <cftry>
             <cfif isDefined("uploadedPath") AND fileExists(uploadedPath)>
                 <cffile action="delete" file="#uploadedPath#">
             </cfif>
             <cfcatch></cfcatch>
         </cftry>
-        <cfoutput>{"success":false,"error":#serializeJSON(cfcatch.message)#}</cfoutput>
+        <cfoutput>{"success":false,"error":#serializeJSON(cfcatch.message & " (" & cfcatch.type & ")")#}</cfoutput>
     </cfcatch>
 </cftry>
