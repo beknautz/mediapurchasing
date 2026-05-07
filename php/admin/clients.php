@@ -536,92 +536,52 @@ function processPdf(file) {
 
     fetch(PDF_ENDPOINT, { method: 'POST', body: fd })
         .then(r => r.json())
-        .then(data => {
-            if (!data.success) throw new Error(data.error || 'Extraction failed.');
-            const filled = populateFromText(data.text);
-            const pageStr = data.pages ? ` (${data.pages} page${data.pages !== 1 ? 's' : ''})` : '';
-            pdfSetState('Done', `Filled ${filled} field${filled !== 1 ? 's' : ''} from "${file.name}"${pageStr}`);
+        .then(resp => {
+            if (!resp.success) throw new Error(resp.error || 'Extraction failed.');
+            fillForm(resp.data);
+            pdfSetState('Done', `Fields filled from "${file.name}" — review before saving`);
         })
         .catch(err => pdfSetState('Error', err.message || 'Could not process PDF.'));
 }
 
 // ---------------------------------------------------------------------------
-// Field extraction — regex patterns applied to raw PDF text
+// Map Claude-extracted fields → form inputs
 // ---------------------------------------------------------------------------
-function populateFromText(text) {
-    const set   = (id, val) => { if (val) document.getElementById(id).value = val.trim(); };
-    let filled  = 0;
-    const mark  = (id, val) => { if (val && val.trim()) { set(id, val); filled++; } };
+function setField(id, val) {
+    if (val == null || val === '') return false;
+    const el = document.getElementById(id);
+    if (!el) return false;
+    el.value = val;
+    return true;
+}
 
-    // ── Emails ──────────────────────────────────────────────────────────────
-    const emails = [...new Set(
-        (text.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g) || [])
-    )];
-    mark('clientEmail', emails[0]);
-    mark('clientSecondaryEmail', emails[1]);
+function highlight(el) {
+    el.style.transition = 'background .3s';
+    el.style.background = '#d1fae5';
+    setTimeout(() => el.style.background = '', 2500);
+}
 
-    // ── Phone numbers ───────────────────────────────────────────────────────
-    const phones = [...new Set(
-        (text.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g) || [])
-            .map(p => p.trim())
-    )];
-    mark('clientPhone', phones[0]);
-    mark('clientSecondaryPhone', phones[1]);
+function fillForm(data) {
+    const fieldMap = {
+        'clientCompanyName':    data.company_name,
+        'clientContactName':    data.contact_name,
+        'clientAddress':        data.address,
+        'clientPhone':          data.phone,
+        'clientSecondaryPhone': data.secondary_phone,
+        'clientEmail':          data.email,
+        'clientSecondaryEmail': data.secondary_email,
+        'billingCompany':       data.billing_company,
+        'billingContact':       data.billing_contact,
+        'billingAddress':       data.billing_address,
+        'billingEmail':         data.billing_email,
+        'billingPhone':         data.billing_phone,
+    };
 
-    // ── Company name ────────────────────────────────────────────────────────
-    const coLabels = /(?:company|business|client|organization|firm|account)\s*[:\-]\s*([^\n\r]{2,80})/i;
-    const coMatch  = text.match(coLabels);
-    mark('clientCompanyName', coMatch ? coMatch[1] : null);
-
-    // ── Contact / person name ───────────────────────────────────────────────
-    const ctLabels = /(?:contact|name|attention|att\.?|representative|rep\.?|to)\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/;
-    const ctMatch  = text.match(ctLabels);
-    mark('clientContactName', ctMatch ? ctMatch[1] : null);
-
-    // ── Street address ──────────────────────────────────────────────────────
-    const addrMatch = text.match(
-        /\d{1,6}\s+[A-Za-z0-9 .]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Boulevard|Dr(?:ive)?|Rd|Road|Way|Ln|Lane|Ct|Court|Pl(?:ace)?|Pkwy|Suite|Ste)[^\n\r]{0,60}/i
-    );
-    mark('clientAddress', addrMatch ? addrMatch[0].replace(/\s+/g, ' ') : null);
-
-    // ── Billing section ─────────────────────────────────────────────────────
-    const billingSectionMatch = text.match(
-        /billing\s*(?:information|info|contact|address)?[\s:\-]*([\s\S]{10,600}?)(?=\n{2,}|accounting|invoice|$)/i
-    );
-    if (billingSectionMatch) {
-        const bs = billingSectionMatch[1];
-
-        const bEmails = (bs.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g) || [])
-            .filter(e => e !== document.getElementById('clientEmail').value);
-        mark('billingEmail', bEmails[0]);
-
-        const bPhones = (bs.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g) || [])
-            .map(p => p.trim())
-            .filter(p => p !== document.getElementById('clientPhone').value);
-        mark('billingPhone', bPhones[0]);
-
-        const bAddrMatch = bs.match(
-            /\d{1,6}\s+[A-Za-z0-9 .]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Dr(?:ive)?|Rd|Way|Ln|Ct|Pl(?:ace)?|Suite|Ste)[^\n\r]{0,60}/i
-        );
-        mark('billingAddress', bAddrMatch ? bAddrMatch[0].replace(/\s+/g, ' ') : null);
-
-        const bCoMatch = bs.match(/(?:company|bill\s*to|billing\s*company|payee)\s*[:\-]\s*([^\n\r]{2,80})/i);
-        mark('billingCompany', bCoMatch ? bCoMatch[1] : null);
-
-        const bCtMatch = bs.match(/(?:contact|accounting\s*contact|attn\.?|attention)\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i);
-        mark('billingContact', bCtMatch ? bCtMatch[1] : null);
-    }
-
-    // Highlight filled fields briefly
-    document.querySelectorAll('#clientForm input, #clientForm textarea').forEach(el => {
-        if (el.value && el.value !== el.defaultValue) {
-            el.style.transition = 'background .3s';
-            el.style.background = '#d1fae5';
-            setTimeout(() => el.style.background = '', 2000);
+    Object.entries(fieldMap).forEach(([id, val]) => {
+        if (setField(id, val)) {
+            highlight(document.getElementById(id));
         }
     });
-
-    return filled;
 }
 
 // ---------------------------------------------------------------------------
