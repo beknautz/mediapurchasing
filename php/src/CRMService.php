@@ -20,7 +20,11 @@ class CRMService extends BaseService
     public function getClients(string $search = ''): array
     {
         $sql    = 'SELECT id, company_name, contact_name,
-                          email, phone, address, notes, is_active,
+                          email, secondary_email, phone, secondary_phone,
+                          address, billing_same_as,
+                          billing_company, billing_contact, billing_address,
+                          billing_email, billing_phone,
+                          notes, is_active,
                           google_ads_customer_id, google_business_location,
                           created_at, updated_at
                      FROM clients';
@@ -83,16 +87,33 @@ class CRMService extends BaseService
     // -----------------------------------------------------------------------
     public function saveClient(array $data): array
     {
-        $id          = (int) ($data['id']           ?? 0);
-        $companyName = trim($data['company_name']    ?? '');
-        $contactName = trim($data['contact_name']    ?? '');
-        $email       = trim(strtolower($data['email'] ?? ''));
-        $phone       = trim($data['phone']           ?? '');
-        $address     = trim($data['address']         ?? '');
-        $notes       = trim($data['notes']            ?? '');
-        $googleAdsId  = preg_replace('/\D/', '', $data['google_ads_customer_id'] ?? '') ?: null;
-        $gbpLocation  = trim($data['google_business_location'] ?? '') ?: null;
-        $isActive     = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
+        $id              = (int) ($data['id']              ?? 0);
+        $companyName     = trim($data['company_name']      ?? '');
+        $contactName     = trim($data['contact_name']      ?? '');
+        $email           = trim(strtolower($data['email']  ?? ''));
+        $secondaryEmail  = trim(strtolower($data['secondary_email'] ?? '')) ?: null;
+        $phone           = trim($data['phone']             ?? '');
+        $secondaryPhone  = trim($data['secondary_phone']   ?? '') ?: null;
+        $address         = trim($data['address']           ?? '');
+        $billingSameAs   = (int)(bool)($data['billing_same_as'] ?? 0);
+        $billingCompany  = trim($data['billing_company']   ?? '') ?: null;
+        $billingContact  = trim($data['billing_contact']   ?? '') ?: null;
+        $billingAddress  = trim($data['billing_address']   ?? '') ?: null;
+        $billingEmail    = trim(strtolower($data['billing_email'] ?? '')) ?: null;
+        $billingPhone    = trim($data['billing_phone']     ?? '') ?: null;
+        $notes           = trim($data['notes']             ?? '');
+        $googleAdsId     = preg_replace('/\D/', '', $data['google_ads_customer_id'] ?? '') ?: null;
+        $gbpLocation     = trim($data['google_business_location'] ?? '') ?: null;
+        $isActive        = isset($data['is_active']) ? (int)(bool)$data['is_active'] : 1;
+
+        // If billing is same as client, mirror client fields
+        if ($billingSameAs) {
+            $billingCompany = $companyName;
+            $billingContact = $contactName;
+            $billingAddress = $address;
+            $billingEmail   = $email;
+            $billingPhone   = $phone;
+        }
 
         if ($companyName === '') {
             return ['success' => false, 'id' => 0, 'message' => 'Company name is required.'];
@@ -101,22 +122,34 @@ class CRMService extends BaseService
         if ($id === 0) {
             $stmt = $this->db->prepare(
                 'INSERT INTO clients
-                     (company_name, contact_name, email, phone,
-                      address, notes, google_ads_customer_id, google_business_location, is_active, created_at, updated_at)
+                     (company_name, contact_name, email, secondary_email, phone, secondary_phone,
+                      address, billing_same_as, billing_company, billing_contact,
+                      billing_address, billing_email, billing_phone,
+                      notes, google_ads_customer_id, google_business_location, is_active, created_at, updated_at)
                  VALUES
-                     (:company_name, :contact_name, :email, :phone,
-                      :address, :notes, :google_ads_customer_id, :google_business_location, :is_active, NOW(), NOW())'
+                     (:company_name, :contact_name, :email, :secondary_email, :phone, :secondary_phone,
+                      :address, :billing_same_as, :billing_company, :billing_contact,
+                      :billing_address, :billing_email, :billing_phone,
+                      :notes, :google_ads_customer_id, :google_business_location, :is_active, NOW(), NOW())'
             );
             $stmt->execute([
-                ':company_name'              => $companyName,
-                ':contact_name'              => $contactName,
-                ':email'                     => $email,
-                ':phone'                     => $phone,
-                ':address'                   => $address,
-                ':notes'                     => $notes,
-                ':google_ads_customer_id'    => $googleAdsId,
-                ':google_business_location'  => $gbpLocation,
-                ':is_active'                 => $isActive,
+                ':company_name'             => $companyName,
+                ':contact_name'             => $contactName,
+                ':email'                    => $email,
+                ':secondary_email'          => $secondaryEmail,
+                ':phone'                    => $phone,
+                ':secondary_phone'          => $secondaryPhone,
+                ':address'                  => $address,
+                ':billing_same_as'          => $billingSameAs,
+                ':billing_company'          => $billingCompany,
+                ':billing_contact'          => $billingContact,
+                ':billing_address'          => $billingAddress,
+                ':billing_email'            => $billingEmail,
+                ':billing_phone'            => $billingPhone,
+                ':notes'                    => $notes,
+                ':google_ads_customer_id'   => $googleAdsId,
+                ':google_business_location' => $gbpLocation,
+                ':is_active'                => $isActive,
             ]);
 
             $newId = $this->lastInsertId();
@@ -127,29 +160,45 @@ class CRMService extends BaseService
 
         $stmt = $this->db->prepare(
             'UPDATE clients
-                SET company_name              = :company_name,
-                    contact_name              = :contact_name,
-                    email                     = :email,
-                    phone                     = :phone,
-                    address                   = :address,
-                    notes                     = :notes,
-                    google_ads_customer_id    = :google_ads_customer_id,
-                    google_business_location  = :google_business_location,
-                    is_active                 = :is_active,
-                    updated_at                = NOW()
+                SET company_name             = :company_name,
+                    contact_name             = :contact_name,
+                    email                    = :email,
+                    secondary_email          = :secondary_email,
+                    phone                    = :phone,
+                    secondary_phone          = :secondary_phone,
+                    address                  = :address,
+                    billing_same_as          = :billing_same_as,
+                    billing_company          = :billing_company,
+                    billing_contact          = :billing_contact,
+                    billing_address          = :billing_address,
+                    billing_email            = :billing_email,
+                    billing_phone            = :billing_phone,
+                    notes                    = :notes,
+                    google_ads_customer_id   = :google_ads_customer_id,
+                    google_business_location = :google_business_location,
+                    is_active                = :is_active,
+                    updated_at               = NOW()
               WHERE id = :id'
         );
         $stmt->execute([
-            ':company_name'              => $companyName,
-            ':contact_name'              => $contactName,
-            ':email'                     => $email,
-            ':phone'                     => $phone,
-            ':address'                   => $address,
-            ':notes'                     => $notes,
-            ':google_ads_customer_id'    => $googleAdsId,
-            ':google_business_location'  => $gbpLocation,
-            ':is_active'                 => $isActive,
-            ':id'                        => $id,
+            ':company_name'             => $companyName,
+            ':contact_name'             => $contactName,
+            ':email'                    => $email,
+            ':secondary_email'          => $secondaryEmail,
+            ':phone'                    => $phone,
+            ':secondary_phone'          => $secondaryPhone,
+            ':address'                  => $address,
+            ':billing_same_as'          => $billingSameAs,
+            ':billing_company'          => $billingCompany,
+            ':billing_contact'          => $billingContact,
+            ':billing_address'          => $billingAddress,
+            ':billing_email'            => $billingEmail,
+            ':billing_phone'            => $billingPhone,
+            ':notes'                    => $notes,
+            ':google_ads_customer_id'   => $googleAdsId,
+            ':google_business_location' => $gbpLocation,
+            ':is_active'                => $isActive,
+            ':id'                       => $id,
         ]);
 
         $this->auditLog('update_client', 'client', $id, "Updated: {$companyName}");
