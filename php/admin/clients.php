@@ -493,7 +493,7 @@ function confirmDelete(id, name) {
 // ===========================================================================
 // PDF Drop Zone
 // ===========================================================================
-const PDF_ENDPOINT = '/proposals/extract-client-pdf.cfm';
+const PDF_ENDPOINT = '/admin/extract-client-pdf.php';
 
 function pdfDragOver(e) {
     e.preventDefault();
