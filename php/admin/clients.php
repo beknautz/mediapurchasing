@@ -234,6 +234,41 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <div class="modal-body">
 
+                    <!-- ── PDF DROP ZONE ── -->
+                    <div id="pdfDropZone"
+                         class="border border-2 border-dashed rounded-3 p-3 mb-4 text-center position-relative"
+                         style="border-color:#6c757d!important;cursor:pointer;transition:all .2s;"
+                         ondragover="pdfDragOver(event)"
+                         ondragleave="pdfDragLeave(event)"
+                         ondrop="pdfDrop(event)"
+                         onclick="document.getElementById('pdfFileInput').click()">
+
+                        <input type="file" id="pdfFileInput" accept="application/pdf"
+                               class="d-none" onchange="pdfFileSelected(this)">
+
+                        <div id="pdfDropIdle">
+                            <i class="bi bi-file-earmark-arrow-up fs-3 text-secondary d-block mb-1"></i>
+                            <p class="mb-0 fw-semibold text-secondary">Drag &amp; drop a client PDF here</p>
+                            <p class="mb-0 small text-muted">or click to browse — fields will be auto-filled from the document</p>
+                        </div>
+
+                        <div id="pdfDropWorking" class="d-none">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            <span class="text-primary fw-semibold">Extracting text from PDF…</span>
+                        </div>
+
+                        <div id="pdfDropDone" class="d-none">
+                            <i class="bi bi-check-circle-fill text-success fs-3 d-block mb-1"></i>
+                            <p class="mb-0 fw-semibold text-success" id="pdfDropDoneMsg"></p>
+                            <p class="mb-0 small text-muted">Review the fields below and adjust if needed.</p>
+                        </div>
+
+                        <div id="pdfDropError" class="d-none">
+                            <i class="bi bi-exclamation-triangle-fill text-danger fs-3 d-block mb-1"></i>
+                            <p class="mb-0 fw-semibold text-danger" id="pdfDropErrorMsg"></p>
+                        </div>
+                    </div>
+
                     <!-- ── CLIENT INFO ── -->
                     <div class="row g-3 mb-3">
 
@@ -455,6 +490,153 @@ function confirmDelete(id, name) {
 // ---------------------------------------------------------------------------
 // Table search
 // ---------------------------------------------------------------------------
+// ===========================================================================
+// PDF Drop Zone
+// ===========================================================================
+const PDF_ENDPOINT = '/proposals/extract-client-pdf.cfm';
+
+function pdfDragOver(e) {
+    e.preventDefault();
+    const z = document.getElementById('pdfDropZone');
+    z.style.borderColor  = '#0d6efd';
+    z.style.background   = '#f0f5ff';
+}
+function pdfDragLeave(e) {
+    const z = document.getElementById('pdfDropZone');
+    z.style.borderColor  = '';
+    z.style.background   = '';
+}
+function pdfDrop(e) {
+    e.preventDefault();
+    pdfDragLeave(e);
+    const file = e.dataTransfer.files[0];
+    if (file) processPdf(file);
+}
+function pdfFileSelected(input) {
+    if (input.files[0]) processPdf(input.files[0]);
+}
+
+function pdfSetState(state, msg) {
+    ['Idle','Working','Done','Error'].forEach(s =>
+        document.getElementById('pdfDrop' + s).classList.add('d-none'));
+    document.getElementById('pdfDrop' + state).classList.remove('d-none');
+    if (state === 'Done'  && msg) document.getElementById('pdfDropDoneMsg').textContent  = msg;
+    if (state === 'Error' && msg) document.getElementById('pdfDropErrorMsg').textContent = msg;
+}
+
+function processPdf(file) {
+    if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        pdfSetState('Error', 'Please drop a PDF file.');
+        return;
+    }
+    pdfSetState('Working');
+
+    const fd = new FormData();
+    fd.append('pdf', file);
+
+    fetch(PDF_ENDPOINT, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.error || 'Extraction failed.');
+            const filled = populateFromText(data.text);
+            const pageStr = data.pages ? ` (${data.pages} page${data.pages !== 1 ? 's' : ''})` : '';
+            pdfSetState('Done', `Filled ${filled} field${filled !== 1 ? 's' : ''} from "${file.name}"${pageStr}`);
+        })
+        .catch(err => pdfSetState('Error', err.message || 'Could not process PDF.'));
+}
+
+// ---------------------------------------------------------------------------
+// Field extraction — regex patterns applied to raw PDF text
+// ---------------------------------------------------------------------------
+function populateFromText(text) {
+    const set   = (id, val) => { if (val) document.getElementById(id).value = val.trim(); };
+    let filled  = 0;
+    const mark  = (id, val) => { if (val && val.trim()) { set(id, val); filled++; } };
+
+    // ── Emails ──────────────────────────────────────────────────────────────
+    const emails = [...new Set(
+        (text.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g) || [])
+    )];
+    mark('clientEmail', emails[0]);
+    mark('clientSecondaryEmail', emails[1]);
+
+    // ── Phone numbers ───────────────────────────────────────────────────────
+    const phones = [...new Set(
+        (text.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g) || [])
+            .map(p => p.trim())
+    )];
+    mark('clientPhone', phones[0]);
+    mark('clientSecondaryPhone', phones[1]);
+
+    // ── Company name ────────────────────────────────────────────────────────
+    const coLabels = /(?:company|business|client|organization|firm|account)\s*[:\-]\s*([^\n\r]{2,80})/i;
+    const coMatch  = text.match(coLabels);
+    mark('clientCompanyName', coMatch ? coMatch[1] : null);
+
+    // ── Contact / person name ───────────────────────────────────────────────
+    const ctLabels = /(?:contact|name|attention|att\.?|representative|rep\.?|to)\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/;
+    const ctMatch  = text.match(ctLabels);
+    mark('clientContactName', ctMatch ? ctMatch[1] : null);
+
+    // ── Street address ──────────────────────────────────────────────────────
+    const addrMatch = text.match(
+        /\d{1,6}\s+[A-Za-z0-9 .]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Boulevard|Dr(?:ive)?|Rd|Road|Way|Ln|Lane|Ct|Court|Pl(?:ace)?|Pkwy|Suite|Ste)[^\n\r]{0,60}/i
+    );
+    mark('clientAddress', addrMatch ? addrMatch[0].replace(/\s+/g, ' ') : null);
+
+    // ── Billing section ─────────────────────────────────────────────────────
+    const billingSectionMatch = text.match(
+        /billing\s*(?:information|info|contact|address)?[\s:\-]*([\s\S]{10,600}?)(?=\n{2,}|accounting|invoice|$)/i
+    );
+    if (billingSectionMatch) {
+        const bs = billingSectionMatch[1];
+
+        const bEmails = (bs.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g) || [])
+            .filter(e => e !== document.getElementById('clientEmail').value);
+        mark('billingEmail', bEmails[0]);
+
+        const bPhones = (bs.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g) || [])
+            .map(p => p.trim())
+            .filter(p => p !== document.getElementById('clientPhone').value);
+        mark('billingPhone', bPhones[0]);
+
+        const bAddrMatch = bs.match(
+            /\d{1,6}\s+[A-Za-z0-9 .]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Dr(?:ive)?|Rd|Way|Ln|Ct|Pl(?:ace)?|Suite|Ste)[^\n\r]{0,60}/i
+        );
+        mark('billingAddress', bAddrMatch ? bAddrMatch[0].replace(/\s+/g, ' ') : null);
+
+        const bCoMatch = bs.match(/(?:company|bill\s*to|billing\s*company|payee)\s*[:\-]\s*([^\n\r]{2,80})/i);
+        mark('billingCompany', bCoMatch ? bCoMatch[1] : null);
+
+        const bCtMatch = bs.match(/(?:contact|accounting\s*contact|attn\.?|attention)\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i);
+        mark('billingContact', bCtMatch ? bCtMatch[1] : null);
+    }
+
+    // Highlight filled fields briefly
+    document.querySelectorAll('#clientForm input, #clientForm textarea').forEach(el => {
+        if (el.value && el.value !== el.defaultValue) {
+            el.style.transition = 'background .3s';
+            el.style.background = '#d1fae5';
+            setTimeout(() => el.style.background = '', 2000);
+        }
+    });
+
+    return filled;
+}
+
+// ---------------------------------------------------------------------------
+// Reset drop zone when modal closes
+// ---------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('clientModal').addEventListener('hidden.bs.modal', function () {
+        pdfSetState('Idle');
+        document.getElementById('pdfFileInput').value = '';
+        const z = document.getElementById('pdfDropZone');
+        z.style.borderColor = '';
+        z.style.background  = '';
+    });
+});
+
 function filterTable(q, tableId) {
     q = q.toLowerCase();
     document.querySelectorAll('#' + tableId + ' tbody tr').forEach(r => {
