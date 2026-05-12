@@ -175,15 +175,15 @@ class PrintBidService extends BaseService
 
     // -----------------------------------------------------------------------
     // getVendorsForPrint()
-    // Returns vendors whose service_options JSON includes "Print Media".
+    // Returns vendors tagged "Printing" — actual print shops, not newspapers.
     // Falls back to all vendors if none matched.
     // -----------------------------------------------------------------------
     public function getVendorsForPrint(): array
     {
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
-              WHERE JSON_CONTAINS(service_options, '\"Print Media\"')
-                 OR service_options LIKE '%Print Media%'
+              WHERE JSON_CONTAINS(COALESCE(service_options,'[]'), '\"Printing\"')
+                 OR service_options LIKE '%\"Printing\"%'
            ORDER BY company_name"
         );
         $stmt->execute();
@@ -193,16 +193,15 @@ class PrintBidService extends BaseService
 
     // -----------------------------------------------------------------------
     // getVendorsForSignage()
-    // Returns vendors whose service_options JSON includes "Billboards" or
-    // whose company name contains "sign" (broad fallback).
+    // Returns vendors tagged "Signage" — sign shops, not billboard ad sellers.
+    // Falls back to all vendors if none matched.
     // -----------------------------------------------------------------------
     public function getVendorsForSignage(): array
     {
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
-              WHERE JSON_CONTAINS(service_options, '\"Billboards\"')
-                 OR service_options LIKE '%Billboards%'
-                 OR company_name LIKE '%sign%'
+              WHERE JSON_CONTAINS(COALESCE(service_options,'[]'), '\"Signage\"')
+                 OR service_options LIKE '%\"Signage\"%'
            ORDER BY company_name"
         );
         $stmt->execute();
