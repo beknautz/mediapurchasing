@@ -33,7 +33,8 @@ function navActive(string $path): string {
                 $marketingActive = str_contains($currentUri, '/campaigns')
                     || str_contains($currentUri, '/media-buys')
                     || str_contains($currentUri, '/ad-schedules')
-                    || str_contains($currentUri, '/budget-planner');
+                    || str_contains($currentUri, '/budget-planner')
+                    || str_contains($currentUri, '/print-bids');
                 $invoicingActive = str_contains($currentUri, '/approvals')
                     || str_contains($currentUri, '/billing');
                 ?>
@@ -80,6 +81,11 @@ function navActive(string $path): string {
                         <li>
                             <a class="dropdown-item <?= navActive('/budget-planner') ?>" href="/budget-planner/index.php">
                                 <i class="bi bi-robot me-2"></i>Budget Planner
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item <?= navActive('/print-bids') ?>" href="/print-bids/index.php">
+                                <i class="bi bi-printer me-2"></i>Print Bids
                             </a>
                         </li>
                         <li>
