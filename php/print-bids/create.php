@@ -10,12 +10,9 @@ $editId  = !empty($_GET['id']) ? (int)$_GET['id'] : null;
 $bid     = $editId ? $svc->getBid($editId) : null;
 $isEdit  = !empty($bid);
 
-// ── Vendor lists ──────────────────────────────────────────────────────────
-$printVendors   = $svc->getVendorsForPrint();
-$signageVendors = $svc->getVendorsForSignage();
-// If no tagged vendors found, fall back to all vendors
-if (empty($printVendors))   $printVendors   = $svc->getAllVendors();
-if (empty($signageVendors)) $signageVendors = $svc->getAllVendors();
+// ── Vendor lists — strictly tagged vendors only ───────────────────────────
+$printVendors   = $svc->getVendorsForPrint();   // tagged "Printing"
+$signageVendors = $svc->getVendorsForSignage();  // tagged "Signage"
 
 // ── Handle POST ───────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -189,19 +186,23 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
 
                     <div class="row g-3">
-                        <!-- Printers -->
+                        <!-- Printers — tagged "Printing" -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">
                                 Printer <span class="text-danger">*</span>
                                 <span class="text-muted small fw-normal">(select all that apply)</span>
                             </label>
                             <?php if (empty($printVendors)): ?>
-                                <p class="text-muted small">No print vendors found. <a href="/admin/vendors.php">Add vendors</a>.</p>
+                                <div class="text-muted small border rounded p-2">
+                                    No print shops found.
+                                    <a href="/admin/vendors.php">Tag vendors with "Printing"</a>.
+                                </div>
                             <?php else: ?>
                             <div class="vendor-list">
                                 <?php foreach ($printVendors as $v): ?>
-                                    <label>
-                                        <input type="checkbox" name="printer_vendor_ids[]"
+                                    <label class="d-flex align-items-center gap-2">
+                                        <input type="checkbox" class="form-check-input mt-0"
+                                               name="printer_vendor_ids[]"
                                                value="<?= (int)$v['id'] ?>"
                                                <?= in_array((int)$v['id'], $existingPrinterIds, true) ? 'checked' : '' ?>>
                                         <?= h($v['company_name']) ?>
@@ -211,19 +212,23 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </div>
 
-                        <!-- Signage vendors -->
+                        <!-- Signage shops — tagged "Signage" -->
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">
                                 Signage <span class="text-danger">*</span>
                                 <span class="text-muted small fw-normal">(select all that apply)</span>
                             </label>
                             <?php if (empty($signageVendors)): ?>
-                                <p class="text-muted small">No signage vendors found. <a href="/admin/vendors.php">Add vendors</a>.</p>
+                                <div class="text-muted small border rounded p-2">
+                                    No signage shops found.
+                                    <a href="/admin/vendors.php">Tag vendors with "Signage"</a>.
+                                </div>
                             <?php else: ?>
                             <div class="vendor-list">
                                 <?php foreach ($signageVendors as $v): ?>
-                                    <label>
-                                        <input type="checkbox" name="signage_vendor_ids[]"
+                                    <label class="d-flex align-items-center gap-2">
+                                        <input type="checkbox" class="form-check-input mt-0"
+                                               name="signage_vendor_ids[]"
                                                value="<?= (int)$v['id'] ?>"
                                                <?= in_array((int)$v['id'], $existingSignageIds, true) ? 'checked' : '' ?>>
                                         <?= h($v['company_name']) ?>
