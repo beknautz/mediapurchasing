@@ -182,31 +182,28 @@ class PrintBidService extends BaseService
     {
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
-              WHERE JSON_CONTAINS(COALESCE(service_options,'[]'), '\"Printing\"')
-                 OR service_options LIKE '%\"Printing\"%'
+              WHERE service_options LIKE '%Printing%'
+                AND is_active = 1
            ORDER BY company_name"
         );
         $stmt->execute();
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        return $rows ?: [];
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     // -----------------------------------------------------------------------
     // getVendorsForSignage()
     // Returns vendors tagged "Signage" — sign shops, not billboard ad sellers.
-    // Falls back to all vendors if none matched.
     // -----------------------------------------------------------------------
     public function getVendorsForSignage(): array
     {
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
-              WHERE JSON_CONTAINS(COALESCE(service_options,'[]'), '\"Signage\"')
-                 OR service_options LIKE '%\"Signage\"%'
+              WHERE service_options LIKE '%Signage%'
+                AND is_active = 1
            ORDER BY company_name"
         );
         $stmt->execute();
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        return $rows ?: [];
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     // -----------------------------------------------------------------------
