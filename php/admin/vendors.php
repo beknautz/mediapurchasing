@@ -125,6 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $vendors = $crmService->getVendors();
 
+// TEMP DEBUG — remove after diagnosis
+$_debugIds = array_column($vendors, 'id');
+error_log('VENDOR DEBUG: count=' . count($vendors) . ' ids=' . implode(',', $_debugIds));
+echo '<!-- VENDOR DEBUG: count=' . count($vendors) . ' ids=' . implode(',', $_debugIds) . ' -->';
+
 $pageTitle = 'Vendors — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
 ?>
