@@ -127,8 +127,17 @@ $vendors = $crmService->getVendors();
 
 // TEMP DEBUG — remove after diagnosis
 $_debugIds = array_column($vendors, 'id');
-error_log('VENDOR DEBUG: count=' . count($vendors) . ' ids=' . implode(',', $_debugIds));
-echo '<!-- VENDOR DEBUG: count=' . count($vendors) . ' ids=' . implode(',', $_debugIds) . ' -->';
+// Raw PDO query — bypasses CRMService entirely
+try {
+    $_rawPdo   = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS);
+    $_rawCount = $_rawPdo->query('SELECT COUNT(*) FROM vendors')->fetchColumn();
+    $_rawNew   = $_rawPdo->query('SELECT id, company_name FROM vendors WHERE id BETWEEN 99 AND 110')->fetchAll(PDO::FETCH_ASSOC);
+    $_rawNewStr = json_encode($_rawNew);
+} catch (Throwable $_e) { $_rawCount = 'ERR:'.$_e->getMessage(); $_rawNewStr = ''; }
+echo '<!-- DEBUG service_count=' . count($vendors)
+   . ' raw_table_count=' . $_rawCount
+   . ' ids_in_service=' . implode(',', $_debugIds)
+   . ' raw_new_vendors=' . htmlspecialchars($_rawNewStr) . ' -->';
 
 $pageTitle = 'Vendors — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
