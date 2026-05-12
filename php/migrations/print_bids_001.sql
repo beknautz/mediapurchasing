@@ -30,5 +30,5 @@ CREATE TABLE IF NOT EXISTS print_bid_items (
     qty_5       VARCHAR(20)  NULL,
     notes       TEXT NULL,
     sort_order  INT NOT NULL DEFAULT 0,
-    CONSTRAINT fk_pbi_bid FOREIGN KEY (bid_id) REFERENCES print_bids(id) ON DELETE CASCADE
+    INDEX idx_pbi_bid (bid_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
