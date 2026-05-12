@@ -33,8 +33,7 @@ function navActive(string $path): string {
                 $marketingActive = str_contains($currentUri, '/campaigns')
                     || str_contains($currentUri, '/media-buys')
                     || str_contains($currentUri, '/ad-schedules')
-                    || str_contains($currentUri, '/budget-planner')
-                    || str_contains($currentUri, '/print-bids');
+                    || str_contains($currentUri, '/budget-planner');
                 $invoicingActive = str_contains($currentUri, '/approvals')
                     || str_contains($currentUri, '/billing');
                 ?>
@@ -84,11 +83,6 @@ function navActive(string $path): string {
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item <?= navActive('/print-bids') ?>" href="/print-bids/index.php">
-                                <i class="bi bi-printer me-2"></i>Print Bids
-                            </a>
-                        </li>
-                        <li>
                             <a class="dropdown-item <?= navActive('/admin/ai-video') ?>" href="/admin/ai-video/index.php">
                                 <i class="bi bi-camera-video-fill me-2 text-danger"></i>AI Video Studio
                             </a>
@@ -131,6 +125,12 @@ function navActive(string $path): string {
                 <li class="nav-item">
                     <a class="nav-link <?= navActive('/proposals') ?>" href="/proposals/index.php">
                         <i class="bi bi-file-earmark-richtext me-1"></i>Proposals
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link <?= navActive('/print-bids') ?>" href="/print-bids/index.php">
+                        <i class="bi bi-printer me-1"></i>Print Bids
                     </a>
                 </li>
 
