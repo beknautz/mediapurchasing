@@ -183,7 +183,6 @@ class PrintBidService extends BaseService
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
               WHERE service_options LIKE '%Printing%'
-                AND is_active = 1
            ORDER BY company_name"
         );
         $stmt->execute();
@@ -199,7 +198,6 @@ class PrintBidService extends BaseService
         $stmt = $this->db->prepare(
             "SELECT id, company_name FROM vendors
               WHERE service_options LIKE '%Signage%'
-                AND is_active = 1
            ORDER BY company_name"
         );
         $stmt->execute();
