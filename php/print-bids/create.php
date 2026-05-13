@@ -373,9 +373,7 @@ let signageItems = <?= json_encode(array_map(fn($i) => [
     'notes'       => $i['notes']       ?? '',
 ], $existingSignageItems)) ?>;
 
-// Seed empty item if nothing pre-loaded
-if (printItems.length   === 0) printItems   = [newPrintItem()];
-if (signageItems.length === 0) signageItems = [newSignageItem()];
+// Start blank — user adds items via the Add buttons
 
 // ── New item factories ─────────────────────────────────────────────────────
 function newPrintItem() {
