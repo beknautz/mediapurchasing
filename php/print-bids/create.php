@@ -424,8 +424,8 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 // ── Constants from PHP ─────────────────────────────────────────────────────
-const INK_OPTIONS = <?= json_encode($INK_OPTIONS) ?>;
-const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS) ?>;
+const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
+const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
 
 // Existing items pre-loaded from DB (edit mode)
 let printItems   = <?= json_encode(array_map(fn($i) => [
@@ -439,7 +439,7 @@ let printItems   = <?= json_encode(array_map(fn($i) => [
     'qty_4'       => $i['qty_4']       ?? '500',
     'qty_5'       => $i['qty_5']       ?? '1000',
     'notes'       => $i['notes']       ?? '',
-], $existingPrintItems)) ?>;
+], $existingPrintItems), JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
 
 let signageItems = <?= json_encode(array_map(fn($i) => [
     'description' => $i['description'] ?? '',
@@ -447,7 +447,7 @@ let signageItems = <?= json_encode(array_map(fn($i) => [
     'material'    => $i['material']    ?? '',
     'qty_1'       => $i['qty_1']       ?? '1',
     'notes'       => $i['notes']       ?? '',
-], $existingSignageItems)) ?>;
+], $existingSignageItems), JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
 
 // Start blank — user adds items via the Add buttons
 
