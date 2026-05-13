@@ -165,6 +165,143 @@ class PrintBidService extends BaseService
     }
 
     // -----------------------------------------------------------------------
+    // sendBidEmails()
+    // Emails each selected vendor their relevant job items.
+    // Printer vendors receive print items; signage vendors receive signage items.
+    // Returns ['sent'=>int, 'failed'=>int, 'errors'=>string[]]
+    // -----------------------------------------------------------------------
+    public function sendBidEmails(array $bid): array
+    {
+        $mailer   = new SmtpMailer();
+        $sent     = 0;
+        $failed   = 0;
+        $errors   = [];
+
+        $printItems   = array_values(array_filter($bid['items'], fn($i) => $i['type'] === 'print'));
+        $signageItems = array_values(array_filter($bid['items'], fn($i) => $i['type'] === 'signage'));
+
+        // Fetch vendor rows for printer IDs and signage IDs
+        $allIds = array_unique(array_merge(
+            array_map('intval', $bid['printer_vendor_ids']),
+            array_map('intval', $bid['signage_vendor_ids'])
+        ));
+
+        if (empty($allIds)) return ['sent' => 0, 'failed' => 0, 'errors' => ['No vendors selected.']];
+
+        $placeholders = implode(',', array_fill(0, count($allIds), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT id, company_name, email FROM vendors WHERE id IN ($placeholders) AND email != ''"
+        );
+        $stmt->execute($allIds);
+        $vendors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $printerIds = array_map('intval', $bid['printer_vendor_ids']);
+        $signageIds = array_map('intval', $bid['signage_vendor_ids']);
+
+        foreach ($vendors as $vendor) {
+            $vid        = (int)$vendor['id'];
+            $isPrinter  = in_array($vid, $printerIds, true);
+            $isSignage  = in_array($vid, $signageIds, true);
+
+            // Determine which items to include for this vendor
+            $vendorPrintItems   = $isPrinter ? $printItems   : [];
+            $vendorSignageItems = $isSignage  ? $signageItems : [];
+
+            if (empty($vendorPrintItems) && empty($vendorSignageItems)) continue;
+
+            $subject  = 'Print Bid Request — ' . $bid['client_name'];
+            $bodyHtml = $this->buildBidEmailHtml($bid, $vendor, $vendorPrintItems, $vendorSignageItems);
+
+            $ok = $mailer->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml);
+            if ($ok) {
+                $sent++;
+            } else {
+                $failed++;
+                $errors[] = 'Failed to send to ' . $vendor['company_name'] . ' (' . $vendor['email'] . ')';
+            }
+        }
+
+        return ['sent' => $sent, 'failed' => $failed, 'errors' => $errors];
+    }
+
+    // -----------------------------------------------------------------------
+    // buildBidEmailHtml()  [private]
+    // Composes the HTML email body for a vendor.
+    // -----------------------------------------------------------------------
+    private function buildBidEmailHtml(array $bid, array $vendor, array $printItems, array $signageItems): string
+    {
+        $clientName = htmlspecialchars($bid['client_name'], ENT_QUOTES, 'UTF-8');
+        $vendorName = htmlspecialchars($vendor['company_name'], ENT_QUOTES, 'UTF-8');
+        $date       = date('F j, Y');
+        $notes      = !empty($bid['notes']) ? nl2br(htmlspecialchars($bid['notes'], ENT_QUOTES, 'UTF-8')) : '';
+
+        $h = fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+
+        $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        $html .= '<style>body{font-family:Arial,sans-serif;color:#222;font-size:14px;margin:0;padding:0;}';
+        $html .= '.wrap{max-width:680px;margin:0 auto;padding:24px;}';
+        $html .= 'h2{color:#b02a37;margin-top:0;} h3{color:#333;border-bottom:2px solid #b02a37;padding-bottom:4px;}';
+        $html .= 'table{width:100%;border-collapse:collapse;margin-bottom:20px;}';
+        $html .= 'th{background:#f8f9fa;text-align:left;padding:8px;font-size:12px;text-transform:uppercase;border:1px solid #dee2e6;}';
+        $html .= 'td{padding:8px;border:1px solid #dee2e6;vertical-align:top;}';
+        $html .= '.footer{margin-top:32px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;}';
+        $html .= '</style></head><body><div class="wrap">';
+
+        $html .= "<h2>Print Bid Request</h2>";
+        $html .= "<p>Dear <strong>{$vendorName}</strong>,</p>";
+        $html .= "<p>Please provide pricing for the following job(s) for our client <strong>{$clientName}</strong>.</p>";
+        $html .= "<p><strong>Date:</strong> {$date}</p>";
+
+        // ── Print Items ──────────────────────────────────────────────────────
+        if (!empty($printItems)) {
+            $html .= '<h3>Printing Job Items</h3>';
+            $html .= '<table><thead><tr>';
+            $html .= '<th>Description</th><th>Size</th><th>Paper</th><th>Ink</th><th>Quantities</th><th>Notes</th>';
+            $html .= '</tr></thead><tbody>';
+            foreach ($printItems as $item) {
+                $qtys = array_filter([$item['qty_1'],$item['qty_2'],$item['qty_3'],$item['qty_4'],$item['qty_5']]);
+                $html .= '<tr>';
+                $html .= '<td>' . $h($item['description'] ?? '') . '</td>';
+                $html .= '<td>' . $h($item['size']        ?? '') . '</td>';
+                $html .= '<td>' . $h($item['paper']       ?? '') . '</td>';
+                $html .= '<td>' . $h($item['ink_spec']    ?? '') . '</td>';
+                $html .= '<td>' . $h(implode(' / ', $qtys))       . '</td>';
+                $html .= '<td>' . $h($item['notes']       ?? '') . '</td>';
+                $html .= '</tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+
+        // ── Signage Items ────────────────────────────────────────────────────
+        if (!empty($signageItems)) {
+            $html .= '<h3>Signage Job Items</h3>';
+            $html .= '<table><thead><tr>';
+            $html .= '<th>Description</th><th>Size</th><th>Material</th><th>Quantity</th><th>Notes</th>';
+            $html .= '</tr></thead><tbody>';
+            foreach ($signageItems as $item) {
+                $html .= '<tr>';
+                $html .= '<td>' . $h($item['description'] ?? '') . '</td>';
+                $html .= '<td>' . $h($item['size']        ?? '') . '</td>';
+                $html .= '<td>' . $h($item['material']    ?? '') . '</td>';
+                $html .= '<td>' . $h($item['qty_1']       ?? '') . '</td>';
+                $html .= '<td>' . $h($item['notes']       ?? '') . '</td>';
+                $html .= '</tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+
+        if ($notes) {
+            $html .= '<h3>Additional Notes</h3><p>' . $notes . '</p>';
+        }
+
+        $html .= '<p>Please reply to this email with your quote at your earliest convenience. Thank you!</p>';
+        $html .= '<div class="footer">Sent via ' . APP_NAME . ' &mdash; ' . date('Y') . '</div>';
+        $html .= '</div></body></html>';
+
+        return $html;
+    }
+
+    // -----------------------------------------------------------------------
     // deleteBid()
     // -----------------------------------------------------------------------
     public function deleteBid(int $id): void

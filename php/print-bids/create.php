@@ -55,7 +55,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($signageItems as $item) { $item['type'] = 'signage'; $allItems[] = $item; }
         $svc->saveItems($bidId, $allItems);
 
-        flash('success', $result['message']);
+        // Send emails to vendors if status is 'sent'
+        if ($status === 'sent') {
+            $fullBid = $svc->getBid($bidId);
+            $emailResult = $svc->sendBidEmails($fullBid);
+            if ($emailResult['sent'] > 0) {
+                flash('success', $result['message'] . ' Bid emailed to ' . $emailResult['sent'] . ' vendor' . ($emailResult['sent'] !== 1 ? 's' : '') . '.');
+            } else {
+                $errDetail = !empty($emailResult['errors']) ? ' (' . implode('; ', $emailResult['errors']) . ')' : '';
+                flash('success', $result['message'] . ' Warning: no vendor emails could be sent' . $errDetail . '.');
+            }
+        } else {
+            flash('success', $result['message']);
+        }
+
         redirect('/print-bids/view.php?id=' . $bidId);
     }
 }
