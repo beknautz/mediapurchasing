@@ -70,6 +70,12 @@ require_once __DIR__ . '/../includes/header.php';
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
+<?php $warn = flash('warning'); if ($warn): ?>
+    <div class="alert alert-warning alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><?= $warn ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
 
 <div class="row g-4">
     <div class="col-lg-8">

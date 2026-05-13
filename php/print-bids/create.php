@@ -57,13 +57,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Send emails to vendors if status is 'sent'
         if ($status === 'sent') {
-            $fullBid = $svc->getBid($bidId);
+            $fullBid     = $svc->getBid($bidId);
             $emailResult = $svc->sendBidEmails($fullBid);
-            if ($emailResult['sent'] > 0) {
-                flash('success', $result['message'] . ' Bid emailed to ' . $emailResult['sent'] . ' vendor' . ($emailResult['sent'] !== 1 ? 's' : '') . '.');
+            if ($emailResult['sent'] > 0 && $emailResult['failed'] === 0) {
+                flash('success', $result['message'] . ' Emailed ' . $emailResult['sent'] . ' vendor' . ($emailResult['sent'] !== 1 ? 's' : '') . '.');
+            } elseif ($emailResult['sent'] > 0) {
+                flash('success', $result['message'] . ' Emailed ' . $emailResult['sent'] . ' vendor(s); ' . $emailResult['failed'] . ' failed.');
+                flash('warning', implode('<br>', $emailResult['errors']));
             } else {
-                $errDetail = !empty($emailResult['errors']) ? ' (' . implode('; ', $emailResult['errors']) . ')' : '';
-                flash('success', $result['message'] . ' Warning: no vendor emails could be sent' . $errDetail . '.');
+                flash('warning', 'Bid saved but no emails were sent. ' . implode('<br>', $emailResult['errors']));
             }
         } else {
             flash('success', $result['message']);

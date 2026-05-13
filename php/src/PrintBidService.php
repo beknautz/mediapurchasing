@@ -198,6 +198,15 @@ class PrintBidService extends BaseService
         $printerIds = array_map('intval', $bid['printer_vendor_ids']);
         $signageIds = array_map('intval', $bid['signage_vendor_ids']);
 
+        // Pre-flight: check SMTP is configured
+        if (!defined('SMTP_HOST') || SMTP_HOST === '') {
+            return ['sent' => 0, 'failed' => 0, 'errors' => ['SMTP not configured — go to Settings → Workflow Settings.']];
+        }
+
+        if (empty($vendors)) {
+            return ['sent' => 0, 'failed' => 0, 'errors' => ['No vendor emails found for the selected vendors.']];
+        }
+
         foreach ($vendors as $vendor) {
             $vid        = (int)$vendor['id'];
             $isPrinter  = in_array($vid, $printerIds, true);
@@ -212,12 +221,18 @@ class PrintBidService extends BaseService
             $subject  = 'Print Bid Request — ' . $bid['client_name'];
             $bodyHtml = $this->buildBidEmailHtml($bid, $vendor, $vendorPrintItems, $vendorSignageItems);
 
-            $ok = $mailer->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml);
+            try {
+                $ok = $mailer->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml);
+            } catch (Throwable $e) {
+                $ok = false;
+                $errors[] = $vendor['company_name'] . ': exception — ' . $e->getMessage();
+            }
+
             if ($ok) {
                 $sent++;
             } else {
                 $failed++;
-                $errors[] = 'Failed to send to ' . $vendor['company_name'] . ' (' . $vendor['email'] . ')';
+                $errors[] = 'Failed: ' . $vendor['company_name'] . ' &lt;' . $vendor['email'] . '&gt; — check SMTP settings and error log.';
             }
         }
 
