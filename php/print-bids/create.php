@@ -456,6 +456,7 @@ require_once __DIR__ . '/../includes/header.php';
      data-print="<?= $printItemsForJs ?>"
      data-signage="<?= $signageItemsForJs ?>"></div>
 <script>
+/* create.php v5 — data-bridge build */
 // ── Constants from PHP ─────────────────────────────────────────────────────
 const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
 const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
