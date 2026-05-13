@@ -55,7 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($signageItems as $item) { $item['type'] = 'signage'; $allItems[] = $item; }
         $svc->saveItems($bidId, $allItems);
 
-        // Handle file uploads
+        // Handle attachment removals (existing files the user clicked × on)
+        $removeJson = $_POST['remove_attachments_json'] ?? '[]';
+        $toRemove   = json_decode($removeJson, true) ?: [];
+        if (!empty($toRemove)) {
+            $svc->removeAttachments($bidId, $toRemove);
+        }
+
+        // Handle new file uploads
         if (!empty($_FILES['attachments']['name'][0]) || !empty($_FILES['attachments']['name'])) {
             $svc->saveAttachments($bidId, $_FILES['attachments']);
         }
@@ -172,8 +179,9 @@ require_once __DIR__ . '/../includes/header.php';
       id="printBidForm" enctype="multipart/form-data" novalidate>
 
     <!-- Hidden JSON fields filled by JS before submit -->
-    <input type="hidden" id="printItemsJson"   name="print_items_json"   value="[]">
-    <input type="hidden" id="signageItemsJson" name="signage_items_json" value="[]">
+    <input type="hidden" id="printItemsJson"        name="print_items_json"        value="[]">
+    <input type="hidden" id="signageItemsJson"       name="signage_items_json"      value="[]">
+    <input type="hidden" id="removeAttachmentsJson"  name="remove_attachments_json" value="[]">
 
     <div class="row g-4">
 
@@ -317,17 +325,23 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="pb-section-body">
 
                     <?php if ($isEdit && !empty($bid['attachments'])): ?>
-                    <div class="mb-3">
+                    <div id="existingAttachSection" class="mb-3">
                         <p class="small fw-semibold mb-1 text-muted">Already attached:</p>
-                        <ul class="list-unstyled mb-0">
-                            <?php foreach ($bid['attachments'] as $att): ?>
-                                <li class="d-flex align-items-center gap-2 mb-1 small">
-                                    <i class="bi bi-file-earmark-pdf text-danger"></i>
-                                    <a href="/<?= h($att['path']) ?>" target="_blank"><?= h($att['name']) ?></a>
+                        <ul id="existingAttachList" class="list-unstyled mb-0">
+                            <?php foreach ($bid['attachments'] as $attIdx => $att): ?>
+                                <li id="existingAtt_<?= $attIdx ?>" class="d-flex align-items-center gap-2 mb-1 small py-1 border-bottom">
+                                    <?php $attIcon = str_contains($att['type'] ?? '', 'pdf') ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary'; ?>
+                                    <i class="bi <?= $attIcon ?>"></i>
+                                    <a href="/<?= h($att['path']) ?>" target="_blank" class="flex-grow-1 text-decoration-none"><?= h($att['name']) ?></a>
+                                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1"
+                                            onclick="removeExistingAttach(<?= $attIdx ?>, <?= json_encode($att['path']) ?>)"
+                                            title="Remove this attachment">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
                                 </li>
                             <?php endforeach; ?>
                         </ul>
-                        <p class="small text-muted mt-1">Upload more files below to add to the existing list.</p>
+                        <p class="small text-muted mt-2">Upload more files below to add to the existing list.</p>
                     </div>
                     <?php endif; ?>
 
@@ -584,6 +598,26 @@ document.getElementById('printBidForm').addEventListener('submit', function () {
     document.getElementById('printItemsJson').value   = JSON.stringify(printItems);
     document.getElementById('signageItemsJson').value = JSON.stringify(signageItems);
 });
+
+// ── Existing attachment removal ───────────────────────────────────────────
+let attachmentsToRemove = [];
+
+function removeExistingAttach(idx, path) {
+    // Mark for server-side deletion
+    attachmentsToRemove.push(path);
+    document.getElementById('removeAttachmentsJson').value = JSON.stringify(attachmentsToRemove);
+
+    // Remove the row from the UI
+    const li = document.getElementById('existingAtt_' + idx);
+    if (li) li.remove();
+
+    // Hide the section if no rows remain
+    const list = document.getElementById('existingAttachList');
+    if (list && list.querySelectorAll('li').length === 0) {
+        const section = document.getElementById('existingAttachSection');
+        if (section) section.style.display = 'none';
+    }
+}
 
 // ── Attachment drag-drop ──────────────────────────────────────────────────
 let attachFiles = new DataTransfer();

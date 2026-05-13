@@ -388,6 +388,38 @@ class PrintBidService extends BaseService
     }
 
     // -----------------------------------------------------------------------
+    // removeAttachments()
+    // Deletes specified attachment files from disk and strips them from the
+    // JSON column.  $pathsToRemove is an array of relative paths as stored
+    // in the DB (e.g. "uploads/print-bids/7/20250512_logo.pdf").
+    // -----------------------------------------------------------------------
+    public function removeAttachments(int $bidId, array $pathsToRemove): void
+    {
+        if (empty($pathsToRemove)) return;
+
+        $stmt = $this->db->prepare('SELECT attachments FROM print_bids WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $bidId]);
+        $row      = $stmt->fetch(PDO::FETCH_ASSOC);
+        $existing = json_decode($row['attachments'] ?? '[]', true) ?: [];
+
+        $updated = [];
+        foreach ($existing as $att) {
+            if (in_array($att['path'], $pathsToRemove, true)) {
+                // Delete physical file
+                $absPath = __DIR__ . '/../' . $att['path'];
+                if (file_exists($absPath)) {
+                    @unlink($absPath);
+                }
+            } else {
+                $updated[] = $att;
+            }
+        }
+
+        $this->db->prepare('UPDATE print_bids SET attachments = :a WHERE id = :id')
+                 ->execute([':a' => json_encode(array_values($updated)), ':id' => $bidId]);
+    }
+
+    // -----------------------------------------------------------------------
     // deleteBid()
     // -----------------------------------------------------------------------
     public function deleteBid(int $id): void
