@@ -424,8 +424,14 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 // ── Constants from PHP ─────────────────────────────────────────────────────
-const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
-const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
+<?php
+// JSON_HEX_TAG  — escapes < > so </script> inside data can't close the script block
+// JSON_HEX_AMP  — escapes & to prevent HTML entity confusion
+// JSON_INVALID_UTF8_SUBSTITUTE — replaces bad UTF-8 bytes (pasted content) instead of returning false
+define('JS_JSON_FLAGS', JSON_HEX_TAG | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE);
+?>
+const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JS_JSON_FLAGS) ?: '[]' ?>;
+const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JS_JSON_FLAGS) ?: '[]' ?>;
 
 // Existing items pre-loaded from DB (edit mode)
 let printItems   = <?= json_encode(array_map(fn($i) => [
@@ -439,7 +445,7 @@ let printItems   = <?= json_encode(array_map(fn($i) => [
     'qty_4'       => $i['qty_4']       ?? '500',
     'qty_5'       => $i['qty_5']       ?? '1000',
     'notes'       => $i['notes']       ?? '',
-], $existingPrintItems), JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
+], $existingPrintItems), JS_JSON_FLAGS) ?: '[]' ?>;
 
 let signageItems = <?= json_encode(array_map(fn($i) => [
     'description' => $i['description'] ?? '',
@@ -447,7 +453,7 @@ let signageItems = <?= json_encode(array_map(fn($i) => [
     'material'    => $i['material']    ?? '',
     'qty_1'       => $i['qty_1']       ?? '1',
     'notes'       => $i['notes']       ?? '',
-], $existingSignageItems), JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
+], $existingSignageItems), JS_JSON_FLAGS) ?: '[]' ?>;
 
 // Start blank — user adds items via the Add buttons
 
