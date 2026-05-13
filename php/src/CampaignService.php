@@ -106,6 +106,11 @@ class CampaignService extends BaseService
         $chanStmt->execute([':id' => $id]);
         $channels = $chanStmt->fetchAll(PDO::FETCH_ASSOC);
 
+        foreach ($channels as &$ch) {
+            $ch['vendor_replies'] = json_decode($ch['vendor_replies'] ?? '[]', true) ?: [];
+        }
+        unset($ch);
+
         return ['campaign' => $campaign, 'channels' => $channels];
     }
 
@@ -305,6 +310,18 @@ class CampaignService extends BaseService
             return ['success' => false, 'message' => 'Vendor has no email address.', 'logId' => 0];
         }
 
+        // Generate or reuse secure reply token for vendor self-service portal
+        $existingToken = $ch['rfp_reply_token'] ?? '';
+        $replyToken = ($existingToken !== '' && strlen($existingToken) === 40)
+            ? $existingToken
+            : bin2hex(random_bytes(20));
+
+        $this->db->prepare('UPDATE campaign_channels SET rfp_reply_token = :t WHERE id = :id')
+                 ->execute([':t' => $replyToken, ':id' => $channelId]);
+
+        $baseUrl   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $portalUrl = $baseUrl . '/campaigns/vendor-rfp-reply.php?token=' . $replyToken;
+
         $flightStart = $ch['campaign_start'] ? date('M j, Y', strtotime($ch['campaign_start'])) : 'TBD';
         $flightEnd   = $ch['campaign_end']   ? date('M j, Y', strtotime($ch['campaign_end']))   : 'TBD';
         $budget      = '$' . number_format((float) $ch['budget_allocated'], 2);
@@ -326,6 +343,12 @@ class CampaignService extends BaseService
             . '<tr><td><strong>Flight Dates</strong></td><td>' . $flightStart . ' &ndash; ' . $flightEnd . '</td></tr>'
             . '<tr><td><strong>Budget</strong></td><td>' . $budget . '</td></tr>'
             . '</table>'
+            . '<div style="margin:24px 0;text-align:center;">'
+            . '<a href="' . htmlspecialchars($portalUrl, ENT_QUOTES, 'UTF-8') . '" '
+            . 'style="background:#0d6efd;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:bold;font-size:15px;display:inline-block;">'
+            . '&#128228; Submit Your Proposal Online</a>'
+            . '<p style="font-size:12px;color:#888;margin-top:8px;">Or reply directly to this email with your proposal attached.</p>'
+            . '</div>'
             . '<p>Please reply to this email with your proposed schedule, rate card, and any available package options. '
             . 'Attach your schedule as a PDF or Excel file if available.</p>'
             . '<p>Thank you,<br>Media Buying Team</p>';
@@ -385,6 +408,189 @@ class CampaignService extends BaseService
             'UPDATE campaigns SET status = :status, updated_at = NOW() WHERE id = :id'
         )->execute([':status' => $status, ':id' => $id]);
         $this->auditLog('update_status', 'campaign', $id, "Status: {$status}");
+    }
+
+    // -----------------------------------------------------------------------
+    // getRfpChannelByToken()
+    // Looks up a campaign channel + campaign info by the rfp_reply_token.
+    // Tokens are not single-use — vendors may resubmit updated proposals.
+    // Returns full context array or [] if token not found.
+    // -----------------------------------------------------------------------
+    public function getRfpChannelByToken(string $token): array
+    {
+        $token = trim($token);
+        if (strlen($token) !== 40) return [];
+
+        $stmt = $this->db->prepare(
+            'SELECT cc.*,
+                    v.company_name  AS vendor_name,
+                    v.email         AS vendor_email,
+                    v.contact_name  AS vendor_contact,
+                    c.title         AS campaign_title,
+                    c.flight_start  AS campaign_start,
+                    c.flight_end    AS campaign_end,
+                    c.market        AS campaign_market,
+                    c.language      AS campaign_language,
+                    c.notes         AS campaign_notes,
+                    u.email         AS buyer_email,
+                    u.name          AS buyer_name
+               FROM campaign_channels cc
+          LEFT JOIN vendors   v ON v.id  = cc.vendor_id
+          LEFT JOIN campaigns c ON c.id  = cc.campaign_id
+          LEFT JOIN users     u ON u.id  = c.created_by
+              WHERE cc.rfp_reply_token = :token
+              LIMIT 1'
+        );
+        $stmt->execute([':token' => $token]);
+        $ch = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$ch) return [];
+
+        $ch['vendor_replies'] = json_decode($ch['vendor_replies'] ?? '[]', true) ?: [];
+
+        // Collect prior replies from this vendor for the resubmit notice
+        $priorReplies = $ch['vendor_replies'];
+
+        return ['channel' => $ch, 'prior_replies' => $priorReplies];
+    }
+
+    // -----------------------------------------------------------------------
+    // saveRfpReplyByToken()
+    // Processes a vendor's self-submitted proposal via their unique token.
+    // Uploads files to uploads/campaigns/{channelId}/replies/, appends to
+    // vendor_replies JSON, updates channel status to 'response_received',
+    // and emails the buyer a notification.
+    // -----------------------------------------------------------------------
+    public function saveRfpReplyByToken(string $token, string $notes, array $filesInput): array
+    {
+        $ctx = $this->getRfpChannelByToken($token);
+        if (empty($ctx)) {
+            return ['success' => false, 'message' => 'Invalid or expired link.'];
+        }
+
+        $ch         = $ctx['channel'];
+        $channelId  = (int)$ch['id'];
+        $campaignId = (int)$ch['campaign_id'];
+        $vendorName = $ch['vendor_name'] ?: $ch['vendor_email'];
+
+        // Upload files to uploads/campaigns/{channelId}/replies/
+        $uploadDir = __DIR__ . '/../uploads/campaigns/' . $channelId . '/replies/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $allowed = [
+            'application/pdf',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
+
+        // Normalise multi-file $_FILES structure
+        $files = [];
+        if (!empty($filesInput['name']) && is_array($filesInput['name'])) {
+            foreach ($filesInput['name'] as $i => $name) {
+                $files[] = [
+                    'name'     => $name,
+                    'tmp_name' => $filesInput['tmp_name'][$i],
+                    'type'     => $filesInput['type'][$i],
+                    'error'    => $filesInput['error'][$i],
+                    'size'     => $filesInput['size'][$i],
+                ];
+            }
+        } elseif (!empty($filesInput['name'])) {
+            $files[] = $filesInput;
+        }
+
+        $attachments = [];
+        foreach ($files as $file) {
+            if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] === 0) continue;
+            $mime = mime_content_type($file['tmp_name']);
+            if (!in_array($mime, $allowed, true)) continue;
+            $safeName = preg_replace('/[^a-zA-Z0-9._\-]/', '_', basename($file['name']));
+            $safeName = date('Ymd_His_') . $safeName;
+            $destPath = $uploadDir . $safeName;
+            if (move_uploaded_file($file['tmp_name'], $destPath)) {
+                $attachments[] = [
+                    'name' => $file['name'],
+                    'path' => 'uploads/campaigns/' . $channelId . '/replies/' . $safeName,
+                    'type' => $mime,
+                ];
+            }
+        }
+
+        // Append reply to vendor_replies JSON
+        $existing   = $ch['vendor_replies'];
+        $existing[] = [
+            'vendor_name' => $vendorName,
+            'notes'       => $notes,
+            'replied_at'  => date('Y-m-d H:i:s'),
+            'attachments' => $attachments,
+            'source'      => 'portal',
+        ];
+
+        // Update channel: append reply, set status to response_received
+        $this->db->prepare(
+            "UPDATE campaign_channels
+                SET vendor_replies = :vr,
+                    status         = 'response_received',
+                    updated_at     = NOW()
+              WHERE id = :id"
+        )->execute([
+            ':vr' => json_encode(array_values($existing)),
+            ':id' => $channelId,
+        ]);
+
+        // If all channels for campaign have responded, update campaign status
+        $pendingStmt = $this->db->prepare(
+            "SELECT COUNT(*) FROM campaign_channels
+              WHERE campaign_id = :cid AND status = 'rfp_sent'"
+        );
+        $pendingStmt->execute([':cid' => $campaignId]);
+        if ((int)$pendingStmt->fetchColumn() === 0) {
+            $this->db->prepare(
+                "UPDATE campaigns SET status = 'responses_in', updated_at = NOW()
+                  WHERE id = :id AND status = 'rfp_sent'"
+            )->execute([':id' => $campaignId]);
+        }
+
+        // Email buyer notification
+        if (!empty($ch['buyer_email'])) {
+            $baseUrl  = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            $viewUrl  = $baseUrl . '/campaigns/view.php?id=' . $campaignId;
+            $isResub  = count($ctx['prior_replies']) > 0;
+            $attsNote = !empty($attachments) ? count($attachments) . ' file' . (count($attachments) > 1 ? 's' : '') . ' attached' : 'no files attached';
+            $subject  = ($isResub ? 'Updated ' : '') . 'RFP Response Received — ' . $ch['campaign_title'] . ' (' . $ch['media_category'] . ')';
+            $h        = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+            $bodyHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;color:#222;font-size:14px;">'
+                . '<div style="max-width:600px;margin:0 auto;padding:24px;">'
+                . '<p style="display:inline-block;background:#0d6efd;color:#fff;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:bold;">' . ($isResub ? 'Updated Proposal' : 'Proposal Received') . '</p>'
+                . '<h2 style="color:#0d6efd;">' . ($isResub ? 'Vendor Proposal Updated' : 'RFP Response Received') . '</h2>'
+                . '<p><strong>' . $h($vendorName) . '</strong> has ' . ($isResub ? 'submitted an updated proposal' : 'submitted their proposal') . ' for:</p>'
+                . '<ul><li><strong>Campaign:</strong> ' . $h($ch['campaign_title']) . '</li>'
+                . '<li><strong>Category:</strong> ' . $h($ch['media_category']) . '</li>'
+                . '<li><strong>Attachments:</strong> ' . $attsNote . '</li></ul>'
+                . '<a href="' . $h($viewUrl) . '" style="background:#0d6efd;color:#fff;text-decoration:none;padding:10px 24px;border-radius:6px;font-weight:bold;display:inline-block;margin-top:8px;">View Campaign</a>'
+                . '<p style="margin-top:32px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;">Sent via ' . APP_NAME . '</p>'
+                . '</div></body></html>';
+            $emailSvc = new EmailService();
+            $emailSvc->send($ch['buyer_email'], $ch['buyer_name'] ?? '', $subject, $bodyHtml);
+        }
+
+        return ['success' => true, 'vendor_name' => $vendorName];
+    }
+
+    // -----------------------------------------------------------------------
+    // getChannelReplies()
+    // Returns all vendor_replies for a channel, decoded.
+    // -----------------------------------------------------------------------
+    public function getChannelReplies(int $channelId): array
+    {
+        $stmt = $this->db->prepare('SELECT vendor_replies FROM campaign_channels WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $channelId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return json_decode($row['vendor_replies'] ?? '[]', true) ?: [];
     }
 
     // -----------------------------------------------------------------------

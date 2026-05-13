@@ -339,6 +339,13 @@ require_once __DIR__ . '/../includes/header.php';
                                         </button>
                                     </form>
                                     <?php endif; ?>
+                                    <?php if (!empty($ch['vendor_replies'])): ?>
+                                    <button class="btn btn-sm btn-success" type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#replies_<?= (int)$ch['id'] ?>">
+                                        <i class="bi bi-paperclip me-1"></i>View Proposal (<?= count($ch['vendor_replies']) ?>)
+                                    </button>
+                                    <?php endif; ?>
                                     <?php if ($canDelete): ?>
                                     <form method="post" class="d-inline"
                                           onsubmit="return confirm('Remove this channel?')">
@@ -352,6 +359,49 @@ require_once __DIR__ . '/../includes/header.php';
                                 </div>
                             </td>
                         </tr>
+                        <?php if (!empty($ch['vendor_replies'])): ?>
+                        <tr class="collapse" id="replies_<?= (int)$ch['id'] ?>">
+                            <td colspan="6" class="bg-light p-3">
+                                <?php foreach ($ch['vendor_replies'] as $ri => $reply): ?>
+                                <div class="<?= $ri > 0 ? 'mt-3 pt-3 border-top' : '' ?>">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <strong class="text-primary"><?= h($reply['vendor_name'] ?? '') ?></strong>
+                                        <span class="text-muted small">
+                                            <?= date('M j, Y g:ia', strtotime($reply['replied_at'])) ?>
+                                            <?php if (($reply['source'] ?? '') === 'email'): ?>
+                                                <span class="badge bg-secondary ms-1">via email</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-primary ms-1">via portal</span>
+                                            <?php endif; ?>
+                                        </span>
+                                    </div>
+                                    <?php if (!empty($reply['notes'])): ?>
+                                        <p class="text-muted small mb-2 fst-italic"><?= nl2br(h($reply['notes'])) ?></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($reply['attachments'])): ?>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <?php foreach ($reply['attachments'] as $att): ?>
+                                            <?php
+                                            $type = $att['type'] ?? '';
+                                            if (str_contains($type, 'pdf')) $icon = 'bi-file-earmark-pdf text-danger';
+                                            elseif (str_contains($type, 'sheet') || str_contains($type, 'excel')) $icon = 'bi-file-earmark-excel text-success';
+                                            elseif (str_contains($type, 'word')) $icon = 'bi-file-earmark-word text-primary';
+                                            else $icon = 'bi-file-earmark-image text-secondary';
+                                            ?>
+                                            <a href="/campaigns/download.php?f=<?= urlencode($att['path']) ?>" target="_blank"
+                                               class="btn btn-sm btn-outline-secondary">
+                                                <i class="bi <?= $icon ?> me-1"></i><?= h($att['name']) ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php else: ?>
+                                        <span class="text-muted small"><i class="bi bi-paperclip me-1"></i>No files attached.</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </td>
+                        </tr>
+                        <?php endif; ?>
                         <?php endforeach; ?>
                         </tbody>
                         <?php if ($allocatedSum > 0): ?>
