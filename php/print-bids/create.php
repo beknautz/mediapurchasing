@@ -90,6 +90,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Existing items split by type
 $existingPrintItems   = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['type'] === 'print'));
 $existingSignageItems = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['type'] === 'signage'));
+
+// Pre-encode item data for the HTML data-attribute bridge.
+// htmlspecialchars() makes it safe in an HTML attribute regardless of content
+// — no </script> can close a script tag when the data is in the HTML body.
+$printItemsForJs = htmlspecialchars(
+    json_encode(array_map(fn($i) => [
+        'description' => $i['description'] ?? '',
+        'size'        => $i['size']        ?? '',
+        'paper'       => $i['paper']       ?? '',
+        'ink_spec'    => $i['ink_spec']    ?? '',
+        'qty_1'       => $i['qty_1']       ?? '50',
+        'qty_2'       => $i['qty_2']       ?? '100',
+        'qty_3'       => $i['qty_3']       ?? '250',
+        'qty_4'       => $i['qty_4']       ?? '500',
+        'qty_5'       => $i['qty_5']       ?? '1000',
+        'notes'       => $i['notes']       ?? '',
+    ], $existingPrintItems), JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]',
+    ENT_QUOTES, 'UTF-8'
+);
+$signageItemsForJs = htmlspecialchars(
+    json_encode(array_map(fn($i) => [
+        'description' => $i['description'] ?? '',
+        'size'        => $i['size']        ?? '',
+        'material'    => $i['material']    ?? '',
+        'qty_1'       => $i['qty_1']       ?? '1',
+        'notes'       => $i['notes']       ?? '',
+    ], $existingSignageItems), JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]',
+    ENT_QUOTES, 'UTF-8'
+);
 $existingPrinterIds   = $bid['printer_vendor_ids'] ?? [];
 $existingSignageIds   = $bid['signage_vendor_ids']  ?? [];
 
@@ -422,38 +451,20 @@ require_once __DIR__ . '/../includes/header.php';
     </div><!-- /row -->
 </form>
 
+<!-- Data bridge: PHP item data → JS via HTML attributes, safe from script-tag injection -->
+<div id="bidItemsData" class="d-none"
+     data-print="<?= $printItemsForJs ?>"
+     data-signage="<?= $signageItemsForJs ?>"></div>
 <script>
 // ── Constants from PHP ─────────────────────────────────────────────────────
-<?php
-// JSON_HEX_TAG  — escapes < > so </script> inside data can't close the script block
-// JSON_HEX_AMP  — escapes & to prevent HTML entity confusion
-// JSON_INVALID_UTF8_SUBSTITUTE — replaces bad UTF-8 bytes (pasted content) instead of returning false
-define('JS_JSON_FLAGS', JSON_HEX_TAG | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE);
-?>
-const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JS_JSON_FLAGS) ?: '[]' ?>;
-const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JS_JSON_FLAGS) ?: '[]' ?>;
+const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
+const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
 
-// Existing items pre-loaded from DB (edit mode)
-let printItems   = <?= json_encode(array_map(fn($i) => [
-    'description' => $i['description'] ?? '',
-    'size'        => $i['size']        ?? '',
-    'paper'       => $i['paper']       ?? '',
-    'ink_spec'    => $i['ink_spec']    ?? '',
-    'qty_1'       => $i['qty_1']       ?? '50',
-    'qty_2'       => $i['qty_2']       ?? '100',
-    'qty_3'       => $i['qty_3']       ?? '250',
-    'qty_4'       => $i['qty_4']       ?? '500',
-    'qty_5'       => $i['qty_5']       ?? '1000',
-    'notes'       => $i['notes']       ?? '',
-], $existingPrintItems), JS_JSON_FLAGS) ?: '[]' ?>;
-
-let signageItems = <?= json_encode(array_map(fn($i) => [
-    'description' => $i['description'] ?? '',
-    'size'        => $i['size']        ?? '',
-    'material'    => $i['material']    ?? '',
-    'qty_1'       => $i['qty_1']       ?? '1',
-    'notes'       => $i['notes']       ?? '',
-], $existingSignageItems), JS_JSON_FLAGS) ?: '[]' ?>;
+// Existing items — read from data attributes in the HTML body (not inline JS).
+// This means no amount of special characters in the data can break JS parsing.
+const _bidData   = document.getElementById('bidItemsData').dataset;
+let printItems   = (function(s){ try{ return JSON.parse(s); }catch(e){ return []; } })(_bidData.print   || '[]');
+let signageItems = (function(s){ try{ return JSON.parse(s); }catch(e){ return []; } })(_bidData.signage || '[]');
 
 // Start blank — user adds items via the Add buttons
 
