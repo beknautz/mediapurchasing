@@ -198,6 +198,28 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="alert alert-info">No job items on this bid yet. <a href="/print-bids/create.php?id=<?= $bid['id'] ?>">Edit bid</a> to add items.</div>
         <?php endif; ?>
 
+        <!-- ── Attachments ── -->
+        <?php if (!empty($bid['attachments'])): ?>
+        <div class="section-card">
+            <div class="section-card-header"><i class="bi bi-paperclip me-1"></i>Attachments</div>
+            <div class="section-card-body">
+                <ul class="list-unstyled mb-0">
+                    <?php foreach ($bid['attachments'] as $att): ?>
+                        <li class="d-flex align-items-center gap-2 py-2 border-bottom">
+                            <?php
+                            $icon = str_contains($att['type'], 'pdf') ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
+                            ?>
+                            <i class="bi <?= $icon ?> fs-5"></i>
+                            <a href="/<?= h($att['path']) ?>" target="_blank" class="text-decoration-none">
+                                <?= h($att['name']) ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+        <?php endif; ?>
+
     </div><!-- /col-lg-8 -->
 
     <!-- ── Sidebar ── -->

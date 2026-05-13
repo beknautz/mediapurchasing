@@ -47,6 +47,7 @@ class PrintBidService extends BaseService
 
         $bid['printer_vendor_ids'] = json_decode($bid['printer_vendor_ids'] ?? '[]', true) ?: [];
         $bid['signage_vendor_ids'] = json_decode($bid['signage_vendor_ids'] ?? '[]', true) ?: [];
+        $bid['attachments']        = json_decode($bid['attachments']        ?? '[]', true) ?: [];
         $bid['items']              = $this->getItems($id);
 
         return $bid;
@@ -106,6 +107,7 @@ class PrintBidService extends BaseService
             ]);
             return ['success' => true, 'id' => $id, 'message' => 'Print bid updated.'];
         }
+
 
         $stmt = $this->db->prepare(
             'INSERT INTO print_bids
@@ -216,7 +218,20 @@ class PrintBidService extends BaseService
             $subject  = 'Print Bid Request — ' . $bid['client_name'];
             $bodyHtml = $this->buildBidEmailHtml($bid, $vendor, $vendorPrintItems, $vendorSignageItems);
 
-            $result = $emailSvc->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml);
+            // Build absolute-path attachment list for SendGrid
+            $sgAttachments = [];
+            foreach ($bid['attachments'] ?? [] as $att) {
+                $absPath = __DIR__ . '/../' . $att['path'];
+                if (file_exists($absPath)) {
+                    $sgAttachments[] = [
+                        'name' => $att['name'],
+                        'path' => $absPath,
+                        'type' => $att['type'],
+                    ];
+                }
+            }
+
+            $result = $emailSvc->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml, '', '', '', 0, 0, 0, 0, $sgAttachments);
 
             if ($result['success']) {
                 $sent++;
@@ -304,6 +319,72 @@ class PrintBidService extends BaseService
         $html .= '</div></body></html>';
 
         return $html;
+    }
+
+    // -----------------------------------------------------------------------
+    // saveAttachments()
+    // Processes $_FILES['attachments'] (multi-file), moves accepted files
+    // into uploads/print-bids/{bidId}/, appends to existing attachments,
+    // and persists the JSON back to print_bids.attachments.
+    //
+    // Returns the full updated attachments array.
+    // -----------------------------------------------------------------------
+    public function saveAttachments(int $bidId, array $filesInput): array
+    {
+        // Fetch existing attachments
+        $stmt = $this->db->prepare('SELECT attachments FROM print_bids WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $bidId]);
+        $row         = $stmt->fetch(PDO::FETCH_ASSOC);
+        $existing    = json_decode($row['attachments'] ?? '[]', true) ?: [];
+
+        $uploadDir = __DIR__ . '/../uploads/print-bids/' . $bidId . '/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+        // Normalise $_FILES multi-upload structure into a flat list
+        $files = [];
+        if (!empty($filesInput['name']) && is_array($filesInput['name'])) {
+            foreach ($filesInput['name'] as $i => $name) {
+                $files[] = [
+                    'name'     => $name,
+                    'tmp_name' => $filesInput['tmp_name'][$i],
+                    'type'     => $filesInput['type'][$i],
+                    'error'    => $filesInput['error'][$i],
+                    'size'     => $filesInput['size'][$i],
+                ];
+            }
+        } elseif (!empty($filesInput['name'])) {
+            $files[] = $filesInput;
+        }
+
+        foreach ($files as $file) {
+            if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] === 0) continue;
+
+            $mime = mime_content_type($file['tmp_name']);
+            if (!in_array($mime, $allowed, true)) continue;
+
+            // Safe filename: strip non-alphanumeric except dot/dash/underscore
+            $safeName = preg_replace('/[^a-zA-Z0-9._\-]/', '_', basename($file['name']));
+            $safeName = date('Ymd_His_') . $safeName;
+            $destPath = $uploadDir . $safeName;
+
+            if (move_uploaded_file($file['tmp_name'], $destPath)) {
+                $existing[] = [
+                    'name' => $file['name'],
+                    'path' => 'uploads/print-bids/' . $bidId . '/' . $safeName,
+                    'type' => $mime,
+                ];
+            }
+        }
+
+        // Persist updated attachment list
+        $this->db->prepare('UPDATE print_bids SET attachments = :a WHERE id = :id')
+                 ->execute([':a' => json_encode($existing), ':id' => $bidId]);
+
+        return $existing;
     }
 
     // -----------------------------------------------------------------------

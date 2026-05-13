@@ -55,6 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($signageItems as $item) { $item['type'] = 'signage'; $allItems[] = $item; }
         $svc->saveItems($bidId, $allItems);
 
+        // Handle file uploads
+        if (!empty($_FILES['attachments']['name'][0]) || !empty($_FILES['attachments']['name'])) {
+            $svc->saveAttachments($bidId, $_FILES['attachments']);
+        }
+
         // Send emails to vendors if status is 'sent'
         if ($status === 'sent') {
             $fullBid     = $svc->getBid($bidId);
@@ -164,7 +169,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <form method="post" action="/print-bids/create.php<?= $isEdit ? '?id=' . $bid['id'] : '' ?>"
-      id="printBidForm" novalidate>
+      id="printBidForm" enctype="multipart/form-data" novalidate>
 
     <!-- Hidden JSON fields filled by JS before submit -->
     <input type="hidden" id="printItemsJson"   name="print_items_json"   value="[]">
@@ -300,6 +305,48 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="pb-section-body">
                     <textarea name="notes" class="form-control" rows="3"
                               placeholder="Additional notes or instructions for vendors…"><?= h($bid['notes'] ?? '') ?></textarea>
+                </div>
+            </div>
+
+            <!-- ── Attachments ── -->
+            <div class="pb-section">
+                <div class="pb-section-header">
+                    <h6><i class="bi bi-paperclip me-2"></i>Attachments</h6>
+                    <span class="text-muted small fw-normal">PDF, JPG, PNG — sent with the email to vendors</span>
+                </div>
+                <div class="pb-section-body">
+
+                    <?php if ($isEdit && !empty($bid['attachments'])): ?>
+                    <div class="mb-3">
+                        <p class="small fw-semibold mb-1 text-muted">Already attached:</p>
+                        <ul class="list-unstyled mb-0">
+                            <?php foreach ($bid['attachments'] as $att): ?>
+                                <li class="d-flex align-items-center gap-2 mb-1 small">
+                                    <i class="bi bi-file-earmark-pdf text-danger"></i>
+                                    <a href="/<?= h($att['path']) ?>" target="_blank"><?= h($att['name']) ?></a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <p class="small text-muted mt-1">Upload more files below to add to the existing list.</p>
+                    </div>
+                    <?php endif; ?>
+
+                    <div id="attachDropZone"
+                         class="border border-2 border-dashed rounded-3 p-4 text-center"
+                         style="border-color:#6c757d!important;cursor:pointer;transition:background .2s;"
+                         ondragover="attachDragOver(event)"
+                         ondragleave="attachDragLeave(event)"
+                         ondrop="attachDrop(event)"
+                         onclick="document.getElementById('attachInput').click()">
+                        <input type="file" id="attachInput" name="attachments[]"
+                               multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                               class="d-none" onchange="attachSelected(this)">
+                        <i class="bi bi-paperclip fs-3 text-secondary d-block mb-1"></i>
+                        <p class="mb-0 fw-semibold text-secondary">Drag &amp; drop files here</p>
+                        <p class="mb-0 small text-muted">or click to browse &mdash; PDF, JPG, PNG supported</p>
+                    </div>
+
+                    <ul id="attachFileList" class="list-unstyled mt-2 mb-0 small"></ul>
                 </div>
             </div>
 
@@ -537,6 +584,54 @@ document.getElementById('printBidForm').addEventListener('submit', function () {
     document.getElementById('printItemsJson').value   = JSON.stringify(printItems);
     document.getElementById('signageItemsJson').value = JSON.stringify(signageItems);
 });
+
+// ── Attachment drag-drop ──────────────────────────────────────────────────
+let attachFiles = new DataTransfer();
+
+function attachDragOver(e) {
+    e.preventDefault();
+    document.getElementById('attachDropZone').style.background = '#f0f5ff';
+}
+function attachDragLeave(e) {
+    document.getElementById('attachDropZone').style.background = '';
+}
+function attachDrop(e) {
+    e.preventDefault();
+    attachDragLeave(e);
+    const input = document.getElementById('attachInput');
+    [...e.dataTransfer.files].forEach(f => attachFiles.items.add(f));
+    input.files = attachFiles.files;
+    renderAttachList();
+}
+function attachSelected(input) {
+    [...input.files].forEach(f => attachFiles.items.add(f));
+    input.files = attachFiles.files;
+    renderAttachList();
+}
+function renderAttachList() {
+    const list  = document.getElementById('attachFileList');
+    const files = document.getElementById('attachInput').files;
+    list.innerHTML = '';
+    [...files].forEach((f, i) => {
+        const li = document.createElement('li');
+        li.className = 'd-flex align-items-center gap-2 py-1 border-bottom';
+        li.innerHTML = `<i class="bi bi-file-earmark text-secondary"></i>
+            <span class="flex-grow-1">${esc(f.name)}</span>
+            <span class="text-muted">${(f.size/1024).toFixed(0)} KB</span>
+            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeAttach(${i})">
+                <i class="bi bi-x-lg"></i>
+            </button>`;
+        list.appendChild(li);
+    });
+}
+function removeAttach(idx) {
+    const dt = new DataTransfer();
+    const files = document.getElementById('attachInput').files;
+    [...files].forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+    attachFiles = dt;
+    document.getElementById('attachInput').files = dt.files;
+    renderAttachList();
+}
 
 // ── Initial render ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
