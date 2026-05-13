@@ -162,7 +162,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="d-flex flex-wrap gap-2 mt-1">
                         <?php foreach ($reply['attachments'] as $att): ?>
                             <?php $icon = str_contains($att['type'], 'pdf') ? 'bi-file-earmark-pdf text-danger' : (str_contains($att['type'], 'sheet') || str_contains($att['type'], 'excel') ? 'bi-file-earmark-excel text-success' : 'bi-file-earmark text-secondary'); ?>
-                            <a href="/<?= h($att['path']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            <a href="/print-bids/download.php?f=<?= urlencode($att['path']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi <?= $icon ?> me-1"></i><?= h($att['name']) ?>
                             </a>
                         <?php endforeach; ?>

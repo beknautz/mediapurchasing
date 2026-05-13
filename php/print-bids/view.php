@@ -210,7 +210,7 @@ require_once __DIR__ . '/../includes/header.php';
                             $icon = str_contains($att['type'], 'pdf') ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
                             ?>
                             <i class="bi <?= $icon ?> fs-5"></i>
-                            <a href="/<?= h($att['path']) ?>" target="_blank" class="text-decoration-none">
+                            <a href="/print-bids/download.php?f=<?= urlencode($att['path']) ?>" target="_blank" class="text-decoration-none">
                                 <?= h($att['name']) ?>
                             </a>
                         </li>
@@ -253,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 $icon = 'bi-file-earmark-image text-primary';
                             }
                             ?>
-                            <a href="/<?= h($att['path']) ?>" target="_blank"
+                            <a href="/print-bids/download.php?f=<?= urlencode($att['path']) ?>" target="_blank"
                                class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
                                 <i class="bi <?= $icon ?>"></i>
                                 <?= h($att['name']) ?>
