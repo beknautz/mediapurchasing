@@ -94,6 +94,10 @@ $existingSignageItems = array_values(array_filter($bid['items'] ?? [], fn($i) =>
 // Pre-encode item data for the HTML data-attribute bridge.
 // htmlspecialchars() makes it safe in an HTML attribute regardless of content
 // — no </script> can close a script tag when the data is in the HTML body.
+// Also encode the static option lists so the <script> block has zero PHP
+$inkOptionsForJs    = htmlspecialchars(json_encode($INK_OPTIONS,    JSON_UNESCAPED_UNICODE) ?: '[]', ENT_QUOTES, 'UTF-8');
+$signMaterialsForJs = htmlspecialchars(json_encode($SIGN_MATERIALS, JSON_UNESCAPED_UNICODE) ?: '[]', ENT_QUOTES, 'UTF-8');
+
 $printItemsForJs = htmlspecialchars(
     json_encode(array_map(fn($i) => [
         'description' => $i['description'] ?? '',
@@ -451,21 +455,21 @@ require_once __DIR__ . '/../includes/header.php';
     </div><!-- /row -->
 </form>
 
-<!-- Data bridge: PHP item data → JS via HTML attributes, safe from script-tag injection -->
+<!-- Data bridge: ALL PHP data → JS via HTML attributes. The <script> block below is 100% static JS. -->
 <div id="bidItemsData" class="d-none"
      data-print="<?= $printItemsForJs ?>"
-     data-signage="<?= $signageItemsForJs ?>"></div>
+     data-signage="<?= $signageItemsForJs ?>"
+     data-ink-options="<?= $inkOptionsForJs ?>"
+     data-sign-materials="<?= $signMaterialsForJs ?>"></div>
 <script>
-/* create.php v5 — data-bridge build */
-// ── Constants from PHP ─────────────────────────────────────────────────────
-const INK_OPTIONS    = <?= json_encode($INK_OPTIONS,    JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
-const SIGN_MATERIALS = <?= json_encode($SIGN_MATERIALS, JSON_HEX_TAG | JSON_HEX_AMP) ?: '[]' ?>;
-
-// Existing items — read from data attributes in the HTML body (not inline JS).
-// This means no amount of special characters in the data can break JS parsing.
-const _bidData   = document.getElementById('bidItemsData').dataset;
-let printItems   = (function(s){ try{ return JSON.parse(s); }catch(e){ return []; } })(_bidData.print   || '[]');
-let signageItems = (function(s){ try{ return JSON.parse(s); }catch(e){ return []; } })(_bidData.signage || '[]');
+/* create.php v6 — fully static script, zero PHP */
+// All PHP data lives in #bidItemsData data-attributes; this block is pure JS.
+const _bd         = document.getElementById('bidItemsData').dataset;
+const _parse      = s => { try { return JSON.parse(s); } catch(e) { return []; } };
+const INK_OPTIONS    = _parse(_bd.inkOptions    || '[]');
+const SIGN_MATERIALS = _parse(_bd.signMaterials || '[]');
+let printItems   = _parse(_bd.print   || '[]');
+let signageItems = _parse(_bd.signage || '[]');
 
 // Start blank — user adds items via the Add buttons
 
