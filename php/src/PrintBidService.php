@@ -48,6 +48,7 @@ class PrintBidService extends BaseService
         $bid['printer_vendor_ids'] = json_decode($bid['printer_vendor_ids'] ?? '[]', true) ?: [];
         $bid['signage_vendor_ids'] = json_decode($bid['signage_vendor_ids'] ?? '[]', true) ?: [];
         $bid['attachments']        = json_decode($bid['attachments']        ?? '[]', true) ?: [];
+        $bid['vendor_replies']     = json_decode($bid['vendor_replies']     ?? '[]', true) ?: [];
         $bid['items']              = $this->getItems($id);
 
         return $bid;
@@ -420,6 +421,89 @@ class PrintBidService extends BaseService
     }
 
     // -----------------------------------------------------------------------
+    // saveVendorReply()
+    // Logs a vendor's reply (pricing quote) with optional file attachments.
+    // Uploads files to uploads/print-bids/{bidId}/replies/ and appends to
+    // the vendor_replies JSON column.  Sets bid status → 'replied'.
+    //
+    // Returns ['success'=>bool, 'message'=>string]
+    // -----------------------------------------------------------------------
+    public function saveVendorReply(int $bidId, int $vendorId, string $vendorName, string $notes, array $filesInput): array
+    {
+        // Fetch existing replies
+        $stmt = $this->db->prepare('SELECT vendor_replies FROM print_bids WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $bidId]);
+        $row     = $stmt->fetch(PDO::FETCH_ASSOC);
+        $replies = json_decode($row['vendor_replies'] ?? '[]', true) ?: [];
+
+        // Upload pricing files to uploads/print-bids/{bidId}/replies/
+        $uploadDir = __DIR__ . '/../uploads/print-bids/' . $bidId . '/replies/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $allowed = [
+            'application/pdf',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
+
+        // Normalise multi-file $_FILES structure
+        $files = [];
+        if (!empty($filesInput['name']) && is_array($filesInput['name'])) {
+            foreach ($filesInput['name'] as $i => $name) {
+                $files[] = [
+                    'name'     => $name,
+                    'tmp_name' => $filesInput['tmp_name'][$i],
+                    'type'     => $filesInput['type'][$i],
+                    'error'    => $filesInput['error'][$i],
+                    'size'     => $filesInput['size'][$i],
+                ];
+            }
+        } elseif (!empty($filesInput['name'])) {
+            $files[] = $filesInput;
+        }
+
+        $replyAttachments = [];
+        foreach ($files as $file) {
+            if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] === 0) continue;
+            $mime = mime_content_type($file['tmp_name']);
+            if (!in_array($mime, $allowed, true)) continue;
+            $safeName = preg_replace('/[^a-zA-Z0-9._\-]/', '_', basename($file['name']));
+            $safeName = date('Ymd_His_') . $safeName;
+            $destPath = $uploadDir . $safeName;
+            if (move_uploaded_file($file['tmp_name'], $destPath)) {
+                $replyAttachments[] = [
+                    'name' => $file['name'],
+                    'path' => 'uploads/print-bids/' . $bidId . '/replies/' . $safeName,
+                    'type' => $mime,
+                ];
+            }
+        }
+
+        $replies[] = [
+            'vendor_id'   => $vendorId,
+            'vendor_name' => $vendorName,
+            'notes'       => $notes,
+            'replied_at'  => date('Y-m-d H:i:s'),
+            'attachments' => $replyAttachments,
+        ];
+
+        $this->db->prepare(
+            'UPDATE print_bids SET vendor_replies = :vr, status = :status WHERE id = :id'
+        )->execute([
+            ':vr'     => json_encode(array_values($replies)),
+            ':status' => 'replied',
+            ':id'     => $bidId,
+        ]);
+
+        return ['success' => true, 'message' => 'Reply logged.'];
+    }
+
+    // -----------------------------------------------------------------------
     // deleteBid()
     // -----------------------------------------------------------------------
     public function deleteBid(int $id): void
@@ -480,7 +564,7 @@ class PrintBidService extends BaseService
             "SELECT status, COUNT(*) AS cnt FROM print_bids GROUP BY status"
         );
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $out  = ['draft' => 0, 'sent' => 0, 'approved' => 0, 'rejected' => 0, '' => 0];
+        $out  = ['draft' => 0, 'sent' => 0, 'replied' => 0, 'approved' => 0, 'rejected' => 0, '' => 0];
         foreach ($rows as $r) {
             $out[$r['status']] = (int)$r['cnt'];
             $out['']          += (int)$r['cnt'];

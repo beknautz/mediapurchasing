@@ -23,7 +23,7 @@ $vendorMap    = array_column($allVendors, 'company_name', 'id');
 $printerNames = array_filter(array_map(fn($vid) => $vendorMap[$vid] ?? null, $bid['printer_vendor_ids']));
 $signageNames = array_filter(array_map(fn($vid) => $vendorMap[$vid] ?? null, $bid['signage_vendor_ids']));
 
-$statusColors = ['draft' => 'secondary', 'sent' => 'primary', 'approved' => 'success', 'rejected' => 'danger'];
+$statusColors = ['draft' => 'secondary', 'sent' => 'primary', 'replied' => 'danger', 'approved' => 'success', 'rejected' => 'danger'];
 $sc = $statusColors[$bid['status']] ?? 'secondary';
 
 $pageTitle = 'Print Bid #' . $bid['id'] . ' — MediaBuy';
@@ -220,6 +220,55 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
 
+        <!-- ── Vendor Replies ── -->
+        <?php if (!empty($bid['vendor_replies'])): ?>
+        <div class="section-card" id="vendor-replies">
+            <div class="section-card-header" style="color:#b02a37;">
+                <i class="bi bi-reply-fill me-1"></i>Vendor Replies (<?= count($bid['vendor_replies']) ?>)
+            </div>
+            <div class="section-card-body p-0">
+                <?php foreach ($bid['vendor_replies'] as $ri => $reply): ?>
+                <div class="p-3 <?= $ri > 0 ? 'border-top' : '' ?>">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong class="text-danger"><?= h($reply['vendor_name']) ?></strong>
+                            <span class="badge bg-danger ms-2">Replied</span>
+                        </div>
+                        <span class="text-muted small"><?= date('M j, Y g:ia', strtotime($reply['replied_at'])) ?></span>
+                    </div>
+                    <?php if (!empty($reply['notes'])): ?>
+                        <p class="text-muted small mb-2 fst-italic"><?= nl2br(h($reply['notes'])) ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($reply['attachments'])): ?>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php foreach ($reply['attachments'] as $att): ?>
+                            <?php
+                            if (str_contains($att['type'], 'pdf')) {
+                                $icon = 'bi-file-earmark-pdf text-danger';
+                            } elseif (str_contains($att['type'], 'sheet') || str_contains($att['type'], 'excel')) {
+                                $icon = 'bi-file-earmark-excel text-success';
+                            } elseif (str_contains($att['type'], 'word')) {
+                                $icon = 'bi-file-earmark-word text-primary';
+                            } else {
+                                $icon = 'bi-file-earmark-image text-primary';
+                            }
+                            ?>
+                            <a href="/<?= h($att['path']) ?>" target="_blank"
+                               class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+                                <i class="bi <?= $icon ?>"></i>
+                                <?= h($att['name']) ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                        <span class="text-muted small"><i class="bi bi-paperclip me-1"></i>No files attached to this reply.</span>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
     </div><!-- /col-lg-8 -->
 
     <!-- ── Sidebar ── -->
@@ -236,6 +285,12 @@ require_once __DIR__ . '/../includes/header.php';
                     <i class="bi bi-printer me-1"></i>Print / Save PDF
                 </button>
                 <hr class="my-1">
+                <?php if (in_array($bid['status'], ['sent','replied'], true)): ?>
+                <a href="/print-bids/reply.php?id=<?= $bid['id'] ?>" class="btn btn-danger btn-sm">
+                    <i class="bi bi-reply-fill me-1"></i>Log Vendor Reply
+                </a>
+                <hr class="my-1">
+                <?php endif; ?>
                 <a href="/print-bids/index.php" class="btn btn-link btn-sm text-secondary">
                     <i class="bi bi-arrow-left me-1"></i>Back to List
                 </a>

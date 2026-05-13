@@ -6,7 +6,7 @@ $svc    = new PrintBidService();
 $status = trim($_GET['status'] ?? '');
 $page   = max(1, (int)($_GET['page'] ?? 1));
 
-$validStatuses = ['draft', 'sent', 'approved', 'rejected'];
+$validStatuses = ['draft', 'sent', 'replied', 'approved', 'rejected'];
 if ($status && !in_array($status, $validStatuses, true)) $status = '';
 
 $result = $svc->getBids($status, $page, 25);
@@ -25,8 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     redirect('/print-bids/index.php');
 }
 
-$statusTabs = ['' => 'All', 'draft' => 'Draft', 'sent' => 'Sent', 'approved' => 'Approved', 'rejected' => 'Rejected'];
-$statusColors = ['draft' => 'secondary', 'sent' => 'primary', 'approved' => 'success', 'rejected' => 'danger'];
+$statusTabs   = ['' => 'All', 'draft' => 'Draft', 'sent' => 'Sent', 'replied' => 'Replied', 'approved' => 'Approved', 'rejected' => 'Rejected'];
+$statusColors = ['draft' => 'secondary', 'sent' => 'primary', 'replied' => 'danger', 'approved' => 'success', 'rejected' => 'danger'];
 
 $pageTitle = 'Print Bids — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
@@ -101,21 +101,37 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-muted small"><?= ($page - 1) * 25 + $i + 1 ?></td>
                         <td><i class="bi bi-building me-1 text-secondary"></i><strong><?= h($b['client_name']) ?></strong></td>
                         <td><?= h($b['title'] ?: '—') ?></td>
-                        <td><span class="badge bg-<?= $sc ?>"><?= h(ucfirst($b['status'])) ?></span></td>
+                        <td>
+                            <?php if ($b['status'] === 'replied'): ?>
+                                <a href="/print-bids/view.php?id=<?= (int)$b['id'] ?>#vendor-replies"
+                                   class="badge bg-danger text-decoration-none">
+                                    <i class="bi bi-reply-fill me-1"></i>Replied
+                                </a>
+                            <?php else: ?>
+                                <span class="badge bg-<?= $sc ?>"><?= h(ucfirst($b['status'])) ?></span>
+                            <?php endif; ?>
+                        </td>
                         <td class="small text-muted"><?= h($b['created_by_name'] ?? '—') ?></td>
                         <td class="small text-muted"><?= date('M j, Y', strtotime($b['created_at'])) ?></td>
                         <td class="text-end">
                             <div class="d-flex gap-1 justify-content-end">
                                 <a href="/print-bids/view.php?id=<?= (int)$b['id'] ?>"
-                                   class="btn btn-sm btn-outline-secondary">
+                                   class="btn btn-sm btn-outline-secondary" title="View">
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 <a href="/print-bids/create.php?id=<?= (int)$b['id'] ?>"
-                                   class="btn btn-sm btn-outline-primary">
+                                   class="btn btn-sm btn-outline-primary" title="Edit">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
+                                <?php if (in_array($b['status'], ['sent','replied'], true)): ?>
+                                <a href="/print-bids/reply.php?id=<?= (int)$b['id'] ?>"
+                                   class="btn btn-sm btn-outline-danger" title="Log Vendor Reply">
+                                    <i class="bi bi-reply-fill"></i>
+                                </a>
+                                <?php endif; ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger"
-                                        onclick="confirmDelete(<?= (int)$b['id'] ?>, <?= htmlspecialchars(json_encode($b['client_name']), ENT_QUOTES) ?>)">
+                                        onclick="confirmDelete(<?= (int)$b['id'] ?>, <?= htmlspecialchars(json_encode($b['client_name']), ENT_QUOTES) ?>)"
+                                        title="Delete">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
