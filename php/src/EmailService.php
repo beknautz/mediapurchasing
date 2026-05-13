@@ -25,7 +25,8 @@ class EmailService extends BaseService
         int    $billId       = 0,
         int    $campaignId   = 0,
         int    $channelId    = 0,
-        array  $attachments  = []   // [['name'=>'file.pdf','path'=>'/abs/path','type'=>'application/pdf'], ...]
+        array  $attachments  = [],   // [['name'=>'file.pdf','path'=>'/abs/path','type'=>'application/pdf'], ...]
+        int    $printBidId   = 0
     ): array {
         $apiKey      = $this->getSetting('sendgrid_api_key', '');
         $fromEmail   = $fromEmail !== '' ? $fromEmail : $this->getSetting('sendgrid_from_email', 'noreply@example.com');
@@ -52,6 +53,8 @@ class EmailService extends BaseService
                 $tag = 'reply+cc' . $channelId;
             } elseif ($mediaBuyId > 0) {
                 $tag = 'reply+mb' . $mediaBuyId;
+            } elseif ($printBidId > 0) {
+                $tag = 'reply+pb' . $printBidId;
             } else {
                 $tag = 'reply';
             }
@@ -186,6 +189,7 @@ class EmailService extends BaseService
         $mediaBuyId = 0;
         $campaignId = 0;
         $channelId  = 0;
+        $printBidId = 0;
 
         if (preg_match('/reply\+cc(\d+)@/i', $to, $m)) {
             // Campaign channel reply: reply+cc{channelId}@domain
@@ -199,6 +203,8 @@ class EmailService extends BaseService
         } elseif (preg_match('/reply\+mb(\d+)@/i', $to, $m)) {
             // Legacy media buy reply: reply+mb{mediaBuyId}@domain
             $mediaBuyId = (int) $m[1];
+        } elseif (preg_match('/reply\+pb(\d+)@/i', $to, $m)) {
+            $printBidId = (int) $m[1];
         }
 
         // Log the inbound communication
@@ -260,6 +266,103 @@ class EmailService extends BaseService
             $this->db->prepare(
                 'UPDATE communication_logs SET attachments = :a WHERE id = :id'
             )->execute([':a' => json_encode($savedFiles), ':id' => $logId]);
+        }
+
+        // ── Handle print bid vendor reply ────────────────────────────────────────
+        if ($printBidId > 0) {
+            try {
+                // Fetch bid + buyer info
+                $bidStmt = $this->db->prepare(
+                    'SELECT pb.*, u.email AS created_by_email, u.name AS created_by_name
+                       FROM print_bids pb
+                  LEFT JOIN users u ON u.id = pb.created_by
+                      WHERE pb.id = :id LIMIT 1'
+                );
+                $bidStmt->execute([':id' => $printBidId]);
+                $bidRow = $bidStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($bidRow) {
+                    // Identify vendor by sender email
+                    $vendorId   = 0;
+                    $vendorName = $from;  // fallback to raw email address
+                    $vStmt = $this->db->prepare(
+                        "SELECT id, company_name FROM vendors WHERE email = :e LIMIT 1"
+                    );
+                    $vStmt->execute([':e' => $from]);
+                    $vRow = $vStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($vRow) {
+                        $vendorId   = (int)$vRow['id'];
+                        $vendorName = $vRow['company_name'];
+                    }
+
+                    // Copy inbound attachment files into print-bids/replies directory
+                    $repliesDir = __DIR__ . '/../uploads/print-bids/' . $printBidId . '/replies/';
+                    if (!is_dir($repliesDir)) {
+                        mkdir($repliesDir, 0755, true);
+                    }
+                    $replyAtts = [];
+                    foreach ($savedFiles as $sf) {
+                        $srcAbs  = __DIR__ . '/../' . $sf['path'];
+                        $safeName = date('Ymd_His_') . preg_replace('/[^a-zA-Z0-9._\-]/', '_', $sf['name']);
+                        $destAbs = $repliesDir . $safeName;
+                        if (file_exists($srcAbs) && copy($srcAbs, $destAbs)) {
+                            $replyAtts[] = [
+                                'name' => $sf['name'],
+                                'path' => 'uploads/print-bids/' . $printBidId . '/replies/' . $safeName,
+                                'type' => mime_content_type($destAbs) ?: 'application/octet-stream',
+                            ];
+                        }
+                    }
+
+                    // Append reply to vendor_replies JSON
+                    $existing = json_decode($bidRow['vendor_replies'] ?? '[]', true) ?: [];
+                    $noteText = trim($bodyText);
+                    if (strlen($noteText) > 600) $noteText = substr($noteText, 0, 600) . '…';
+                    $existing[] = [
+                        'vendor_id'   => $vendorId,
+                        'vendor_name' => $vendorName,
+                        'notes'       => $noteText,
+                        'replied_at'  => date('Y-m-d H:i:s'),
+                        'attachments' => $replyAtts,
+                        'source'      => 'email',
+                        'from_email'  => $from,
+                    ];
+
+                    $this->db->prepare(
+                        "UPDATE print_bids SET vendor_replies = :vr, status = 'replied' WHERE id = :id"
+                    )->execute([
+                        ':vr' => json_encode(array_values($existing)),
+                        ':id' => $printBidId,
+                    ]);
+
+                    // Notify buyer
+                    if (!empty($bidRow['created_by_email'])) {
+                        $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+                                 . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+                        $viewUrl = $baseUrl . '/print-bids/view.php?id=' . $printBidId . '#vendor-replies';
+                        $attsNote = !empty($replyAtts)
+                            ? count($replyAtts) . ' file' . (count($replyAtts) > 1 ? 's' : '') . ' attached'
+                            : 'no files attached';
+                        $notifSubject = 'Vendor Pricing Received — ' . $bidRow['client_name'] . ' (Bid #' . $printBidId . ')';
+                        $notifHtml    = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;color:#222;font-size:14px;">'
+                            . '<div style="max-width:600px;margin:0 auto;padding:24px;">'
+                            . '<p style="display:inline-block;background:#b02a37;color:#fff;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:bold;">Pricing Received</p>'
+                            . '<h2 style="color:#b02a37;">Vendor Pricing Submitted via Email</h2>'
+                            . '<p><strong>' . htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') . '</strong> replied to your print bid request with pricing.</p>'
+                            . '<ul><li><strong>Client:</strong> ' . htmlspecialchars($bidRow['client_name'], ENT_QUOTES, 'UTF-8') . '</li>'
+                            . '<li><strong>Bid #:</strong> ' . $printBidId . '</li>'
+                            . '<li><strong>Attachments:</strong> ' . $attsNote . '</li></ul>'
+                            . '<a href="' . htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8') . '" '
+                            . 'style="background:#b02a37;color:#fff;text-decoration:none;padding:10px 24px;border-radius:6px;font-weight:bold;display:inline-block;margin-top:8px;">'
+                            . 'View Vendor Reply</a>'
+                            . '<p style="margin-top:32px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;">Sent via ' . APP_NAME . '</p>'
+                            . '</div></body></html>';
+                        $this->send($bidRow['created_by_email'], $bidRow['created_by_name'] ?? '', $notifSubject, $notifHtml);
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log('[Inbound Print Bid] Error: ' . $e->getMessage());
+            }
         }
 
         // Update campaign channel status when a reply is received

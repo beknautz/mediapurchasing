@@ -254,7 +254,7 @@ class PrintBidService extends BaseService
                 }
             }
 
-            $result = $emailSvc->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml, '', '', '', 0, 0, 0, 0, 0, $sgAttachments);
+            $result = $emailSvc->send($vendor['email'], $vendor['company_name'], $subject, $bodyHtml, '', '', '', 0, 0, 0, 0, 0, $sgAttachments, (int)$bid['id']);
 
             if ($result['success']) {
                 $sent++;
