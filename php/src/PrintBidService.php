@@ -174,7 +174,24 @@ class PrintBidService extends BaseService
     // Printer vendors receive print items; signage vendors receive signage items.
     // Returns ['sent'=>int, 'failed'=>int, 'errors'=>string[]]
     // -----------------------------------------------------------------------
-    public function sendBidEmails(array $bid): array
+    // -----------------------------------------------------------------------
+    // resendToVendors()
+    // Re-sends the bid request email (with their unique reply link) to one
+    // or more specific vendors. Useful when a vendor needs to resubmit or
+    // has lost the original email.
+    //
+    // $vendorIds — array of vendor IDs to resend to (must already be on the bid)
+    // -----------------------------------------------------------------------
+    public function resendToVendors(int $bidId, array $vendorIds): array
+    {
+        $bid = $this->getBid($bidId);
+        if (empty($bid)) {
+            return ['sent' => 0, 'failed' => 0, 'errors' => ['Bid not found.']];
+        }
+        return $this->sendBidEmails($bid, array_map('intval', $vendorIds));
+    }
+
+    public function sendBidEmails(array $bid, array $onlyVendorIds = []): array
     {
         $emailSvc = new EmailService();
         $sent     = 0;
@@ -204,6 +221,14 @@ class PrintBidService extends BaseService
 
         if (empty($vendors)) {
             return ['sent' => 0, 'failed' => 0, 'errors' => ['No vendor emails found for the selected vendors.']];
+        }
+
+        // When resending to specific vendors only, filter the list
+        if (!empty($onlyVendorIds)) {
+            $vendors = array_values(array_filter($vendors, fn($v) => in_array((int)$v['id'], $onlyVendorIds, true)));
+            if (empty($vendors)) {
+                return ['sent' => 0, 'failed' => 0, 'errors' => ['None of the specified vendors have email addresses on file.']];
+            }
         }
 
         // Generate secure reply tokens for each vendor
@@ -582,8 +607,10 @@ class PrintBidService extends BaseService
     // -----------------------------------------------------------------------
     // getBidByVendorToken()
     // Looks up a bid and vendor info by the reply token.
-    // Returns ['bid'=>[], 'vendor_id'=>int, 'vendor_name'=>string, 'token'=>string]
-    // or empty array if token not found / already used.
+    // Returns ['bid'=>[], 'vendor_id'=>int, 'vendor_name'=>string, 'token'=>string,
+    //          'prior_replies'=>[]] where prior_replies lists this vendor's previous
+    //          submissions so vendor-reply.php can show a resubmit notice.
+    // Tokens are NOT single-use — vendors may resubmit as many times as needed.
     // -----------------------------------------------------------------------
     public function getBidByVendorToken(string $token): array
     {
@@ -604,9 +631,6 @@ class PrintBidService extends BaseService
             $tokenList = json_decode($row['vendor_reply_tokens'] ?? '[]', true) ?: [];
             foreach ($tokenList as $t) {
                 if ($t['token'] === $token) {
-                    if (!empty($t['used'])) {
-                        return ['error' => 'This link has already been used.'];
-                    }
                     // Decode JSON columns
                     $row['printer_vendor_ids']  = json_decode($row['printer_vendor_ids']  ?? '[]', true) ?: [];
                     $row['signage_vendor_ids']  = json_decode($row['signage_vendor_ids']  ?? '[]', true) ?: [];
@@ -614,11 +638,21 @@ class PrintBidService extends BaseService
                     $row['vendor_replies']      = json_decode($row['vendor_replies']      ?? '[]', true) ?: [];
                     $row['vendor_reply_tokens'] = $tokenList;
                     $row['items']               = $this->getItems((int)$row['id']);
+
+                    // Collect any prior replies from this vendor so the portal
+                    // can show a "you've already submitted" notice
+                    $vid = (int)$t['vendor_id'];
+                    $priorReplies = array_values(array_filter(
+                        $row['vendor_replies'],
+                        fn($r) => (int)($r['vendor_id'] ?? 0) === $vid
+                    ));
+
                     return [
-                        'bid'         => $row,
-                        'vendor_id'   => (int)$t['vendor_id'],
-                        'vendor_name' => $t['vendor_name'],
-                        'token'       => $token,
+                        'bid'          => $row,
+                        'vendor_id'    => $vid,
+                        'vendor_name'  => $t['vendor_name'],
+                        'token'        => $token,
+                        'prior_replies' => $priorReplies,
                     ];
                 }
             }
@@ -628,15 +662,17 @@ class PrintBidService extends BaseService
 
     // -----------------------------------------------------------------------
     // saveVendorReplyByToken()
-    // Processes a vendor's self-submitted reply via their unique token.
-    // Saves files, logs the reply, marks the token used, flips status to
-    // 'replied', and emails the buyer a notification.
+    // Processes a vendor's self-submitted reply (initial or resubmission) via
+    // their unique token.  Tokens are not single-use — vendors may submit
+    // updated pricing as many times as needed.
+    // Saves files, appends the reply, flips status to 'replied', and
+    // emails the buyer a notification.
     // -----------------------------------------------------------------------
     public function saveVendorReplyByToken(string $token, string $notes, array $filesInput): array
     {
         $ctx = $this->getBidByVendorToken($token);
-        if (empty($ctx) || !empty($ctx['error'])) {
-            return ['success' => false, 'message' => $ctx['error'] ?? 'Invalid or expired link.'];
+        if (empty($ctx)) {
+            return ['success' => false, 'message' => 'Invalid or expired link.'];
         }
 
         $bid        = $ctx['bid'];
@@ -648,25 +684,14 @@ class PrintBidService extends BaseService
         $result = $this->saveVendorReply($bidId, $vendorId, $vendorName, $notes, $filesInput);
         if (!$result['success']) return $result;
 
-        // Mark token as used
-        $tokenList = $bid['vendor_reply_tokens'];
-        foreach ($tokenList as &$t) {
-            if ($t['token'] === $token) {
-                $t['used'] = true;
-                break;
-            }
-        }
-        unset($t);
-        $this->db->prepare('UPDATE print_bids SET vendor_reply_tokens = :t WHERE id = :id')
-                 ->execute([':t' => json_encode(array_values($tokenList)), ':id' => $bidId]);
-
-        // Email the buyer a notification
+        // Email the buyer a notification (indicate if this is a resubmission)
         if (!empty($bid['created_by_email'])) {
-            $baseUrl  = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-            $viewUrl  = $baseUrl . '/print-bids/view.php?id=' . $bidId . '#vendor-replies';
-            $emailSvc = new EmailService();
-            $subject  = 'Vendor Pricing Received — ' . $bid['client_name'] . ' (Bid #' . $bidId . ')';
-            $bodyHtml = $this->buildBuyerNotificationEmail($bid, $vendorName, $viewUrl);
+            $baseUrl    = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            $viewUrl    = $baseUrl . '/print-bids/view.php?id=' . $bidId . '#vendor-replies';
+            $emailSvc   = new EmailService();
+            $isResub    = !empty($ctx['prior_replies']);
+            $subject    = ($isResub ? 'Updated ' : '') . 'Vendor Pricing Received — ' . $bid['client_name'] . ' (Bid #' . $bidId . ')';
+            $bodyHtml   = $this->buildBuyerNotificationEmail($bid, $vendorName, $viewUrl, $isResub);
             $emailSvc->send($bid['created_by_email'], $bid['created_by_name'] ?? '', $subject, $bodyHtml);
         }
 
@@ -678,7 +703,7 @@ class PrintBidService extends BaseService
     // Composes the HTML notification email sent to the buyer when a vendor
     // submits pricing via their self-service link.
     // -----------------------------------------------------------------------
-    private function buildBuyerNotificationEmail(array $bid, string $vendorName, string $viewUrl): string
+    private function buildBuyerNotificationEmail(array $bid, string $vendorName, string $viewUrl, bool $isResubmission = false): string
     {
         $h = fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
         $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
@@ -688,9 +713,11 @@ class PrintBidService extends BaseService
         $html .= '.btn{display:inline-block;background:#b02a37;color:#fff;text-decoration:none;padding:10px 24px;border-radius:6px;font-weight:bold;margin-top:16px;}';
         $html .= '.footer{margin-top:32px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;}';
         $html .= '</style></head><body><div class="wrap">';
-        $html .= '<p class="badge">Pricing Received</p>';
-        $html .= '<h2 style="color:#b02a37;margin-top:12px;">Vendor Pricing Submitted</h2>';
-        $html .= '<p><strong>' . $h($vendorName) . '</strong> has submitted their pricing for:</p>';
+        $html .= '<p class="badge">' . ($isResubmission ? 'Updated Pricing' : 'Pricing Received') . '</p>';
+        $label = $isResubmission ? 'Vendor Pricing Updated' : 'Vendor Pricing Submitted';
+        $html .= '<h2 style="color:#b02a37;margin-top:12px;">' . $label . '</h2>';
+        $action = $isResubmission ? 'submitted an updated quote' : 'submitted their pricing';
+        $html .= '<p><strong>' . $h($vendorName) . '</strong> has ' . $action . ' for:</p>';
         $html .= '<ul><li><strong>Client:</strong> ' . $h($bid['client_name']) . '</li>';
         $html .= '<li><strong>Bid #:</strong> ' . (int)$bid['id'] . '</li>';
         if (!empty($bid['title'])) $html .= '<li><strong>Title:</strong> ' . $h($bid['title']) . '</li>';

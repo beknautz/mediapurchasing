@@ -13,6 +13,22 @@ if (empty($bid)) {
     redirect('/print-bids/index.php');
 }
 
+// Handle resend email action
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resend') {
+    $resendIds = array_map('intval', (array)($_POST['resend_vendor_ids'] ?? []));
+    if (!empty($resendIds)) {
+        $r = $svc->resendToVendors($id, $resendIds);
+        if ($r['sent'] > 0) {
+            flash('success', 'Bid email resent to ' . $r['sent'] . ' vendor' . ($r['sent'] !== 1 ? 's' : '') . '.');
+        } else {
+            flash('warning', 'No emails sent. ' . implode(' ', $r['errors']));
+        }
+    } else {
+        flash('warning', 'Please select at least one vendor to resend to.');
+    }
+    redirect('/print-bids/view.php?id=' . $id);
+}
+
 $printItems   = array_values(array_filter($bid['items'], fn($i) => $i['type'] === 'print'));
 $signageItems = array_values(array_filter($bid['items'], fn($i) => $i['type'] === 'signage'));
 
@@ -289,6 +305,39 @@ require_once __DIR__ . '/../includes/header.php';
                 <a href="/print-bids/reply.php?id=<?= $bid['id'] ?>" class="btn btn-danger btn-sm">
                     <i class="bi bi-reply-fill me-1"></i>Log Vendor Reply
                 </a>
+                <!-- Resend bid email to vendor(s) -->
+                <?php
+                $allBidVendorIds = array_unique(array_merge(
+                    array_map('intval', $bid['printer_vendor_ids']),
+                    array_map('intval', $bid['signage_vendor_ids'])
+                ));
+                $bidVendorList = array_values(array_filter($allVendors, fn($v) => in_array((int)$v['id'], $allBidVendorIds, true)));
+                ?>
+                <?php if (!empty($bidVendorList)): ?>
+                <button class="btn btn-outline-warning btn-sm" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#resendPanel" aria-expanded="false">
+                    <i class="bi bi-send me-1"></i>Resend Bid Email
+                </button>
+                <div class="collapse" id="resendPanel">
+                    <form method="post" class="mt-2 p-2 border rounded bg-light">
+                        <input type="hidden" name="action" value="resend">
+                        <p class="small fw-semibold mb-2 text-muted">Select vendor(s) to resend to:</p>
+                        <?php foreach ($bidVendorList as $bv): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   name="resend_vendor_ids[]" value="<?= (int)$bv['id'] ?>"
+                                   id="rv_<?= (int)$bv['id'] ?>">
+                            <label class="form-check-label small" for="rv_<?= (int)$bv['id'] ?>">
+                                <?= h($bv['company_name']) ?>
+                            </label>
+                        </div>
+                        <?php endforeach; ?>
+                        <button type="submit" class="btn btn-warning btn-sm mt-2 w-100">
+                            <i class="bi bi-send-fill me-1"></i>Resend
+                        </button>
+                    </form>
+                </div>
+                <?php endif; ?>
                 <hr class="my-1">
                 <?php endif; ?>
                 <a href="/print-bids/index.php" class="btn btn-link btn-sm text-secondary">

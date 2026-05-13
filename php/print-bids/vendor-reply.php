@@ -22,32 +22,12 @@ if (empty($ctx)) {
     die('This link is invalid or has expired. Please contact us for assistance.');
 }
 
-if (!empty($ctx['error'])) {
-    // Already used
-    ?><!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Already Submitted</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-</head>
-<body class="bg-light">
-<div class="container py-5 text-center" style="max-width:500px;">
-    <i class="bi bi-check-circle-fill text-success fs-1 mb-3 d-block"></i>
-    <h3>Already Submitted</h3>
-    <p class="text-muted">Your pricing has already been received. Thank you!</p>
-    <p class="text-muted small">If you need to update your quote, please contact us directly.</p>
-</div>
-</body></html>
-<?php
-    exit;
-}
-
-$bid        = $ctx['bid'];
-$vendorName = $ctx['vendor_name'];
-$vendorId   = $ctx['vendor_id'];
-$submitted  = false;
-$errors     = [];
+$bid          = $ctx['bid'];
+$vendorName   = $ctx['vendor_name'];
+$vendorId     = $ctx['vendor_id'];
+$priorReplies = $ctx['prior_replies'] ?? [];   // previous submissions from this vendor
+$submitted    = false;
+$errors       = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes = trim($_POST['notes'] ?? '');
@@ -165,6 +145,18 @@ $signageItems = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['typ
         </div>
     </div>
 
+    <!-- ── Resubmit notice ── -->
+    <?php if (!empty($priorReplies)): ?>
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+        <i class="bi bi-arrow-clockwise fs-5 flex-shrink-0 mt-1"></i>
+        <div>
+            <strong>You've already submitted pricing</strong> — last received
+            <?= date('M j, Y \a\t g:ia', strtotime(end($priorReplies)['replied_at'])) ?>.
+            <br>Use the form below to send us an updated quote. Your previous submission will be kept on file.
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- ── Submission form ── -->
     <?php if (!empty($errors)): ?>
     <div class="alert alert-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i><?= implode('<br>', array_map(fn($e) => htmlspecialchars($e, ENT_QUOTES, 'UTF-8'), $errors)) ?></div>
@@ -172,7 +164,7 @@ $signageItems = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['typ
 
     <div class="card shadow border-0 mb-5">
         <div class="card-header card-header-red fw-semibold">
-            <i class="bi bi-upload me-1"></i>Submit Your Pricing
+            <i class="bi bi-upload me-1"></i><?= !empty($priorReplies) ? 'Submit Updated Pricing' : 'Submit Your Pricing' ?>
         </div>
         <div class="card-body">
             <form method="post" enctype="multipart/form-data" novalidate>
