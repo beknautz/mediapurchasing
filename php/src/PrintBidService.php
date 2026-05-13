@@ -45,11 +45,12 @@ class PrintBidService extends BaseService
         $bid = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$bid) return [];
 
-        $bid['printer_vendor_ids'] = json_decode($bid['printer_vendor_ids'] ?? '[]', true) ?: [];
-        $bid['signage_vendor_ids'] = json_decode($bid['signage_vendor_ids'] ?? '[]', true) ?: [];
-        $bid['attachments']        = json_decode($bid['attachments']        ?? '[]', true) ?: [];
-        $bid['vendor_replies']     = json_decode($bid['vendor_replies']     ?? '[]', true) ?: [];
-        $bid['items']              = $this->getItems($id);
+        $bid['printer_vendor_ids']  = json_decode($bid['printer_vendor_ids']  ?? '[]', true) ?: [];
+        $bid['signage_vendor_ids']  = json_decode($bid['signage_vendor_ids']  ?? '[]', true) ?: [];
+        $bid['attachments']         = json_decode($bid['attachments']         ?? '[]', true) ?: [];
+        $bid['vendor_replies']      = json_decode($bid['vendor_replies']      ?? '[]', true) ?: [];
+        $bid['vendor_reply_tokens'] = json_decode($bid['vendor_reply_tokens'] ?? '[]', true) ?: [];
+        $bid['items']               = $this->getItems($id);
 
         return $bid;
     }
@@ -205,6 +206,26 @@ class PrintBidService extends BaseService
             return ['sent' => 0, 'failed' => 0, 'errors' => ['No vendor emails found for the selected vendors.']];
         }
 
+        // Generate secure reply tokens for each vendor
+        $baseUrl   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $vendorIds = array_column($vendors, 'id');
+        $tokenMap  = $this->generateVendorTokens((int)$bid['id'], $vendorIds);
+
+        // Store vendor names in tokens so getBidByVendorToken() can return them
+        $stmt = $this->db->prepare('SELECT vendor_reply_tokens FROM print_bids WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $bid['id']]);
+        $tokenRow  = $stmt->fetch(PDO::FETCH_ASSOC);
+        $tokenList = json_decode($tokenRow['vendor_reply_tokens'] ?? '[]', true) ?: [];
+        $vendorNameMap = array_column($vendors, 'company_name', 'id');
+        foreach ($tokenList as &$t) {
+            if (isset($vendorNameMap[$t['vendor_id']])) {
+                $t['vendor_name'] = $vendorNameMap[$t['vendor_id']];
+            }
+        }
+        unset($t);
+        $this->db->prepare('UPDATE print_bids SET vendor_reply_tokens = :t WHERE id = :id')
+                 ->execute([':t' => json_encode(array_values($tokenList)), ':id' => $bid['id']]);
+
         foreach ($vendors as $vendor) {
             $vid        = (int)$vendor['id'];
             $isPrinter  = in_array($vid, $printerIds, true);
@@ -217,7 +238,8 @@ class PrintBidService extends BaseService
             if (empty($vendorPrintItems) && empty($vendorSignageItems)) continue;
 
             $subject  = 'Print Bid Request — ' . $bid['client_name'];
-            $bodyHtml = $this->buildBidEmailHtml($bid, $vendor, $vendorPrintItems, $vendorSignageItems);
+            $replyUrl = isset($tokenMap[$vid]) ? $baseUrl . '/print-bids/vendor-reply.php?token=' . $tokenMap[$vid] : '';
+            $bodyHtml = $this->buildBidEmailHtml($bid, $vendor, $vendorPrintItems, $vendorSignageItems, $replyUrl);
 
             // Build absolute-path attachment list for SendGrid
             $sgAttachments = [];
@@ -249,7 +271,7 @@ class PrintBidService extends BaseService
     // buildBidEmailHtml()  [private]
     // Composes the HTML email body for a vendor.
     // -----------------------------------------------------------------------
-    private function buildBidEmailHtml(array $bid, array $vendor, array $printItems, array $signageItems): string
+    private function buildBidEmailHtml(array $bid, array $vendor, array $printItems, array $signageItems, string $replyUrl = ''): string
     {
         $clientName = htmlspecialchars($bid['client_name'], ENT_QUOTES, 'UTF-8');
         $vendorName = htmlspecialchars($vendor['company_name'], ENT_QUOTES, 'UTF-8');
@@ -313,6 +335,15 @@ class PrintBidService extends BaseService
 
         if ($notes) {
             $html .= '<h3>Additional Notes</h3><p>' . $notes . '</p>';
+        }
+
+        if ($replyUrl !== '') {
+            $html .= '<div style="margin:24px 0;text-align:center;">';
+            $html .= '<a href="' . htmlspecialchars($replyUrl, ENT_QUOTES, 'UTF-8') . '" ';
+            $html .= 'style="background:#b02a37;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:bold;font-size:15px;display:inline-block;">';
+            $html .= '&#128228; Submit Your Pricing</a>';
+            $html .= '<p style="font-size:12px;color:#888;margin-top:8px;">Click the button above to upload your price quote directly.</p>';
+            $html .= '</div>';
         }
 
         $html .= '<p>Please reply to this email with your quote at your earliest convenience. Thank you!</p>';
@@ -501,6 +532,174 @@ class PrintBidService extends BaseService
         ]);
 
         return ['success' => true, 'message' => 'Reply logged.'];
+    }
+
+    // -----------------------------------------------------------------------
+    // generateVendorTokens()
+    // Creates a secure reply token for each vendor being emailed and stores
+    // them in the vendor_reply_tokens JSON column.
+    // Returns: array keyed by vendor_id => token string
+    // -----------------------------------------------------------------------
+    public function generateVendorTokens(int $bidId, array $vendorIds): array
+    {
+        // Load any existing tokens (preserve already-generated ones)
+        $stmt = $this->db->prepare('SELECT vendor_reply_tokens FROM print_bids WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $bidId]);
+        $row    = $stmt->fetch(PDO::FETCH_ASSOC);
+        $tokens = json_decode($row['vendor_reply_tokens'] ?? '[]', true) ?: [];
+
+        // Index existing tokens by vendor_id for lookup
+        $existing = [];
+        foreach ($tokens as $t) {
+            $existing[(int)$t['vendor_id']] = $t['token'];
+        }
+
+        $tokenMap = [];
+        foreach ($vendorIds as $vid) {
+            $vid = (int)$vid;
+            if (isset($existing[$vid])) {
+                // Re-use existing token (idempotent resend)
+                $tokenMap[$vid] = $existing[$vid];
+            } else {
+                $token = bin2hex(random_bytes(20));
+                $tokens[] = [
+                    'token'       => $token,
+                    'vendor_id'   => $vid,
+                    'vendor_name' => '',   // filled in by caller
+                    'created_at'  => date('Y-m-d H:i:s'),
+                    'used'        => false,
+                ];
+                $tokenMap[$vid] = $token;
+            }
+        }
+
+        $this->db->prepare('UPDATE print_bids SET vendor_reply_tokens = :t WHERE id = :id')
+                 ->execute([':t' => json_encode(array_values($tokens)), ':id' => $bidId]);
+
+        return $tokenMap;
+    }
+
+    // -----------------------------------------------------------------------
+    // getBidByVendorToken()
+    // Looks up a bid and vendor info by the reply token.
+    // Returns ['bid'=>[], 'vendor_id'=>int, 'vendor_name'=>string, 'token'=>string]
+    // or empty array if token not found / already used.
+    // -----------------------------------------------------------------------
+    public function getBidByVendorToken(string $token): array
+    {
+        $token = trim($token);
+        if (strlen($token) !== 40) return [];
+
+        // Scan all bids for matching token (tokens are unique per bid)
+        $stmt = $this->db->query(
+            'SELECT pb.*, u.name AS created_by_name, u.email AS created_by_email
+               FROM print_bids pb
+          LEFT JOIN users u ON u.id = pb.created_by
+              WHERE pb.vendor_reply_tokens IS NOT NULL
+                AND pb.vendor_reply_tokens != \'[]\''
+        );
+        $bids = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($bids as $row) {
+            $tokenList = json_decode($row['vendor_reply_tokens'] ?? '[]', true) ?: [];
+            foreach ($tokenList as $t) {
+                if ($t['token'] === $token) {
+                    if (!empty($t['used'])) {
+                        return ['error' => 'This link has already been used.'];
+                    }
+                    // Decode JSON columns
+                    $row['printer_vendor_ids']  = json_decode($row['printer_vendor_ids']  ?? '[]', true) ?: [];
+                    $row['signage_vendor_ids']  = json_decode($row['signage_vendor_ids']  ?? '[]', true) ?: [];
+                    $row['attachments']         = json_decode($row['attachments']         ?? '[]', true) ?: [];
+                    $row['vendor_replies']      = json_decode($row['vendor_replies']      ?? '[]', true) ?: [];
+                    $row['vendor_reply_tokens'] = $tokenList;
+                    $row['items']               = $this->getItems((int)$row['id']);
+                    return [
+                        'bid'         => $row,
+                        'vendor_id'   => (int)$t['vendor_id'],
+                        'vendor_name' => $t['vendor_name'],
+                        'token'       => $token,
+                    ];
+                }
+            }
+        }
+        return [];
+    }
+
+    // -----------------------------------------------------------------------
+    // saveVendorReplyByToken()
+    // Processes a vendor's self-submitted reply via their unique token.
+    // Saves files, logs the reply, marks the token used, flips status to
+    // 'replied', and emails the buyer a notification.
+    // -----------------------------------------------------------------------
+    public function saveVendorReplyByToken(string $token, string $notes, array $filesInput): array
+    {
+        $ctx = $this->getBidByVendorToken($token);
+        if (empty($ctx) || !empty($ctx['error'])) {
+            return ['success' => false, 'message' => $ctx['error'] ?? 'Invalid or expired link.'];
+        }
+
+        $bid        = $ctx['bid'];
+        $bidId      = (int)$bid['id'];
+        $vendorId   = $ctx['vendor_id'];
+        $vendorName = $ctx['vendor_name'];
+
+        // Delegate file upload + reply storage to saveVendorReply()
+        $result = $this->saveVendorReply($bidId, $vendorId, $vendorName, $notes, $filesInput);
+        if (!$result['success']) return $result;
+
+        // Mark token as used
+        $tokenList = $bid['vendor_reply_tokens'];
+        foreach ($tokenList as &$t) {
+            if ($t['token'] === $token) {
+                $t['used'] = true;
+                break;
+            }
+        }
+        unset($t);
+        $this->db->prepare('UPDATE print_bids SET vendor_reply_tokens = :t WHERE id = :id')
+                 ->execute([':t' => json_encode(array_values($tokenList)), ':id' => $bidId]);
+
+        // Email the buyer a notification
+        if (!empty($bid['created_by_email'])) {
+            $baseUrl  = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            $viewUrl  = $baseUrl . '/print-bids/view.php?id=' . $bidId . '#vendor-replies';
+            $emailSvc = new EmailService();
+            $subject  = 'Vendor Pricing Received — ' . $bid['client_name'] . ' (Bid #' . $bidId . ')';
+            $bodyHtml = $this->buildBuyerNotificationEmail($bid, $vendorName, $viewUrl);
+            $emailSvc->send($bid['created_by_email'], $bid['created_by_name'] ?? '', $subject, $bodyHtml);
+        }
+
+        return ['success' => true, 'vendor_name' => $vendorName];
+    }
+
+    // -----------------------------------------------------------------------
+    // buildBuyerNotificationEmail()  [private]
+    // Composes the HTML notification email sent to the buyer when a vendor
+    // submits pricing via their self-service link.
+    // -----------------------------------------------------------------------
+    private function buildBuyerNotificationEmail(array $bid, string $vendorName, string $viewUrl): string
+    {
+        $h = fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+        $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        $html .= '<style>body{font-family:Arial,sans-serif;color:#222;font-size:14px;margin:0;padding:0;}';
+        $html .= '.wrap{max-width:600px;margin:0 auto;padding:24px;}';
+        $html .= '.badge{display:inline-block;background:#b02a37;color:#fff;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:bold;}';
+        $html .= '.btn{display:inline-block;background:#b02a37;color:#fff;text-decoration:none;padding:10px 24px;border-radius:6px;font-weight:bold;margin-top:16px;}';
+        $html .= '.footer{margin-top:32px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;}';
+        $html .= '</style></head><body><div class="wrap">';
+        $html .= '<p class="badge">Pricing Received</p>';
+        $html .= '<h2 style="color:#b02a37;margin-top:12px;">Vendor Pricing Submitted</h2>';
+        $html .= '<p><strong>' . $h($vendorName) . '</strong> has submitted their pricing for:</p>';
+        $html .= '<ul><li><strong>Client:</strong> ' . $h($bid['client_name']) . '</li>';
+        $html .= '<li><strong>Bid #:</strong> ' . (int)$bid['id'] . '</li>';
+        if (!empty($bid['title'])) $html .= '<li><strong>Title:</strong> ' . $h($bid['title']) . '</li>';
+        $html .= '</ul>';
+        $html .= '<p>Log in to review their pricing attachments and notes:</p>';
+        $html .= '<a href="' . $h($viewUrl) . '" class="btn">View Vendor Reply</a>';
+        $html .= '<div class="footer">Sent via ' . APP_NAME . '</div>';
+        $html .= '</div></body></html>';
+        return $html;
     }
 
     // -----------------------------------------------------------------------
