@@ -91,6 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $existingPrintItems   = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['type'] === 'print'));
 $existingSignageItems = array_values(array_filter($bid['items'] ?? [], fn($i) => $i['type'] === 'signage'));
 
+// Static option lists — must be defined BEFORE the ForJs encodings that reference them
+$INK_OPTIONS = ['1/0 (Pantone)','1/1 (Pantone)','2/0 (Pantone)','2/2 (Pantone)',
+                '3/0 (Pantone)','3/3 (Pantone)','4/0 (Full Color)','4/4 (Full Color)','See (Notes)'];
+
+$SIGN_MATERIALS = ['8oz Banner','10oz Banner','Foamcore','Printed on Dibond',
+                   'Vinyl & Dibond','Corrugated Plastic','See (Notes)'];
+
 // Pre-encode item data for the HTML data-attribute bridge.
 // htmlspecialchars() makes it safe in an HTML attribute regardless of content
 // — no </script> can close a script tag when the data is in the HTML body.
@@ -125,12 +132,6 @@ $signageItemsForJs = htmlspecialchars(
 );
 $existingPrinterIds   = $bid['printer_vendor_ids'] ?? [];
 $existingSignageIds   = $bid['signage_vendor_ids']  ?? [];
-
-$INK_OPTIONS = ['1/0 (Pantone)','1/1 (Pantone)','2/0 (Pantone)','2/2 (Pantone)',
-                '3/0 (Pantone)','3/3 (Pantone)','4/0 (Full Color)','4/4 (Full Color)','See (Notes)'];
-
-$SIGN_MATERIALS = ['8oz Banner','10oz Banner','Foamcore','Printed on Dibond',
-                   'Vinyl & Dibond','Corrugated Plastic','See (Notes)'];
 
 $pageTitle = ($isEdit ? 'Edit' : 'New') . ' Print Bid — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
@@ -367,7 +368,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <i class="bi <?= $attIcon ?>"></i>
                                     <a href="/<?= h($att['path']) ?>" target="_blank" class="flex-grow-1 text-decoration-none"><?= h($att['name']) ?></a>
                                     <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1"
-                                            onclick="removeExistingAttach(<?= $attIdx ?>, <?= json_encode($att['path']) ?>)"
+                                            onclick="removeExistingAttach(<?= $attIdx ?>, <?= htmlspecialchars(json_encode($att['path'], JSON_HEX_QUOT | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>)"
                                             title="Remove this attachment">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
