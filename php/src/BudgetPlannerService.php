@@ -394,15 +394,20 @@ class BudgetPlannerService extends BaseService
         $map = [];
         foreach (['good', 'better', 'best'] as $tier) {
             foreach ($allocations[$tier] ?? [] as $entry) {
-                $vid = (int)($entry['vendor_id'] ?? 0);
-                if ($vid === 0) {
-                    continue;
-                }
-                if (!isset($map[$vid])) {
-                    $map[$vid] = [
+                $vid  = (int)($entry['vendor_id'] ?? 0);
+                $name = trim($entry['vendor_name'] ?? '');
+                $cat  = $entry['category'] ?? '';
+
+                // Key by vendor_id+category so same vendor with different services
+                // (e.g. Radio vs Social sub-rows) each get their own unified row.
+                // Fall back to vendor_name when vendor_id is 0 (manually-added rows).
+                $key = ($vid > 0 ? $vid : 'n:' . $name) . ':' . $cat;
+
+                if (!isset($map[$key])) {
+                    $map[$key] = [
                         'vendor_id'        => $vid,
-                        'vendor_name'      => $entry['vendor_name'] ?? '',
-                        'category'         => $entry['category'] ?? '',
+                        'vendor_name'      => $name,
+                        'category'         => $cat,
                         'good_amount'      => 0.0,
                         'better_amount'    => 0.0,
                         'best_amount'      => 0.0,
@@ -411,8 +416,8 @@ class BudgetPlannerService extends BaseService
                         'best_rationale'   => '',
                     ];
                 }
-                $map[$vid][$tier . '_amount']    = (float)($entry['amount']    ?? 0);
-                $map[$vid][$tier . '_rationale'] = $entry['rationale'] ?? '';
+                $map[$key][$tier . '_amount']    = (float)($entry['amount']    ?? 0);
+                $map[$key][$tier . '_rationale'] = $entry['rationale'] ?? '';
             }
         }
 
@@ -438,9 +443,12 @@ class BudgetPlannerService extends BaseService
             $vid  = (int)($row['vendor_id'] ?? 0);
             $name = trim($row['vendor_name'] ?? '');
             $cat  = trim($row['category']    ?? '');
-            if ($vid === 0) {
+
+            // Skip completely empty rows; allow vendor_id=0 for manually-added rows
+            if ($vid === 0 && $name === '') {
                 continue;
             }
+
             foreach (['good', 'better', 'best'] as $tier) {
                 $amount = (float)($row[$tier . '_amount'] ?? 0);
                 if ($amount > 0) {

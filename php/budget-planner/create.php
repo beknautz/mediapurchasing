@@ -335,20 +335,31 @@ require_once __DIR__ . '/../includes/header.php';
                     </tr>
                 </thead>
                 <tbody id="vendorRows">
-                <?php foreach ($unifiedRows as $idx => $row): ?>
-                    <tr class="vendor-row">
-                        <td class="drag-handle text-center text-muted" style="cursor:grab;" title="Drag to reorder">
+                <?php foreach ($unifiedRows as $idx => $row):
+                    $isSubrow = !empty($row['is_subrow']);
+                ?>
+                    <tr class="vendor-row<?= $isSubrow ? ' subrow' : '' ?>"<?= $isSubrow ? ' style="background:#f0f4ff;"' : '' ?>>
+                        <td class="drag-handle text-center text-muted" style="cursor:grab;" title="<?= $isSubrow ? 'Sub-row' : 'Drag to reorder' ?>">
+                            <?php if ($isSubrow): ?>
+                            <i class="bi bi-arrow-return-right fs-5 text-primary opacity-50"></i>
+                            <?php else: ?>
                             <i class="bi bi-grip-vertical fs-5"></i>
+                            <?php endif; ?>
                         </td>
-                        <td class="text-muted small"><?= h($row['category']) ?></td>
-                        <td class="fw-semibold">
-                            <?= h($row['vendor_name']) ?>
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_id]"        value="<?= (int)$row['vendor_id'] ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_name]"       value="<?= h($row['vendor_name']) ?>">
-                            <input type="hidden" name="vendor_data[<?= $idx ?>][category]"          value="<?= h($row['category']) ?>">
+                        <td>
+                            <input type="text" class="form-control form-control-sm"
+                                   name="vendor_data[<?= $idx ?>][category]"
+                                   value="<?= h($row['category']) ?>" placeholder="Category">
+                        </td>
+                        <td<?= $isSubrow ? ' style="padding-left:2rem; border-left:3px solid #0d6efd;"' : '' ?>>
+                            <input type="text" class="form-control form-control-sm fw-semibold"
+                                   name="vendor_data[<?= $idx ?>][vendor_name]"
+                                   value="<?= h($row['vendor_name']) ?>" placeholder="Vendor name">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][vendor_id]"        value="<?= (int)($row['vendor_id'] ?? 0) ?>">
                             <input type="hidden" name="vendor_data[<?= $idx ?>][good_rationale]"   value="<?= h($row['good_rationale']   ?? '') ?>">
                             <input type="hidden" name="vendor_data[<?= $idx ?>][better_rationale]" value="<?= h($row['better_rationale'] ?? '') ?>">
                             <input type="hidden" name="vendor_data[<?= $idx ?>][best_rationale]"   value="<?= h($row['best_rationale']   ?? '') ?>">
+                            <input type="hidden" name="vendor_data[<?= $idx ?>][is_subrow]"        value="<?= $isSubrow ? 1 : 0 ?>">
                         </td>
                         <td class="text-end">
                             <div class="input-group input-group-sm justify-content-end">
@@ -386,13 +397,19 @@ require_once __DIR__ . '/../includes/header.php';
                                 $row['better_rationale'] ? 'Better: ' . $row['better_rationale'] : '',
                                 $row['best_rationale']   ? 'Best: '   . $row['best_rationale']   : '',
                             ])); ?>
-                            <?php if ($rationale): ?>
+                            <?php if ($rationale && !$isSubrow): ?>
                             <span class="text-muted me-1" data-bs-toggle="tooltip" title="<?= h($rationale) ?>">
                                 <i class="bi bi-info-circle"></i>
                             </span>
                             <?php endif; ?>
-                            <button type="button" class="btn btn-sm btn-outline-danger delete-row"
-                                    title="Remove vendor" onclick="removeRow(this)">
+                            <?php if (!$isSubrow): ?>
+                            <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                    title="Add sub-row for this vendor" onclick="addSubRow(this)">
+                                <i class="bi bi-diagram-2"></i>
+                            </button>
+                            <?php endif; ?>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    title="Remove row" onclick="removeRow(this)">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </td>
@@ -426,9 +443,14 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
 
         <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3">
-            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('generateForm').submit();">
-                <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('generateForm').submit();">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
+                </button>
+                <button type="button" class="btn btn-outline-primary" onclick="addVendorRow()">
+                    <i class="bi bi-plus-circle me-1"></i>Add Vendor Row
+                </button>
+            </div>
             <button type="submit" class="btn btn-success btn-lg">
                 <i class="bi bi-floppy me-2"></i>Save Proposal
             </button>
@@ -484,6 +506,11 @@ function reindex() {
             inp.name = inp.name.replace(/vendor_data\[\d+\]/, 'vendor_data[' + i + ']');
         });
     });
+    // Wire tier inputs that haven't been wired yet
+    document.querySelectorAll('.tier-input:not([data-wired])').forEach(function (inp) {
+        inp.addEventListener('input', recalc);
+        inp.dataset.wired = '1';
+    });
     recalc();
 }
 
@@ -494,6 +521,117 @@ function removeRow(btn) {
     tr.style.opacity    = '0';
     tr.style.background = '#fee2e2';
     setTimeout(function () { tr.remove(); reindex(); }, 180);
+}
+
+// ── HTML-escape helper (for dynamic row insertion) ────────────────────────────
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// ── Build a vendor row HTML string ────────────────────────────────────────────
+function buildRowHtml(idx, opts) {
+    var isSubrow   = opts.isSubrow || false;
+    var vendorId   = parseInt(opts.vendorId || 0);
+    var vendorName = opts.vendorName || '';
+    var category   = opts.category  || '';
+
+    var handleHtml = isSubrow
+        ? '<i class="bi bi-arrow-return-right fs-5 text-primary opacity-50"></i>'
+        : '<i class="bi bi-grip-vertical fs-5"></i>';
+    var rowStyle   = isSubrow ? ' style="background:#f0f4ff;"' : '';
+    var tdStyle    = isSubrow ? ' style="padding-left:2rem; border-left:3px solid #0d6efd;"' : '';
+    var subRowInput = '<input type="hidden" name="vendor_data[' + idx + '][is_subrow]" value="' + (isSubrow ? 1 : 0) + '">';
+
+    var subRowBtn = isSubrow ? '' :
+        '<button type="button" class="btn btn-sm btn-outline-primary me-1" title="Add sub-row for this vendor" onclick="addSubRow(this)">' +
+        '<i class="bi bi-diagram-2"></i></button>';
+
+    return '<tr class="vendor-row' + (isSubrow ? ' subrow' : '') + '"' + rowStyle + '>' +
+        '<td class="drag-handle text-center text-muted" style="cursor:grab;" title="' + (isSubrow ? 'Sub-row' : 'Drag to reorder') + '">' +
+            handleHtml +
+        '</td>' +
+        '<td><input type="text" class="form-control form-control-sm" ' +
+            'name="vendor_data[' + idx + '][category]" ' +
+            'value="' + escHtml(category) + '" placeholder="Category"></td>' +
+        '<td' + tdStyle + '>' +
+            '<input type="text" class="form-control form-control-sm fw-semibold" ' +
+                'name="vendor_data[' + idx + '][vendor_name]" ' +
+                'value="' + escHtml(vendorName) + '" placeholder="Vendor name">' +
+            '<input type="hidden" name="vendor_data[' + idx + '][vendor_id]" value="' + vendorId + '">' +
+            '<input type="hidden" name="vendor_data[' + idx + '][good_rationale]" value="">' +
+            '<input type="hidden" name="vendor_data[' + idx + '][better_rationale]" value="">' +
+            '<input type="hidden" name="vendor_data[' + idx + '][best_rationale]" value="">' +
+            subRowInput +
+        '</td>' +
+        '<td class="text-end"><div class="input-group input-group-sm justify-content-end">' +
+            '<span class="input-group-text">$</span>' +
+            '<input type="number" class="form-control text-end tier-input" ' +
+                'name="vendor_data[' + idx + '][good_amount]" data-tier="good" ' +
+                'value="0" min="0" step="any" style="max-width:100px;">' +
+        '</div></td>' +
+        '<td class="text-end"><div class="input-group input-group-sm justify-content-end">' +
+            '<span class="input-group-text">$</span>' +
+            '<input type="number" class="form-control text-end tier-input" ' +
+                'name="vendor_data[' + idx + '][better_amount]" data-tier="better" ' +
+                'value="0" min="0" step="any" style="max-width:100px;">' +
+        '</div></td>' +
+        '<td class="text-end"><div class="input-group input-group-sm justify-content-end">' +
+            '<span class="input-group-text">$</span>' +
+            '<input type="number" class="form-control text-end tier-input" ' +
+                'name="vendor_data[' + idx + '][best_amount]" data-tier="best" ' +
+                'value="0" min="0" step="any" style="max-width:100px;">' +
+        '</div></td>' +
+        '<td class="text-center">' +
+            subRowBtn +
+            '<button type="button" class="btn btn-sm btn-outline-danger" title="Remove row" onclick="removeRow(this)">' +
+            '<i class="bi bi-trash"></i></button>' +
+        '</td>' +
+    '</tr>';
+}
+
+// ── Add a blank vendor row at the bottom of the table ─────────────────────────
+function addVendorRow() {
+    var tbody = document.getElementById('vendorRows');
+    var idx   = tbody.querySelectorAll('tr.vendor-row').length;
+    var tmp   = document.createElement('tbody');
+    tmp.innerHTML = buildRowHtml(idx, { isSubrow: false });
+    var newTr = tmp.firstElementChild;
+    tbody.appendChild(newTr);
+    reindex();
+    // Focus the category field for immediate typing
+    newTr.querySelector('input[name*="[category]"]').focus();
+}
+
+// ── Add a sub-row beneath a parent vendor row ─────────────────────────────────
+function addSubRow(btn) {
+    var parentTr   = btn.closest('tr.vendor-row');
+    var vendorId   = (parentTr.querySelector('input[name*="[vendor_id]"]') || {}).value   || '0';
+    var vendorName = (parentTr.querySelector('input[name*="[vendor_name]"]') || {}).value || '';
+
+    var idx = document.querySelectorAll('#vendorRows tr.vendor-row').length;
+    var tmp = document.createElement('tbody');
+    tmp.innerHTML = buildRowHtml(idx, {
+        isSubrow:   true,
+        vendorId:   vendorId,
+        vendorName: vendorName,
+        category:   ''
+    });
+    var newTr = tmp.firstElementChild;
+
+    // Insert after any consecutive sub-rows already under this parent
+    var insertBefore = parentTr.nextElementSibling;
+    while (insertBefore && insertBefore.classList.contains('subrow')) {
+        insertBefore = insertBefore.nextElementSibling;
+    }
+    parentTr.parentNode.insertBefore(newTr, insertBefore);
+    reindex();
+    // Focus the category field so user can type the sub-service name
+    newTr.querySelector('input[name*="[category]"]').focus();
 }
 
 // ── Drag-to-sort via SortableJS ───────────────────────────────────────────────
@@ -510,6 +648,7 @@ if (tbody) {
 // ── Wire live totals & tooltips ───────────────────────────────────────────────
 document.querySelectorAll('.tier-input').forEach(function (inp) {
     inp.addEventListener('input', recalc);
+    inp.dataset.wired = '1';
 });
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
     new bootstrap.Tooltip(el);
