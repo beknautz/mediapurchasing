@@ -34,25 +34,51 @@ $formData = [
     'ai_rationale'      => $proposal['ai_rationale']       ?? '',
 ];
 
-// ─── POST: save updated allocation ───────────────────────────────────────────
+// ─── POST: save updated allocation + budgets ─────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim($_POST['action'] ?? '') === 'save') {
-    $vendorData  = $_POST['vendor_data'] ?? [];
-    $newAllocs   = BudgetPlannerService::rebuildAllocationFromPost(is_array($vendorData) ? $vendorData : []);
 
-    $result = $plannerService->save(array_merge($formData, [
-        'id'             => $id,
-        'allocation_json'=> json_encode($newAllocs),
-    ]), $userId);
+    $postBudgetGood   = trim($_POST['budget_good']   ?? '');
+    $postBudgetBetter = trim($_POST['budget_better'] ?? '');
+    $postBudgetBest   = trim($_POST['budget_best']   ?? '');
 
-    if ($result['success']) {
-        flash('success', 'Allocation updated successfully.');
-        redirect('/budget-planner/view.php?id=' . $id);
-    } else {
-        $errors[] = $result['message'];
-        // Rebuild display rows from POST data so edits aren't lost
-        $vendorDataRaw = $_POST['vendor_data'] ?? [];
-        $unifiedRows   = is_array($vendorDataRaw) ? array_values($vendorDataRaw) : [];
+    if ($postBudgetGood === '' || !is_numeric($postBudgetGood) || (float)$postBudgetGood < 0) {
+        $errors[] = 'Good budget must be a valid positive number.';
     }
+    if ($postBudgetBetter === '' || !is_numeric($postBudgetBetter) || (float)$postBudgetBetter < 0) {
+        $errors[] = 'Better budget must be a valid positive number.';
+    }
+    if ($postBudgetBest === '' || !is_numeric($postBudgetBest) || (float)$postBudgetBest < 0) {
+        $errors[] = 'Best budget must be a valid positive number.';
+    }
+
+    // Reflect posted budgets back into formData so they survive validation errors
+    $formData['budget_good']   = $postBudgetGood;
+    $formData['budget_better'] = $postBudgetBetter;
+    $formData['budget_best']   = $postBudgetBest;
+
+    if (empty($errors)) {
+        $vendorData = $_POST['vendor_data'] ?? [];
+        $newAllocs  = BudgetPlannerService::rebuildAllocationFromPost(is_array($vendorData) ? $vendorData : []);
+
+        $result = $plannerService->save(array_merge($formData, [
+            'id'              => $id,
+            'budget_good'     => (float)$postBudgetGood,
+            'budget_better'   => (float)$postBudgetBetter,
+            'budget_best'     => (float)$postBudgetBest,
+            'allocation_json' => json_encode($newAllocs),
+        ]), $userId);
+
+        if ($result['success']) {
+            flash('success', 'Proposal updated successfully.');
+            redirect('/budget-planner/view.php?id=' . $id);
+        } else {
+            $errors[] = $result['message'];
+        }
+    }
+
+    // Rebuild display rows from POST data so edits aren't lost on error
+    $vendorDataRaw = $_POST['vendor_data'] ?? [];
+    $unifiedRows   = is_array($vendorDataRaw) ? array_values($vendorDataRaw) : [];
 }
 
 $pageTitle = 'Edit Allocation — ' . $proposal['title'];
@@ -111,6 +137,47 @@ require_once __DIR__ . '/../includes/header.php';
     <form method="POST" id="saveForm">
         <input type="hidden" name="action" value="save">
 
+        <!-- ── Budget Targets ─────────────────────────────────────────────── -->
+        <div class="card-body border-bottom bg-light py-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-auto d-flex align-items-center">
+                    <span class="fw-semibold small text-muted">
+                        <i class="bi bi-bullseye me-1"></i>Budget Targets:
+                    </span>
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1 fw-semibold text-success">Good</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control budget-target-input" id="budgetGood"
+                               name="budget_good" value="<?= (float)$formData['budget_good'] ?>"
+                               min="0" step="any" placeholder="0">
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1 fw-semibold text-primary">Better</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control budget-target-input" id="budgetBetter"
+                               name="budget_better" value="<?= (float)$formData['budget_better'] ?>"
+                               min="0" step="any" placeholder="0">
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1 fw-semibold text-warning">Best</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control budget-target-input" id="budgetBest"
+                               name="budget_best" value="<?= (float)$formData['budget_best'] ?>"
+                               min="0" step="any" placeholder="0">
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <p class="small text-muted mb-0">Change a target to adjust<br>the difference row below.</p>
+                </div>
+            </div>
+        </div>
+
         <div class="table-responsive">
             <table class="table align-middle mb-0" id="allocationTable">
                 <thead class="table-dark">
@@ -118,18 +185,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <th style="width:32px"></th><!-- drag handle -->
                         <th style="width:18%">Category</th>
                         <th>Vendor</th>
-                        <th class="text-end" style="width:14%">
-                            Good<br>
-                            <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_good']) ?></small>
-                        </th>
-                        <th class="text-end" style="width:14%">
-                            Better<br>
-                            <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_better']) ?></small>
-                        </th>
-                        <th class="text-end" style="width:14%">
-                            Best<br>
-                            <small class="fw-normal opacity-75">Target: $<?= number_format((float)$formData['budget_best']) ?></small>
-                        </th>
+                        <th class="text-end" style="width:14%">Good</th>
+                        <th class="text-end" style="width:14%">Better</th>
+                        <th class="text-end" style="width:14%">Best</th>
                         <th style="width:88px"></th><!-- actions -->
                     </tr>
                 </thead>
@@ -215,9 +273,9 @@ require_once __DIR__ . '/../includes/header.php';
                     </tr>
                     <tr class="small">
                         <td colspan="3" class="text-muted">Target</td>
-                        <td class="text-end text-muted">$<?= number_format((float)$formData['budget_good']) ?></td>
-                        <td class="text-end text-muted">$<?= number_format((float)$formData['budget_better']) ?></td>
-                        <td class="text-end text-muted">$<?= number_format((float)$formData['budget_best']) ?></td>
+                        <td class="text-end text-muted" id="targetGoodCell">$<?= number_format((float)$formData['budget_good']) ?></td>
+                        <td class="text-end text-muted" id="targetBetterCell">$<?= number_format((float)$formData['budget_better']) ?></td>
+                        <td class="text-end text-muted" id="targetBestCell">$<?= number_format((float)$formData['budget_best']) ?></td>
                         <td></td>
                     </tr>
                     <tr class="small">
@@ -249,15 +307,21 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
-var targetGood   = <?= (float)$formData['budget_good'] ?>;
-var targetBetter = <?= (float)$formData['budget_better'] ?>;
-var targetBest   = <?= (float)$formData['budget_best'] ?>;
-
 function fmt(n) {
     return '$' + Math.round(n).toLocaleString('en-US');
 }
 
 function recalc() {
+    // Read budget targets live from the editable inputs
+    var targetGood   = parseFloat(document.getElementById('budgetGood').value)   || 0;
+    var targetBetter = parseFloat(document.getElementById('budgetBetter').value) || 0;
+    var targetBest   = parseFloat(document.getElementById('budgetBest').value)   || 0;
+
+    // Update tfoot target row to match
+    document.getElementById('targetGoodCell').textContent   = fmt(targetGood);
+    document.getElementById('targetBetterCell').textContent = fmt(targetBetter);
+    document.getElementById('targetBestCell').textContent   = fmt(targetBest);
+
     var good = 0, better = 0, best = 0;
     document.querySelectorAll('.tier-input').forEach(function (inp) {
         var v = parseFloat(inp.value) || 0;
@@ -420,6 +484,12 @@ document.querySelectorAll('.tier-input').forEach(function (inp) {
     inp.addEventListener('input', recalc);
     inp.dataset.wired = '1';
 });
+
+// Wire budget target inputs — changing them instantly updates the difference row
+document.querySelectorAll('.budget-target-input').forEach(function (inp) {
+    inp.addEventListener('input', recalc);
+});
+
 recalc();
 </script>
 
