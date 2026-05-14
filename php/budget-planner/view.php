@@ -206,20 +206,6 @@ require_once __DIR__ . '/../includes/header.php';
                         $isNewCat    = $row['category'] !== $currentCat;
                         $isLastInCat = ($idx + 1 >= $rowCount) || ($unifiedRows[$idx + 1]['category'] !== $row['category']);
 
-                        if ($isNewCat && $currentCat !== null):
-                    ?>
-                        <tr class="table-secondary text-muted fw-semibold small">
-                            <td colspan="2" class="ps-4">
-                                <i class="bi bi-arrow-return-right me-1"></i><?= h($currentCat) ?> Total
-                            </td>
-                            <td class="text-end"><?= $catGood > 0 ? '$' . number_format($catGood) : '—' ?></td>
-                            <td class="text-end"><?= $catBetter > 0 ? '$' . number_format($catBetter) : '—' ?></td>
-                            <td class="text-end"><?= $catBest > 0 ? '$' . number_format($catBest) : '—' ?></td>
-                        </tr>
-                    <?php
-                            $catGood = $catBetter = $catBest = 0;
-                        endif;
-
                         if ($isNewCat):
                             $currentCat = $row['category'];
                     ?>
@@ -356,6 +342,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <h6 class="mb-0 fw-semibold"><i class="bi bi-lightning me-2 text-primary"></i>Actions</h6>
             </div>
             <div class="card-body d-grid gap-2">
+
+                <a href="/budget-planner/edit.php?id=<?= $id ?>" class="btn btn-primary">
+                    <i class="bi bi-pencil-square me-1"></i>Edit Allocation
+                </a>
 
                 <a href="/budget-planner/export.php?id=<?= $id ?>" class="btn btn-outline-success">
                     <i class="bi bi-file-earmark-excel me-1"></i>Download Excel
