@@ -421,7 +421,7 @@ class CampaignService extends BaseService
             foreach ($channelIds as $cid) {
                 $this->db->prepare(
                     "UPDATE campaign_channels
-                        SET status = 'rfp_sent', rfp_sent_at = :now, rfp_log_id = :log_id, updated_at = :now
+                        SET status = 'rfp_sent', rfp_sent_at = :now, rfp_log_id = :log_id, updated_at = NOW()
                       WHERE id = :id"
                 )->execute([':now' => $now, ':log_id' => $result['logId'], ':id' => $cid]);
             }
