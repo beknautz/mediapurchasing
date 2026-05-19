@@ -934,23 +934,31 @@ document.addEventListener('click', function(e) {
 });
 
 function openParseModal(ctx) {
-    document.getElementById('parseFileName').textContent    = ctx.fileName;
-    document.getElementById('parseVendorName').textContent  = ctx.vendorName;
-    document.getElementById('parseResultBody').innerHTML    = '';
-    document.getElementById('parseSaveBtn').style.display   = 'none';
-    document.getElementById('parseRunBtn').style.display    = 'inline-flex';
-    document.getElementById('parseStatus').innerHTML        = '';
+    document.getElementById('parseFileName').textContent   = ctx.fileName;
+    document.getElementById('parseVendorName').textContent = ctx.vendorName;
+    document.getElementById('parseResultBody').innerHTML   = '';
+    document.getElementById('parseStatus').innerHTML       = '';
+    document.getElementById('parseLoading').classList.add('d-none');
+    document.getElementById('parseSaveBtn').classList.add('d-none');
+    document.getElementById('parseRunBtn').classList.remove('d-none');
+    var runBtn = document.getElementById('parseRunBtn');
+    runBtn.disabled = false;
+    runBtn.innerHTML = '<i class="bi bi-stars me-2"></i>Parse with AI';
     window._parseCtx = ctx;
     new bootstrap.Modal(document.getElementById('parseModal')).show();
 }
 
 document.getElementById('parseRunBtn').addEventListener('click', function() {
-    var ctx   = window._parseCtx;
-    var btn   = this;
+    var ctx = window._parseCtx;
+    var btn = this;
+
+    // Show loading state
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Parsing with AI…';
-    document.getElementById('parseStatus').innerHTML = '';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Parsing…';
+    document.getElementById('parseStatus').innerHTML    = '';
     document.getElementById('parseResultBody').innerHTML = '';
+    document.getElementById('parseSaveBtn').classList.add('d-none');
+    document.getElementById('parseLoading').classList.remove('d-none');
 
     var fd = new FormData();
     fd.append('file_path',   ctx.filePath);
@@ -963,8 +971,9 @@ document.getElementById('parseRunBtn').addEventListener('click', function() {
     fetch('/campaigns/parse-proposal.php', { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            document.getElementById('parseLoading').classList.add('d-none');
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-stars me-2"></i>Re-Parse';
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Re-Parse';
             if (!data.success) {
                 document.getElementById('parseStatus').innerHTML =
                     '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>' + escHtml(data.error) + '</div>';
@@ -972,13 +981,14 @@ document.getElementById('parseRunBtn').addEventListener('click', function() {
             }
             window._parseResult = data;
             renderParseResult(data);
-            document.getElementById('parseSaveBtn').style.display = 'inline-flex';
+            document.getElementById('parseSaveBtn').classList.remove('d-none');
         })
-        .catch(function(err) {
+        .catch(function() {
+            document.getElementById('parseLoading').classList.add('d-none');
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-stars me-2"></i>Re-Parse';
+            btn.innerHTML = '<i class="bi bi-stars me-2"></i>Parse with AI';
             document.getElementById('parseStatus').innerHTML =
-                '<div class="alert alert-danger mb-0">Network error — please try again.</div>';
+                '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Network error — please try again.</div>';
         });
 });
 
@@ -1107,6 +1117,11 @@ function exportSchedule() {
                     </div>
                 </div>
                 <div id="parseStatus"></div>
+                <div id="parseLoading" class="d-none text-center py-4">
+                    <div class="spinner-border text-primary mb-3" style="width:2.5rem;height:2.5rem;" role="status"></div>
+                    <div class="fw-semibold text-primary">Analyzing proposal…</div>
+                    <div class="text-muted small mt-1">Claude is reading the file and extracting line items. This may take 15–30 seconds.</div>
+                </div>
                 <div id="parseResultBody"></div>
             </div>
             <div class="modal-footer">
@@ -1114,7 +1129,7 @@ function exportSchedule() {
                 <button type="button" class="btn btn-primary d-inline-flex align-items-center" id="parseRunBtn">
                     <i class="bi bi-stars me-2"></i>Parse with AI
                 </button>
-                <button type="button" class="btn btn-success d-inline-flex align-items-center" id="parseSaveBtn" style="display:none!important;">
+                <button type="button" class="btn btn-success align-items-center d-none" id="parseSaveBtn">
                     <i class="bi bi-check-lg me-2"></i>Save to Ad Schedule
                 </button>
             </div>
