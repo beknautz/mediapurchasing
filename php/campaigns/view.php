@@ -873,6 +873,46 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- ===== Parse Proposal Modal ===== -->
+<div class="modal fade" id="parseModal" tabindex="-1" aria-labelledby="parseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="parseModalLabel">
+                    <i class="bi bi-stars me-2"></i>Parse Proposal with AI
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 p-3 bg-light rounded border d-flex gap-3 align-items-start">
+                    <i class="bi bi-file-earmark-text fs-4 text-primary flex-shrink-0 mt-1"></i>
+                    <div>
+                        <div class="fw-semibold" id="parseFileName"></div>
+                        <div class="text-muted small">Vendor: <span id="parseVendorName"></span></div>
+                        <div class="text-muted small mt-1">Claude will read this file and extract all ad schedule line items and production specs.</div>
+                    </div>
+                </div>
+                <div id="parseStatus"></div>
+                <div id="parseLoading" class="d-none text-center py-4">
+                    <div class="spinner-border text-primary mb-3" style="width:2.5rem;height:2.5rem;" role="status"></div>
+                    <div class="fw-semibold text-primary">Analyzing proposal…</div>
+                    <div class="text-muted small mt-1">Claude is reading the file and extracting line items. This may take 15–30 seconds.</div>
+                </div>
+                <div id="parseResultBody"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary d-inline-flex align-items-center" id="parseRunBtn">
+                    <i class="bi bi-stars me-2"></i>Parse with AI
+                </button>
+                <button type="button" class="btn btn-success align-items-center d-none" id="parseSaveBtn">
+                    <i class="bi bi-check-lg me-2"></i>Save to Ad Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function resetChannelForm() {
     document.getElementById('channelId').value              = '';
@@ -1096,45 +1136,5 @@ function exportSchedule() {
 
 <!-- SheetJS for export -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-<!-- ===== Parse Proposal Modal ===== -->
-<div class="modal fade" id="parseModal" tabindex="-1" aria-labelledby="parseModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content shadow">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="parseModalLabel">
-                    <i class="bi bi-stars me-2"></i>Parse Proposal with AI
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3 p-3 bg-light rounded border d-flex gap-3 align-items-start">
-                    <i class="bi bi-file-earmark-text fs-4 text-primary flex-shrink-0 mt-1"></i>
-                    <div>
-                        <div class="fw-semibold" id="parseFileName"></div>
-                        <div class="text-muted small">Vendor: <span id="parseVendorName"></span></div>
-                        <div class="text-muted small mt-1">Claude will read this file and extract all ad schedule line items and production specs.</div>
-                    </div>
-                </div>
-                <div id="parseStatus"></div>
-                <div id="parseLoading" class="d-none text-center py-4">
-                    <div class="spinner-border text-primary mb-3" style="width:2.5rem;height:2.5rem;" role="status"></div>
-                    <div class="fw-semibold text-primary">Analyzing proposal…</div>
-                    <div class="text-muted small mt-1">Claude is reading the file and extracting line items. This may take 15–30 seconds.</div>
-                </div>
-                <div id="parseResultBody"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary d-inline-flex align-items-center" id="parseRunBtn">
-                    <i class="bi bi-stars me-2"></i>Parse with AI
-                </button>
-                <button type="button" class="btn btn-success align-items-center d-none" id="parseSaveBtn">
-                    <i class="bi bi-check-lg me-2"></i>Save to Ad Schedule
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
