@@ -387,7 +387,7 @@ class CampaignService extends BaseService
             . '&#128228;&nbsp; Submit Your Proposal Online</a>'
             . '<p style="font-size:12px;color:#888;margin-top:8px;">Or reply directly to this email with your proposal attached.</p>'
             . '</div>'
-            . '<p>Please include your rate card, available schedules, and package options for each item above.</p>'
+            . '<p><strong>A proposal template (Excel) is attached.</strong> Fill it in with your rates, schedules, and flight details, then submit it via the button above or reply to this email with it attached.</p>'
             . '<p>Thank you,<br>Media Buying Team</p>';
 
         $bodyText = "Dear {$contact},\n\n"
@@ -400,9 +400,35 @@ class CampaignService extends BaseService
             . $categoryRowsText
             . "  " . str_repeat('-', 36) . "\n"
             . "  Total" . str_repeat(' ', 25) . '$' . number_format($totalBudget, 0) . "\n\n"
-            . "Submit your proposal online: {$portalUrl}\n"
-            . "Or reply to this email with your proposal attached.\n\n"
+            . "A proposal template (Excel) is attached. Fill it in and upload it via the portal below,\n"
+            . "or reply directly to this email with your completed proposal.\n\n"
+            . "Submit your proposal online: {$portalUrl}\n\n"
             . "Thank you,\nMedia Buying Team";
+
+        // ── Generate XLSX proposal template and attach to email ──────────────
+        $templatePath = null;
+        $attachments  = [];
+        try {
+            $safeTitle    = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $first['campaign_title']);
+            $templatePath = sys_get_temp_dir() . '/RFP_Template_' . $safeTitle . '_' . date('Ymd_His') . '.xlsx';
+            $this->buildRfpTemplateXlsx(
+                $templatePath,
+                $first['campaign_title'],
+                $first['vendor_name'] ?: ($first['vendor_email'] ?? ''),
+                $market, $language,
+                $flightStart, $flightEnd,
+                $channels
+            );
+            $attachments[] = [
+                'name' => 'RFP_Template_' . $safeTitle . '.xlsx',
+                'path' => $templatePath,
+                'type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ];
+        } catch (Throwable $e) {
+            // Template generation failure is non-fatal — send email without it
+            $templatePath = null;
+            $attachments  = [];
+        }
 
         $emailService = new EmailService();
         $result = $emailService->send(
@@ -413,8 +439,14 @@ class CampaignService extends BaseService
             $bodyText,
             '', '', 0, 0, 0,
             $campaignId,
-            (int)$first['id']
+            (int)$first['id'],
+            $attachments
         );
+
+        // Clean up temp file
+        if ($templatePath && is_file($templatePath)) {
+            @unlink($templatePath);
+        }
 
         if ($result['success']) {
             $now = date('Y-m-d H:i:s');
@@ -661,6 +693,108 @@ class CampaignService extends BaseService
         $stmt->execute([':id' => $channelId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return json_decode($row['vendor_replies'] ?? '[]', true) ?: [];
+    }
+
+    // -----------------------------------------------------------------------
+    // buildRfpTemplateXlsx()
+    // Generates a pre-filled XLSX proposal template using XlsxWriter and
+    // saves it to $path. Vendors fill this in and return it.
+    // -----------------------------------------------------------------------
+    private function buildRfpTemplateXlsx(
+        string $path,
+        string $campaignTitle,
+        string $vendorName,
+        string $market,
+        string $language,
+        string $flightStart,
+        string $flightEnd,
+        array  $channels
+    ): void {
+        $b = fn($v) => ['v' => $v, 's' => 1]; // bold helper
+
+        $flightLabel = ($flightStart ? date('M j, Y', strtotime($flightStart)) : 'TBD')
+                     . ' – '
+                     . ($flightEnd   ? date('M j, Y', strtotime($flightEnd))   : 'TBD');
+
+        // ── Sheet 1: Proposal ─────────────────────────────────────────────
+        $s1 = [];
+        $s1[] = [$b('RFP PROPOSAL TEMPLATE')];
+        $s1[] = [];
+        $s1[] = [$b('Campaign:'),    $campaignTitle];
+        $s1[] = [$b('Vendor:'),      $vendorName];
+        $s1[] = [$b('Market:'),      $market ?: '—'];
+        $s1[] = [$b('Language:'),    ucfirst($language ?: 'Both')];
+        $s1[] = [$b('Flight Dates:'), $flightLabel];
+        $s1[] = [];
+        $s1[] = [$b('REQUESTED MEDIA ITEMS')];
+        $s1[] = [$b('Media Category'), $b('Budget Allocated')];
+        foreach ($channels as $ch) {
+            $s1[] = [$ch['media_category'], '$' . number_format((float)$ch['budget_allocated'], 0)];
+        }
+        $s1[] = [];
+        $s1[] = [$b('INSTRUCTIONS')];
+        $s1[] = ['Please complete all rows in the AD SCHEDULE section below.'];
+        $s1[] = ['Add rows as needed. Return this file via the online portal or reply to this email.'];
+        $s1[] = [];
+        $s1[] = [$b('AD SCHEDULE')];
+        $s1[] = [
+            $b('Media Category'),
+            $b('Placement / Daypart / Program'),
+            $b('Unit Type'),
+            $b('Flight Start'),
+            $b('Flight End'),
+            $b('# Spots / Units / Impressions'),
+            $b('Rate per Unit ($)'),
+            $b('Total Cost ($)'),
+            $b('Notes / Availabilities'),
+        ];
+        // One pre-filled row per requested channel
+        foreach ($channels as $ch) {
+            $s1[] = [
+                $ch['media_category'],
+                '',
+                '',
+                $flightStart ?: '',
+                $flightEnd   ?: '',
+                '',
+                '',
+                '',
+                '',
+            ];
+        }
+        // Extra blank rows
+        for ($i = 0; $i < 10; $i++) {
+            $s1[] = ['', '', '', '', '', '', '', '', ''];
+        }
+
+        $cols1 = [22, 32, 18, 14, 14, 14, 16, 16, 34];
+
+        // ── Sheet 2: Production Notes ─────────────────────────────────────
+        $s2 = [];
+        $s2[] = [$b('PRODUCTION SPECIFICATIONS')];
+        $s2[] = [];
+        $s2[] = ['List any production specs, material requirements, or deadlines below.'];
+        $s2[] = [];
+        $s2[] = [
+            $b('Media Type'),
+            $b('Ad / Spot Name'),
+            $b('Unit Specs (size, length, format)'),
+            $b('Material Due Date'),
+            $b('Notes'),
+        ];
+        foreach ($channels as $ch) {
+            $s2[] = [$ch['media_category'], '', '', '', ''];
+        }
+        for ($i = 0; $i < 5; $i++) {
+            $s2[] = ['', '', '', '', ''];
+        }
+
+        $cols2 = [22, 28, 38, 18, 34];
+
+        $writer = new XlsxWriter();
+        $writer->addSheet('Proposal',          $s1, $cols1);
+        $writer->addSheet('Production Notes',  $s2, $cols2);
+        $writer->save($path);
     }
 
     // -----------------------------------------------------------------------
