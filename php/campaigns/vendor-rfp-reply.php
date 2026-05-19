@@ -21,7 +21,8 @@ if (empty($ctx)) {
     die('This link is invalid or has expired. Please contact us for assistance.');
 }
 
-$ch           = $ctx['channel'];
+$ch           = $ctx['channel'];              // primary channel (campaign/vendor info)
+$allChannels  = $ctx['channels'];             // all channels for this vendor
 $priorReplies = $ctx['prior_replies'];
 $vendorName   = $ch['vendor_name'] ?: $ch['vendor_email'];
 $submitted    = false;
@@ -39,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $flightStart = !empty($ch['campaign_start']) ? date('M j, Y', strtotime($ch['campaign_start'])) : 'TBD';
 $flightEnd   = !empty($ch['campaign_end'])   ? date('M j, Y', strtotime($ch['campaign_end']))   : 'TBD';
-$budget      = '$' . number_format((float)($ch['budget_allocated'] ?? 0), 2);
+$totalBudget = array_sum(array_column($allChannels, 'budget_allocated'));
 $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 ?><!DOCTYPE html>
 <html lang="en">
@@ -73,7 +74,8 @@ $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
             <i class="bi bi-check-circle-fill text-success fs-1 d-block mb-3"></i>
             <h3 class="fw-bold">Proposal Submitted!</h3>
             <p class="text-muted">Thank you, <strong><?= $h($vendorName) ?></strong>.</p>
-            <p class="text-muted">Your proposal for <strong><?= $h($ch['campaign_title']) ?></strong> has been received. We'll be in touch soon.</p>
+            <p class="text-muted">Your proposal for <strong><?= $h($ch['campaign_title']) ?></strong>
+            (<?= count($allChannels) ?> item<?= count($allChannels) !== 1 ? 's' : '' ?>) has been received. We'll be in touch soon.</p>
         </div>
     </div>
 
@@ -84,18 +86,13 @@ $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
         <div class="card-header card-header-blue fw-semibold">
             <i class="bi bi-file-earmark-text me-1"></i>
             RFP — <?= $h($ch['campaign_title']) ?>
-            <small class="opacity-75 ms-2"><?= $h($ch['media_category']) ?></small>
         </div>
         <div class="card-body">
-            <p class="mb-3">Hello <strong><?= $h($vendorName) ?></strong>, please review the campaign details below and submit your proposal.</p>
-            <div class="row g-3">
+            <p class="mb-3">Hello <strong><?= $h($vendorName) ?></strong>, please review the details below and submit your proposal covering all requested items.</p>
+            <div class="row g-3 mb-3">
                 <div class="col-sm-6">
                     <div class="text-muted small">Campaign</div>
                     <div class="fw-semibold"><?= $h($ch['campaign_title']) ?></div>
-                </div>
-                <div class="col-sm-6">
-                    <div class="text-muted small">Media Category</div>
-                    <div class="fw-semibold"><?= $h($ch['media_category']) ?></div>
                 </div>
                 <div class="col-sm-6">
                     <div class="text-muted small">Market</div>
@@ -109,10 +106,6 @@ $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
                     <div class="text-muted small">Flight Dates</div>
                     <div><?= $h($flightStart) ?> – <?= $h($flightEnd) ?></div>
                 </div>
-                <div class="col-sm-6">
-                    <div class="text-muted small">Budget</div>
-                    <div class="fw-semibold text-success"><?= $h($budget) ?></div>
-                </div>
                 <?php if (!empty($ch['campaign_notes'])): ?>
                 <div class="col-12">
                     <div class="text-muted small">Notes</div>
@@ -120,6 +113,31 @@ $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
                 </div>
                 <?php endif; ?>
             </div>
+
+            <!-- All requested media items for this vendor -->
+            <h6 class="fw-semibold mb-2"><i class="bi bi-list-check me-1 text-primary"></i>Requested Media Items</h6>
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Media Category</th>
+                        <th class="text-end">Budget</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($allChannels as $item): ?>
+                <tr>
+                    <td class="fw-semibold"><?= $h($item['media_category']) ?></td>
+                    <td class="text-end text-success fw-semibold">$<?= number_format((float)$item['budget_allocated'], 0) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td>Total</td>
+                        <td class="text-end">$<?= number_format($totalBudget, 0) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
     </div>
 

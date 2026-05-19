@@ -277,13 +277,14 @@ class CampaignService extends BaseService
     }
 
     // -----------------------------------------------------------------------
-    // sendChannelRfp()
-    // Sends an RFP email to the vendor for a specific campaign channel and
-    // updates the channel status to 'rfp_sent'.
+    // sendVendorRfp()
+    // Sends ONE consolidated RFP email covering ALL channels for a given
+    // vendor in a campaign.  All their channels share a single reply token
+    // so the vendor receives one email, one portal link, and submits once.
     //
     // Returns: ['success'=>bool, 'message'=>string, 'logId'=>int]
     // -----------------------------------------------------------------------
-    public function sendChannelRfp(int $channelId): array
+    public function sendVendorRfp(int $campaignId, int $vendorId): array
     {
         $stmt = $this->db->prepare(
             'SELECT cc.*,
@@ -298,105 +299,159 @@ class CampaignService extends BaseService
                FROM campaign_channels cc
           LEFT JOIN vendors   v ON v.id = cc.vendor_id
           LEFT JOIN campaigns c ON c.id = cc.campaign_id
-              WHERE cc.id = :id LIMIT 1'
+              WHERE cc.campaign_id = :cid AND cc.vendor_id = :vid
+              ORDER BY cc.media_category ASC'
         );
-        $stmt->execute([':id' => $channelId]);
-        $ch = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt->execute([':cid' => $campaignId, ':vid' => $vendorId]);
+        $channels = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        if (!$ch) {
-            return ['success' => false, 'message' => 'Channel not found.', 'logId' => 0];
+        if (empty($channels)) {
+            return ['success' => false, 'message' => 'No channels found for this vendor.', 'logId' => 0];
         }
-        if (empty($ch['vendor_email'])) {
+
+        $first = $channels[0];
+        if (empty($first['vendor_email'])) {
             return ['success' => false, 'message' => 'Vendor has no email address.', 'logId' => 0];
         }
 
-        // Generate or reuse secure reply token for vendor self-service portal
-        $existingToken = $ch['rfp_reply_token'] ?? '';
-        $replyToken = ($existingToken !== '' && strlen($existingToken) === 40)
-            ? $existingToken
+        // One shared token for all this vendor's channels in this campaign.
+        // Reuse if all channels already share the same valid token.
+        $existingTokens = array_unique(array_filter(array_column($channels, 'rfp_reply_token')));
+        $sharedToken = (count($existingTokens) === 1 && strlen(reset($existingTokens)) === 40)
+            ? reset($existingTokens)
             : bin2hex(random_bytes(20));
 
-        $this->db->prepare('UPDATE campaign_channels SET rfp_reply_token = :t WHERE id = :id')
-                 ->execute([':t' => $replyToken, ':id' => $channelId]);
+        $channelIds   = array_column($channels, 'id');
+        $placeholders = implode(',', array_fill(0, count($channelIds), '?'));
+        $this->db->prepare(
+            "UPDATE campaign_channels SET rfp_reply_token = ? WHERE id IN ($placeholders)"
+        )->execute(array_merge([$sharedToken], $channelIds));
 
-        $baseUrl   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-        $portalUrl = $baseUrl . '/campaigns/vendor-rfp-reply.php?token=' . $replyToken;
+        $baseUrl   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+                   . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $portalUrl = $baseUrl . '/campaigns/vendor-rfp-reply.php?token=' . $sharedToken;
 
-        $flightStart = $ch['campaign_start'] ? date('M j, Y', strtotime($ch['campaign_start'])) : 'TBD';
-        $flightEnd   = $ch['campaign_end']   ? date('M j, Y', strtotime($ch['campaign_end']))   : 'TBD';
-        $budget      = '$' . number_format((float) $ch['budget_allocated'], 2);
-        $market      = $ch['campaign_market'] ?: 'Local Market';
-        $contact     = $ch['vendor_contact']  ?: $ch['vendor_name'];
-        $category    = $ch['media_category'];
-        $language    = ucfirst($ch['campaign_language'] ?? 'both');
+        $flightStart  = $first['campaign_start'] ? date('M j, Y', strtotime($first['campaign_start'])) : 'TBD';
+        $flightEnd    = $first['campaign_end']   ? date('M j, Y', strtotime($first['campaign_end']))   : 'TBD';
+        $market       = $first['campaign_market'] ?: 'Local Market';
+        $language     = ucfirst($first['campaign_language'] ?? 'both');
+        $contact      = $first['vendor_contact'] ?: $first['vendor_name'];
+        $totalBudget  = array_sum(array_column($channels, 'budget_allocated'));
+        $h            = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 
-        $subject = 'Request for Proposal: ' . $ch['campaign_title'] . ' — ' . $category;
+        $subject = 'Request for Proposal: ' . $first['campaign_title'];
 
-        $bodyHtml = '<p>Dear ' . htmlspecialchars($contact, ENT_QUOTES, 'UTF-8') . ',</p>'
+        // Build category rows for the email table
+        $categoryRowsHtml = '';
+        $categoryRowsText = '';
+        foreach ($channels as $ch) {
+            $categoryRowsHtml .= '<tr>'
+                . '<td style="padding:8px 12px;border:1px solid #dee2e6;">' . $h($ch['media_category']) . '</td>'
+                . '<td style="padding:8px 12px;border:1px solid #dee2e6;text-align:right;font-weight:bold;">$'
+                . number_format((float)$ch['budget_allocated'], 0) . '</td>'
+                . '</tr>';
+            $categoryRowsText .= '  ' . $ch['media_category']
+                . str_repeat(' ', max(1, 30 - strlen($ch['media_category'])))
+                . '$' . number_format((float)$ch['budget_allocated'], 0) . "\n";
+        }
+        $categoryRowsHtml .= '<tr style="background:#f8f9fa;">'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;font-weight:bold;">Total</td>'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;text-align:right;font-weight:bold;">$'
+            . number_format($totalBudget, 0) . '</td>'
+            . '</tr>';
+
+        $bodyHtml = '<p>Dear ' . $h($contact) . ',</p>'
             . '<p>We are reaching out to request a proposal for an upcoming campaign. '
-            . 'Please review the details below and reply with your available placements, rates, and schedule.</p>'
-            . '<table cellpadding="8" cellspacing="0" border="1" style="border-collapse:collapse;width:100%;max-width:520px;">'
-            . '<tr><td><strong>Campaign</strong></td><td>' . htmlspecialchars($ch['campaign_title'], ENT_QUOTES, 'UTF-8') . '</td></tr>'
-            . '<tr><td><strong>Media Category</strong></td><td>' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</td></tr>'
-            . '<tr><td><strong>Language</strong></td><td>' . htmlspecialchars($language, ENT_QUOTES, 'UTF-8') . '</td></tr>'
-            . '<tr><td><strong>Market</strong></td><td>' . htmlspecialchars($market, ENT_QUOTES, 'UTF-8') . '</td></tr>'
-            . '<tr><td><strong>Flight Dates</strong></td><td>' . $flightStart . ' &ndash; ' . $flightEnd . '</td></tr>'
-            . '<tr><td><strong>Budget</strong></td><td>' . $budget . '</td></tr>'
+            . 'Please review the details below and submit your rates and availability for each item.</p>'
+            . '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:520px;margin-bottom:16px;">'
+            . '<tr><td style="padding:8px 12px;border:1px solid #dee2e6;background:#f8f9fa;width:40%;"><strong>Campaign</strong></td>'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;">' . $h($first['campaign_title']) . '</td></tr>'
+            . '<tr><td style="padding:8px 12px;border:1px solid #dee2e6;background:#f8f9fa;"><strong>Market</strong></td>'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;">' . $h($market) . '</td></tr>'
+            . '<tr><td style="padding:8px 12px;border:1px solid #dee2e6;background:#f8f9fa;"><strong>Language</strong></td>'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;">' . $h($language) . '</td></tr>'
+            . '<tr><td style="padding:8px 12px;border:1px solid #dee2e6;background:#f8f9fa;"><strong>Flight Dates</strong></td>'
+            . '<td style="padding:8px 12px;border:1px solid #dee2e6;">' . $flightStart . ' &ndash; ' . $flightEnd . '</td></tr>'
             . '</table>'
-            . '<div style="margin:24px 0;text-align:center;">'
-            . '<a href="' . htmlspecialchars($portalUrl, ENT_QUOTES, 'UTF-8') . '" '
-            . 'style="background:#0d6efd;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:bold;font-size:15px;display:inline-block;">'
-            . '&#128228; Submit Your Proposal Online</a>'
+            . '<p><strong>Requested Media Items:</strong></p>'
+            . '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:520px;">'
+            . '<thead><tr style="background:#0d6efd;color:#fff;">'
+            . '<th style="padding:8px 12px;border:1px solid #0a58ca;text-align:left;">Media Category</th>'
+            . '<th style="padding:8px 12px;border:1px solid #0a58ca;text-align:right;">Budget</th>'
+            . '</tr></thead>'
+            . '<tbody>' . $categoryRowsHtml . '</tbody>'
+            . '</table>'
+            . '<div style="margin:28px 0;text-align:center;">'
+            . '<a href="' . $h($portalUrl) . '" style="background:#0d6efd;color:#fff;text-decoration:none;'
+            . 'padding:13px 32px;border-radius:6px;font-weight:bold;font-size:15px;display:inline-block;">'
+            . '&#128228;&nbsp; Submit Your Proposal Online</a>'
             . '<p style="font-size:12px;color:#888;margin-top:8px;">Or reply directly to this email with your proposal attached.</p>'
             . '</div>'
-            . '<p>Please reply to this email with your proposed schedule, rate card, and any available package options. '
-            . 'Attach your schedule as a PDF or Excel file if available.</p>'
+            . '<p>Please include your rate card, available schedules, and package options for each item above.</p>'
             . '<p>Thank you,<br>Media Buying Team</p>';
 
         $bodyText = "Dear {$contact},\n\n"
             . "We are requesting a proposal for the following campaign:\n\n"
-            . "Campaign:       {$ch['campaign_title']}\n"
-            . "Media Category: {$category}\n"
-            . "Language:       {$language}\n"
-            . "Market:         {$market}\n"
-            . "Flight Dates:   {$flightStart} - {$flightEnd}\n"
-            . "Budget:         {$budget}\n\n"
-            . "Please reply with your proposed schedule, rate card, and available package options.\n\n"
+            . "Campaign:     {$first['campaign_title']}\n"
+            . "Market:       {$market}\n"
+            . "Language:     {$language}\n"
+            . "Flight Dates: {$flightStart} - {$flightEnd}\n\n"
+            . "Requested Media Items:\n"
+            . $categoryRowsText
+            . "  " . str_repeat('-', 36) . "\n"
+            . "  Total" . str_repeat(' ', 25) . '$' . number_format($totalBudget, 0) . "\n\n"
+            . "Submit your proposal online: {$portalUrl}\n"
+            . "Or reply to this email with your proposal attached.\n\n"
             . "Thank you,\nMedia Buying Team";
 
         $emailService = new EmailService();
         $result = $emailService->send(
-            $ch['vendor_email'],
-            $ch['vendor_name'],
+            $first['vendor_email'],
+            $first['vendor_name'],
             $subject,
             $bodyHtml,
             $bodyText,
-            '',
-            '',
-            0,
-            0,
-            0,
-            (int) $ch['campaign_id'],
-            $channelId
+            '', '', 0, 0, 0,
+            $campaignId,
+            (int)$first['id']
         );
 
         if ($result['success']) {
-            $this->db->prepare(
-                "UPDATE campaign_channels
-                    SET status = 'rfp_sent', rfp_sent_at = NOW(), rfp_log_id = :log_id, updated_at = NOW()
-                  WHERE id = :id"
-            )->execute([':log_id' => $result['logId'], ':id' => $channelId]);
-
+            $now = date('Y-m-d H:i:s');
+            foreach ($channelIds as $cid) {
+                $this->db->prepare(
+                    "UPDATE campaign_channels
+                        SET status = 'rfp_sent', rfp_sent_at = :now, rfp_log_id = :log_id, updated_at = :now
+                      WHERE id = :id"
+                )->execute([':now' => $now, ':log_id' => $result['logId'], ':id' => $cid]);
+            }
             $this->db->prepare(
                 "UPDATE campaigns SET status = 'rfp_sent', updated_at = NOW()
                   WHERE id = :id AND status = 'draft'"
-            )->execute([':id' => $ch['campaign_id']]);
-
-            $this->auditLog('send_rfp', 'campaign_channel', $channelId,
-                "RFP sent to: {$ch['vendor_email']}");
+            )->execute([':id' => $campaignId]);
+            $this->auditLog('send_rfp', 'campaign', $campaignId,
+                "RFP sent to {$first['vendor_email']} — " . count($channels) . ' channel(s)');
         }
 
         return $result;
+    }
+
+    // -----------------------------------------------------------------------
+    // sendChannelRfp()
+    // Legacy single-channel send. Kept for backward compatibility.
+    // Prefer sendVendorRfp() which consolidates all vendor channels into one email.
+    // -----------------------------------------------------------------------
+    public function sendChannelRfp(int $channelId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT campaign_id, vendor_id FROM campaign_channels WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute([':id' => $channelId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return ['success' => false, 'message' => 'Channel not found.', 'logId' => 0];
+        }
+        return $this->sendVendorRfp((int)$row['campaign_id'], (int)$row['vendor_id']);
     }
 
     // -----------------------------------------------------------------------
@@ -421,6 +476,7 @@ class CampaignService extends BaseService
         $token = trim($token);
         if (strlen($token) !== 40) return [];
 
+        // Fetch ALL channels that share this token (one vendor, one campaign)
         $stmt = $this->db->prepare(
             'SELECT cc.*,
                     v.company_name  AS vendor_name,
@@ -439,18 +495,31 @@ class CampaignService extends BaseService
           LEFT JOIN campaigns c ON c.id  = cc.campaign_id
           LEFT JOIN users     u ON u.id  = c.created_by
               WHERE cc.rfp_reply_token = :token
-              LIMIT 1'
+              ORDER BY cc.media_category ASC'
         );
         $stmt->execute([':token' => $token]);
-        $ch = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$ch) return [];
+        $channels = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($channels)) return [];
 
-        $ch['vendor_replies'] = json_decode($ch['vendor_replies'] ?? '[]', true) ?: [];
+        foreach ($channels as &$ch) {
+            $ch['vendor_replies'] = json_decode($ch['vendor_replies'] ?? '[]', true) ?: [];
+        }
+        unset($ch);
 
-        // Collect prior replies from this vendor for the resubmit notice
-        $priorReplies = $ch['vendor_replies'];
+        // Collect all prior replies across all channels for the resubmit notice
+        $priorReplies = [];
+        foreach ($channels as $ch) {
+            foreach ($ch['vendor_replies'] as $r) {
+                $priorReplies[] = $r;
+            }
+        }
+        usort($priorReplies, fn($a, $b) => strcmp($a['replied_at'] ?? '', $b['replied_at'] ?? ''));
 
-        return ['channel' => $ch, 'prior_replies' => $priorReplies];
+        return [
+            'channel'       => $channels[0],   // primary — kept for backward compat
+            'channels'      => $channels,       // all channels for this vendor/token
+            'prior_replies' => $priorReplies,
+        ];
     }
 
     // -----------------------------------------------------------------------
@@ -467,12 +536,13 @@ class CampaignService extends BaseService
             return ['success' => false, 'message' => 'Invalid or expired link.'];
         }
 
-        $ch         = $ctx['channel'];
+        $ch         = $ctx['channel'];           // primary channel
+        $allChannels = $ctx['channels'];         // all channels sharing this token
         $channelId  = (int)$ch['id'];
         $campaignId = (int)$ch['campaign_id'];
         $vendorName = $ch['vendor_name'] ?: $ch['vendor_email'];
 
-        // Upload files to uploads/campaigns/{channelId}/replies/
+        // Upload files under the primary channel's folder
         $uploadDir = __DIR__ . '/../uploads/campaigns/' . $channelId . '/replies/';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
@@ -520,9 +590,8 @@ class CampaignService extends BaseService
             }
         }
 
-        // Append reply to vendor_replies JSON
-        $existing   = $ch['vendor_replies'];
-        $existing[] = [
+        // Build the reply entry once, apply it to ALL channels sharing this token
+        $replyEntry = [
             'vendor_name' => $vendorName,
             'notes'       => $notes,
             'replied_at'  => date('Y-m-d H:i:s'),
@@ -530,17 +599,20 @@ class CampaignService extends BaseService
             'source'      => 'portal',
         ];
 
-        // Update channel: append reply, set status to response_received
-        $this->db->prepare(
-            "UPDATE campaign_channels
-                SET vendor_replies = :vr,
-                    status         = 'response_received',
-                    updated_at     = NOW()
-              WHERE id = :id"
-        )->execute([
-            ':vr' => json_encode(array_values($existing)),
-            ':id' => $channelId,
-        ]);
+        foreach ($allChannels as $chan) {
+            $existing   = $chan['vendor_replies'];
+            $existing[] = $replyEntry;
+            $this->db->prepare(
+                "UPDATE campaign_channels
+                    SET vendor_replies = :vr,
+                        status         = 'response_received',
+                        updated_at     = NOW()
+                  WHERE id = :id"
+            )->execute([
+                ':vr' => json_encode(array_values($existing)),
+                ':id' => (int)$chan['id'],
+            ]);
+        }
 
         // If all channels for campaign have responded, update campaign status
         $pendingStmt = $this->db->prepare(

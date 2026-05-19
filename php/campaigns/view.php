@@ -48,25 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/campaigns/view.php?id=' . $id);
     }
 
-    // ---- Send single RFP ----
+    // ---- Send RFP (consolidated per vendor) ----
     if ($action === 'send_rfp') {
         $channelId = (int) ($_POST['channel_id'] ?? 0);
-        $r = $campaignService->sendChannelRfp($channelId);
+        // Look up the vendor for this channel and send one email for ALL their channels
+        $vendorId = 0;
+        foreach ($channels as $ch) {
+            if ((int)$ch['id'] === $channelId) { $vendorId = (int)$ch['vendor_id']; break; }
+        }
+        if ($vendorId > 0) {
+            $r = $campaignService->sendVendorRfp($id, $vendorId);
+        } else {
+            $r = ['success' => false, 'message' => 'Channel or vendor not found.'];
+        }
         $_SESSION['flash'] = ['type' => $r['success'] ? 'success' : 'danger', 'message' => $r['message']];
         redirect('/campaigns/view.php?id=' . $id);
     }
 
-    // ---- Send all pending RFPs ----
+    // ---- Send all pending RFPs (one email per unique vendor) ----
     if ($action === 'send_all_rfps') {
-        $sent = 0;
-        $failed = 0;
+        $sent        = 0;
+        $failed      = 0;
+        $vendorsSent = [];
         foreach ($channels as $ch) {
             if ($ch['status'] === 'pending' && !empty($ch['vendor_email'])) {
-                $r = $campaignService->sendChannelRfp((int) $ch['id']);
-                $r['success'] ? $sent++ : $failed++;
+                $vid = (int)$ch['vendor_id'];
+                if ($vid > 0 && !in_array($vid, $vendorsSent, true)) {
+                    $r = $campaignService->sendVendorRfp($id, $vid);
+                    $r['success'] ? $sent++ : $failed++;
+                    $vendorsSent[] = $vid;
+                }
             }
         }
-        $msg = "Sent {$sent} RFP" . ($sent !== 1 ? 's' : '') . '.';
+        $msg = "Sent RFP email" . ($sent !== 1 ? 's' : '') . " to {$sent} vendor" . ($sent !== 1 ? 's' : '') . '.';
         if ($failed > 0) {
             $msg .= " {$failed} failed — check vendor email addresses.";
         }
@@ -320,9 +334,16 @@ require_once __DIR__ . '/../includes/header.php';
                                             title="Edit channel">
                                         <i class="bi bi-pencil"></i>
                                     </button>
+                                    <?php
+                                    // Count how many channels this vendor has (for confirm msg)
+                                    $vendorChannelCount = count(array_filter($channels, fn($c) => (int)$c['vendor_id'] === (int)$ch['vendor_id']));
+                                    $confirmMsg = $vendorChannelCount > 1
+                                        ? 'Send one RFP email to ' . addslashes($ch['vendor_name'] ?? 'vendor') . ' covering all ' . $vendorChannelCount . ' of their channels?'
+                                        : 'Send RFP to ' . addslashes($ch['vendor_name'] ?? 'vendor') . '?';
+                                    ?>
                                     <?php if ($canRfp): ?>
                                     <form method="post" class="d-inline"
-                                          onsubmit="return confirm('Send RFP to <?= h(addslashes($ch['vendor_name'] ?? 'vendor')) ?>?')">
+                                          onsubmit="return confirm('<?= h($confirmMsg) ?>')">
                                         <input type="hidden" name="action"     value="send_rfp">
                                         <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
                                         <button type="submit" class="btn btn-info btn-sm text-dark">
@@ -331,7 +352,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     </form>
                                     <?php elseif ($canResend): ?>
                                     <form method="post" class="d-inline"
-                                          onsubmit="return confirm('Resend RFP to <?= h(addslashes($ch['vendor_name'] ?? 'vendor')) ?>?')">
+                                          onsubmit="return confirm('<?= h($confirmMsg) ?>')">
                                         <input type="hidden" name="action"     value="send_rfp">
                                         <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
                                         <button type="submit" class="btn btn-outline-info btn-sm">
