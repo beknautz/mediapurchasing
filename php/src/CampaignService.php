@@ -550,11 +550,9 @@ class CampaignService extends BaseService
 
         $allowed = [
             'application/pdf',
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
             'application/vnd.ms-excel',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/zip',  // some XLSX files are detected as ZIP
         ];
 
         // Normalise multi-file $_FILES structure
@@ -663,6 +661,130 @@ class CampaignService extends BaseService
         $stmt->execute([':id' => $channelId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return json_decode($row['vendor_replies'] ?? '[]', true) ?: [];
+    }
+
+    // -----------------------------------------------------------------------
+    // Ad Schedule — line items parsed from vendor proposals
+    // -----------------------------------------------------------------------
+
+    /** Return all ad schedule lines for a campaign, optionally filtered by vendor. */
+    public function getAdScheduleLines(int $campaignId, ?int $vendorId = null): array
+    {
+        $where  = 'campaign_id = :cid';
+        $params = [':cid' => $campaignId];
+        if ($vendorId !== null) {
+            $where  .= ' AND vendor_id = :vid';
+            $params[':vid'] = $vendorId;
+        }
+        $stmt = $this->db->prepare(
+            "SELECT * FROM campaign_ad_schedules
+              WHERE {$where}
+              ORDER BY vendor_name ASC, sort_order ASC, id ASC"
+        );
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Replace all ad schedule lines for a vendor in this campaign, then write
+     * matching production items.  Deletes existing rows first so a re-parse
+     * always produces a clean result.
+     */
+    public function saveAdScheduleLines(
+        int    $campaignId,
+        int    $vendorId,
+        string $vendorName,
+        array  $lines,
+        string $sourceFile = ''
+    ): void {
+        $this->db->prepare(
+            'DELETE FROM campaign_ad_schedules WHERE campaign_id = :cid AND vendor_id = :vid'
+        )->execute([':cid' => $campaignId, ':vid' => $vendorId]);
+
+        $now = date('Y-m-d H:i:s');
+        foreach ($lines as $i => $line) {
+            $this->db->prepare(
+                'INSERT INTO campaign_ad_schedules
+                     (campaign_id, vendor_id, vendor_name, media_category, placement, unit_type,
+                      flight_start, flight_end, quantity, unit_rate, total_cost, notes,
+                      source_file, parsed_at, sort_order)
+                 VALUES
+                     (:cid, :vid, :vname, :cat, :placement, :unit_type,
+                      :fs, :fe, :qty, :rate, :total, :notes,
+                      :src, :now, :sort)'
+            )->execute([
+                ':cid'       => $campaignId,
+                ':vid'       => $vendorId,
+                ':vname'     => $vendorName,
+                ':cat'       => trim($line['media_category'] ?? ''),
+                ':placement' => trim($line['placement']      ?? ''),
+                ':unit_type' => trim($line['unit_type']      ?? ''),
+                ':fs'        => ($line['flight_start'] ?? '') ?: null,
+                ':fe'        => ($line['flight_end']   ?? '') ?: null,
+                ':qty'       => isset($line['quantity'])   && $line['quantity']   !== '' ? (int)$line['quantity']   : null,
+                ':rate'      => isset($line['unit_rate'])  && $line['unit_rate']  !== '' ? (float)$line['unit_rate']  : null,
+                ':total'     => isset($line['total_cost']) && $line['total_cost'] !== '' ? (float)$line['total_cost'] : null,
+                ':notes'     => trim($line['notes'] ?? ''),
+                ':src'       => $sourceFile,
+                ':now'       => $now,
+                ':sort'      => $i,
+            ]);
+        }
+        $this->auditLog('parse_proposal', 'campaign', $campaignId,
+            "Ad schedule saved: {$vendorName} — " . count($lines) . " line(s) from {$sourceFile}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Production Items — specs/deadlines for creative assets
+    // -----------------------------------------------------------------------
+
+    public function getProductionItems(int $campaignId, ?int $vendorId = null): array
+    {
+        $where  = 'campaign_id = :cid';
+        $params = [':cid' => $campaignId];
+        if ($vendorId !== null) {
+            $where  .= ' AND vendor_id = :vid';
+            $params[':vid'] = $vendorId;
+        }
+        $stmt = $this->db->prepare(
+            "SELECT * FROM campaign_production_items
+              WHERE {$where}
+              ORDER BY vendor_name ASC, sort_order ASC, id ASC"
+        );
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function saveProductionItems(
+        int    $campaignId,
+        int    $vendorId,
+        string $vendorName,
+        array  $items
+    ): void {
+        $this->db->prepare(
+            'DELETE FROM campaign_production_items WHERE campaign_id = :cid AND vendor_id = :vid'
+        )->execute([':cid' => $campaignId, ':vid' => $vendorId]);
+
+        foreach ($items as $i => $item) {
+            $this->db->prepare(
+                'INSERT INTO campaign_production_items
+                     (campaign_id, vendor_id, vendor_name, media_type, ad_name,
+                      unit_specs, material_due_date, notes, sort_order)
+                 VALUES
+                     (:cid, :vid, :vname, :mtype, :aname,
+                      :specs, :due, :notes, :sort)'
+            )->execute([
+                ':cid'   => $campaignId,
+                ':vid'   => $vendorId,
+                ':vname' => $vendorName,
+                ':mtype' => trim($item['media_type'] ?? ''),
+                ':aname' => trim($item['ad_name']    ?? ''),
+                ':specs' => trim($item['unit_specs']  ?? ''),
+                ':due'   => ($item['material_due_date'] ?? '') ?: null,
+                ':notes' => trim($item['notes'] ?? ''),
+                ':sort'  => $i,
+            ]);
+        }
     }
 
     // -----------------------------------------------------------------------

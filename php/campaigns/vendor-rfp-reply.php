@@ -174,8 +174,25 @@ $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
                         <i class="bi bi-paperclip me-1"></i>Proposal Files <span class="text-danger">*</span>
                     </label>
                     <input type="file" name="reply_files[]" class="form-control" multiple
-                           accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx,.doc,.docx">
-                    <div class="form-text">Upload your rate card, schedule, or proposal (PDF, Excel, Word, or images). Multiple files allowed.</div>
+                           accept=".pdf,.xlsx">
+                    <div class="form-text">
+                        <strong>Accepted formats: PDF or Excel (.xlsx) only.</strong>
+                        Use our template for fastest processing — download it below.
+                        Multiple files allowed.
+                    </div>
+                </div>
+
+                <div class="mb-4 p-3 bg-light rounded border">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <div>
+                            <div class="fw-semibold small"><i class="bi bi-file-earmark-excel text-success me-1"></i>Proposal Template (Recommended)</div>
+                            <div class="text-muted" style="font-size:.8rem;">Pre-filled with your campaign details &amp; requested items. Fill in rates, spots, and flight dates.</div>
+                        </div>
+                        <a href="/campaigns/rfp-template.php?token=<?= $h($token) ?>"
+                           target="_blank" class="btn btn-sm btn-success ms-auto flex-shrink-0">
+                            <i class="bi bi-download me-1"></i>Download Template
+                        </a>
+                    </div>
                 </div>
 
                 <div class="mb-4">

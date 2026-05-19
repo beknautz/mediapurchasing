@@ -133,6 +133,11 @@ $rfpSentCount  = count(array_filter($channels, fn($c) => $c['status'] === 'rfp_s
 $repliedCount  = count(array_filter($channels, fn($c) => $c['status'] === 'response_received'));
 $allocatedSum  = array_sum(array_column($channels, 'budget_allocated'));
 
+// Ad schedule data
+$adScheduleLines  = $campaignService->getAdScheduleLines($id);
+$productionItems  = $campaignService->getProductionItems($id);
+$scheduleLineCount = count($adScheduleLines);
+
 $mediaCategories = [
     'TV - Spanish', 'TV - English',
     'Radio - Spanish', 'Radio - English',
@@ -247,6 +252,15 @@ require_once __DIR__ . '/../includes/header.php';
         <button class="nav-link" id="tab-comms" data-bs-toggle="tab" data-bs-target="#pane-comms"
                 type="button" role="tab">
             <i class="bi bi-chat-dots me-1"></i>Communications
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-schedule" data-bs-toggle="tab" data-bs-target="#pane-schedule"
+                type="button" role="tab">
+            <i class="bi bi-calendar2-check me-1"></i>Ad Schedule
+            <?php if ($scheduleLineCount > 0): ?>
+                <span class="badge bg-success ms-1"><?= $scheduleLineCount ?></span>
+            <?php endif; ?>
         </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -371,6 +385,12 @@ require_once __DIR__ . '/../includes/header.php';
                                         </button>
                                     </form>
                                 <?php endif; ?>
+                                <?php if ($vendorId > 0): ?>
+                                    <a href="/campaigns/rfp-template.php?campaign_id=<?= $id ?>&vendor_id=<?= $vendorId ?>"
+                                       target="_blank" class="btn btn-sm btn-outline-success" title="Download XLSX template for this vendor">
+                                        <i class="bi bi-file-earmark-excel me-1"></i>Template
+                                    </a>
+                                <?php endif; ?>
                                 <?php if (!empty($allReplies)): ?>
                                     <button class="btn btn-sm btn-success" type="button"
                                             data-bs-toggle="collapse"
@@ -402,19 +422,42 @@ require_once __DIR__ . '/../includes/header.php';
                                         <p class="text-muted small mb-2 fst-italic"><?= nl2br(h($reply['notes'])) ?></p>
                                     <?php endif; ?>
                                     <?php if (!empty($reply['attachments'])): ?>
-                                    <div class="d-flex flex-wrap gap-2">
+                                    <div class="d-flex flex-wrap gap-2 align-items-center">
                                         <?php foreach ($reply['attachments'] as $att): ?>
                                             <?php
-                                            $type = $att['type'] ?? '';
-                                            if (str_contains($type, 'pdf')) $icon = 'bi-file-earmark-pdf text-danger';
-                                            elseif (str_contains($type, 'sheet') || str_contains($type, 'excel')) $icon = 'bi-file-earmark-excel text-success';
-                                            elseif (str_contains($type, 'word')) $icon = 'bi-file-earmark-word text-primary';
-                                            else $icon = 'bi-file-earmark-image text-secondary';
+                                            $attType    = $att['type'] ?? '';
+                                            $attName    = $att['name'] ?? '';
+                                            $attNameLow = strtolower($attName);
+                                            $isParseable = (str_contains($attType, 'pdf')
+                                                || str_contains($attType, 'sheet')
+                                                || str_contains($attType, 'excel')
+                                                || str_contains($attType, 'zip')
+                                                || str_ends_with($attNameLow, '.pdf')
+                                                || str_ends_with($attNameLow, '.xlsx')
+                                                || str_ends_with($attNameLow, '.xls'));
+                                            if (str_contains($attType, 'pdf') || str_ends_with($attNameLow, '.pdf'))
+                                                $icon = 'bi-file-earmark-pdf text-danger';
+                                            elseif (str_contains($attType, 'sheet') || str_contains($attType, 'excel') || str_ends_with($attNameLow, '.xlsx') || str_ends_with($attNameLow, '.xls'))
+                                                $icon = 'bi-file-earmark-excel text-success';
+                                            else $icon = 'bi-file-earmark text-secondary';
                                             ?>
-                                            <a href="/campaigns/download.php?f=<?= urlencode($att['path']) ?>"
-                                               target="_blank" class="btn btn-sm btn-outline-secondary">
-                                                <i class="bi <?= $icon ?> me-1"></i><?= h($att['name']) ?>
-                                            </a>
+                                            <div class="d-flex gap-1">
+                                                <a href="/campaigns/download.php?f=<?= urlencode($att['path']) ?>"
+                                                   target="_blank" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="bi <?= $icon ?> me-1"></i><?= h($attName) ?>
+                                                </a>
+                                                <?php if ($isParseable): ?>
+                                                <button type="button" class="btn btn-sm btn-outline-primary parse-proposal-btn"
+                                                        title="Parse with AI → Ad Schedule"
+                                                        data-campaign-id="<?= $id ?>"
+                                                        data-vendor-id="<?= $vendorId ?>"
+                                                        data-vendor-name="<?= h($vendorName) ?>"
+                                                        data-file-path="<?= h($att['path']) ?>"
+                                                        data-file-name="<?= h($attName) ?>">
+                                                    <i class="bi bi-stars me-1"></i>Parse
+                                                </button>
+                                                <?php endif; ?>
+                                            </div>
                                         <?php endforeach; ?>
                                     </div>
                                     <?php else: ?>
@@ -515,6 +558,151 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ===== AD SCHEDULE TAB ===== -->
+    <div class="tab-pane fade" id="pane-schedule" role="tabpanel">
+
+        <?php if (empty($adScheduleLines) && empty($productionItems)): ?>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5 text-muted">
+                <i class="bi bi-calendar2-x fs-3 d-block mb-2 opacity-50"></i>
+                <p class="mb-1">No ad schedule yet.</p>
+                <p class="small">Once vendors submit proposals, click <strong><i class="bi bi-stars"></i> Parse</strong> next to any PDF or XLSX attachment to extract the schedule automatically.</p>
+            </div>
+        </div>
+        <?php else: ?>
+
+        <?php if (!empty($adScheduleLines)):
+            // Group by vendor
+            $schedByVendor = [];
+            foreach ($adScheduleLines as $line) {
+                $schedByVendor[$line['vendor_name']][] = $line;
+            }
+        ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <span class="fw-semibold"><i class="bi bi-calendar2-check me-1 text-success"></i>Ad Schedule</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="exportSchedule()">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Export to Excel
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0" id="adScheduleTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Vendor</th>
+                                <th>Category</th>
+                                <th>Placement</th>
+                                <th>Unit Type</th>
+                                <th>Flight Start</th>
+                                <th>Flight End</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Unit Rate</th>
+                                <th class="text-end">Total</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php
+                        $schedTotal = 0;
+                        foreach ($schedByVendor as $vname => $vlines):
+                            $vTotal = array_sum(array_column($vlines, 'total_cost'));
+                            $schedTotal += $vTotal;
+                        ?>
+                            <?php foreach ($vlines as $li => $line): ?>
+                            <tr>
+                                <?php if ($li === 0): ?>
+                                <td class="fw-semibold" rowspan="<?= count($vlines) ?>"><?= h($vname) ?></td>
+                                <?php endif; ?>
+                                <td><?= h($line['media_category']) ?></td>
+                                <td><?= h($line['placement']) ?></td>
+                                <td><?= h($line['unit_type']) ?></td>
+                                <td class="text-nowrap"><?= $line['flight_start'] ? date('M j, Y', strtotime($line['flight_start'])) : '—' ?></td>
+                                <td class="text-nowrap"><?= $line['flight_end']   ? date('M j, Y', strtotime($line['flight_end']))   : '—' ?></td>
+                                <td class="text-end"><?= $line['quantity'] !== null ? number_format((int)$line['quantity']) : '—' ?></td>
+                                <td class="text-end"><?= $line['unit_rate'] !== null ? '$' . number_format((float)$line['unit_rate'], 2) : '—' ?></td>
+                                <td class="text-end fw-semibold"><?= $line['total_cost'] !== null ? '$' . number_format((float)$line['total_cost'], 2) : '—' ?></td>
+                                <td class="small text-muted"><?= h($line['notes'] ?? '') ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <tr class="table-light fw-semibold">
+                                <td colspan="8" class="text-end pe-2">Subtotal — <?= h($vname) ?></td>
+                                <td class="text-end">$<?= number_format($vTotal, 2) ?></td>
+                                <td></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                        <tfoot class="table-secondary fw-bold">
+                            <tr>
+                                <td colspan="8" class="text-end pe-2">Grand Total</td>
+                                <td class="text-end">$<?= number_format($schedTotal, 2) ?></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($productionItems)):
+            $prodByVendor = [];
+            foreach ($productionItems as $pi) {
+                $prodByVendor[$pi['vendor_name']][] = $pi;
+            }
+            $statusLabels = ['pending' => 'Pending', 'in_progress' => 'In Progress', 'client_approved' => 'Client Approved', 'delivered' => 'Delivered'];
+            $statusClasses = ['pending' => 'secondary', 'in_progress' => 'info text-dark', 'client_approved' => 'warning text-dark', 'delivered' => 'success'];
+        ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <span class="fw-semibold"><i class="bi bi-list-task me-1 text-primary"></i>Production Schedule</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Vendor</th>
+                                <th>Media Type</th>
+                                <th>Ad / Spot Name</th>
+                                <th>Specs</th>
+                                <th>Material Due</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($prodByVendor as $vname => $pitems): ?>
+                            <?php foreach ($pitems as $pi => $pitem): ?>
+                            <tr>
+                                <?php if ($pi === 0): ?>
+                                <td class="fw-semibold" rowspan="<?= count($pitems) ?>"><?= h($vname) ?></td>
+                                <?php endif; ?>
+                                <td><?= h($pitem['media_type']) ?></td>
+                                <td class="fw-semibold"><?= h($pitem['ad_name']) ?></td>
+                                <td class="small text-muted"><?= h($pitem['unit_specs']) ?></td>
+                                <td class="text-nowrap <?= ($pitem['material_due_date'] && strtotime($pitem['material_due_date']) < time()) ? 'text-danger fw-semibold' : '' ?>">
+                                    <?= $pitem['material_due_date'] ? date('M j, Y', strtotime($pitem['material_due_date'])) : '—' ?>
+                                </td>
+                                <td>
+                                    <span class="badge bg-<?= $statusClasses[$pitem['status']] ?? 'secondary' ?>">
+                                        <?= $statusLabels[$pitem['status']] ?? h($pitem['status']) ?>
+                                    </span>
+                                </td>
+                                <td class="small text-muted"><?= h($pitem['notes'] ?? '') ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php endif; // end empty check ?>
     </div>
 
     <!-- ===== EDIT DETAILS TAB ===== -->
@@ -731,6 +919,207 @@ function openChannelComms(channelId, label) {
     modal.show();
     loadHtml('/communications/partial_log.php?channel_id=' + encodeURIComponent(channelId), 'channelCommsBody');
 }
+
+// ── Parse Proposal ────────────────────────────────────────────────────────────
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.parse-proposal-btn');
+    if (!btn) return;
+    openParseModal({
+        campaignId:  btn.dataset.campaignId,
+        vendorId:    btn.dataset.vendorId,
+        vendorName:  btn.dataset.vendorName,
+        filePath:    btn.dataset.filePath,
+        fileName:    btn.dataset.fileName
+    });
+});
+
+function openParseModal(ctx) {
+    document.getElementById('parseFileName').textContent    = ctx.fileName;
+    document.getElementById('parseVendorName').textContent  = ctx.vendorName;
+    document.getElementById('parseResultBody').innerHTML    = '';
+    document.getElementById('parseSaveBtn').style.display   = 'none';
+    document.getElementById('parseRunBtn').style.display    = 'inline-flex';
+    document.getElementById('parseStatus').innerHTML        = '';
+    window._parseCtx = ctx;
+    new bootstrap.Modal(document.getElementById('parseModal')).show();
+}
+
+document.getElementById('parseRunBtn').addEventListener('click', function() {
+    var ctx   = window._parseCtx;
+    var btn   = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Parsing with AI…';
+    document.getElementById('parseStatus').innerHTML = '';
+    document.getElementById('parseResultBody').innerHTML = '';
+
+    var fd = new FormData();
+    fd.append('file_path',   ctx.filePath);
+    fd.append('file_name',   ctx.fileName);
+    fd.append('campaign_id', ctx.campaignId);
+    fd.append('vendor_id',   ctx.vendorId);
+    fd.append('vendor_name', ctx.vendorName);
+    fd.append('save',        '0');
+
+    fetch('/campaigns/parse-proposal.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars me-2"></i>Re-Parse';
+            if (!data.success) {
+                document.getElementById('parseStatus').innerHTML =
+                    '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>' + escHtml(data.error) + '</div>';
+                return;
+            }
+            window._parseResult = data;
+            renderParseResult(data);
+            document.getElementById('parseSaveBtn').style.display = 'inline-flex';
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars me-2"></i>Re-Parse';
+            document.getElementById('parseStatus').innerHTML =
+                '<div class="alert alert-danger mb-0">Network error — please try again.</div>';
+        });
+});
+
+document.getElementById('parseSaveBtn').addEventListener('click', function() {
+    var ctx = window._parseCtx;
+    var btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
+
+    var fd = new FormData();
+    fd.append('file_path',   ctx.filePath);
+    fd.append('file_name',   ctx.fileName);
+    fd.append('campaign_id', ctx.campaignId);
+    fd.append('vendor_id',   ctx.vendorId);
+    fd.append('vendor_name', ctx.vendorName);
+    fd.append('save',        '1');
+
+    fetch('/campaigns/parse-proposal.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('parseModal')).hide();
+                // Switch to Ad Schedule tab and reload
+                window.location.hash = '';
+                window.location.reload();
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Save to Ad Schedule';
+                document.getElementById('parseStatus').innerHTML =
+                    '<div class="alert alert-danger mb-0">' + escHtml(data.error) + '</div>';
+            }
+        });
+});
+
+function renderParseResult(data) {
+    var sched = data.ad_schedule    || [];
+    var prod  = data.production     || [];
+    var html  = '';
+
+    if (sched.length === 0 && prod.length === 0) {
+        html = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-circle me-2"></i>No schedule items were found in this file. The vendor may not have used the template format. You can try re-parsing or enter the schedule manually.</div>';
+        document.getElementById('parseResultBody').innerHTML = html;
+        return;
+    }
+
+    // Ad Schedule table
+    if (sched.length > 0) {
+        html += '<h6 class="fw-bold text-primary mb-2"><i class="bi bi-calendar2-check me-1"></i>Ad Schedule (' + sched.length + ' line' + (sched.length !== 1 ? 's' : '') + ')</h6>';
+        html += '<div class="table-responsive mb-3"><table class="table table-sm table-bordered mb-0"><thead class="table-primary"><tr>';
+        html += '<th>Category</th><th>Placement</th><th>Unit Type</th><th>Flight</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Total</th>';
+        html += '</tr></thead><tbody>';
+        sched.forEach(function(r) {
+            var flt = (r.flight_start || '—') + (r.flight_end ? ' – ' + r.flight_end : '');
+            var qty   = r.quantity   != null ? r.quantity   : '—';
+            var rate  = r.unit_rate  != null ? '$' + Number(r.unit_rate).toFixed(2)  : '—';
+            var total = r.total_cost != null ? '$' + Number(r.total_cost).toFixed(2) : '—';
+            html += '<tr>';
+            html += '<td>' + escHtml(r.media_category||'') + '</td>';
+            html += '<td>' + escHtml(r.placement||'') + '</td>';
+            html += '<td>' + escHtml(r.unit_type||'') + '</td>';
+            html += '<td class="text-nowrap small">' + escHtml(flt) + '</td>';
+            html += '<td class="text-end">' + qty + '</td>';
+            html += '<td class="text-end">' + rate + '</td>';
+            html += '<td class="text-end fw-semibold">' + total + '</td>';
+            html += '</tr>';
+        });
+        // Total row
+        var grandTotal = sched.reduce(function(s, r) { return s + (parseFloat(r.total_cost) || 0); }, 0);
+        html += '<tr class="table-light fw-bold"><td colspan="6" class="text-end">Total</td><td class="text-end">$' + grandTotal.toFixed(2) + '</td></tr>';
+        html += '</tbody></table></div>';
+    }
+
+    // Production items
+    if (prod.length > 0) {
+        html += '<h6 class="fw-bold text-primary mb-2"><i class="bi bi-list-task me-1"></i>Production Items (' + prod.length + ')</h6>';
+        html += '<div class="table-responsive mb-2"><table class="table table-sm table-bordered mb-0"><thead class="table-primary"><tr>';
+        html += '<th>Media Type</th><th>Ad Name</th><th>Specs</th><th>Material Due</th>';
+        html += '</tr></thead><tbody>';
+        prod.forEach(function(p) {
+            html += '<tr>';
+            html += '<td>' + escHtml(p.media_type||'') + '</td>';
+            html += '<td class="fw-semibold">' + escHtml(p.ad_name||'') + '</td>';
+            html += '<td class="small text-muted">' + escHtml(p.unit_specs||'') + '</td>';
+            html += '<td class="text-nowrap">' + escHtml(p.material_due_date||'—') + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+    }
+
+    document.getElementById('parseResultBody').innerHTML = html;
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Export ad schedule to Excel (SheetJS)
+function exportSchedule() {
+    var tbl = document.getElementById('adScheduleTable');
+    if (!tbl) return;
+    var wb  = XLSX.utils.table_to_book(tbl, { sheet: 'Ad Schedule' });
+    XLSX.writeFile(wb, 'AdSchedule_<?= preg_replace('/[^a-zA-Z0-9]/', '_', $campaign['title']) ?>_<?= date('Ymd') ?>.xlsx');
+}
 </script>
+
+<!-- SheetJS for export -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- ===== Parse Proposal Modal ===== -->
+<div class="modal fade" id="parseModal" tabindex="-1" aria-labelledby="parseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="parseModalLabel">
+                    <i class="bi bi-stars me-2"></i>Parse Proposal with AI
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 p-3 bg-light rounded border d-flex gap-3 align-items-start">
+                    <i class="bi bi-file-earmark-text fs-4 text-primary flex-shrink-0 mt-1"></i>
+                    <div>
+                        <div class="fw-semibold" id="parseFileName"></div>
+                        <div class="text-muted small">Vendor: <span id="parseVendorName"></span></div>
+                        <div class="text-muted small mt-1">Claude will read this file and extract all ad schedule line items and production specs.</div>
+                    </div>
+                </div>
+                <div id="parseStatus"></div>
+                <div id="parseResultBody"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary d-inline-flex align-items-center" id="parseRunBtn">
+                    <i class="bi bi-stars me-2"></i>Parse with AI
+                </button>
+                <button type="button" class="btn btn-success d-inline-flex align-items-center" id="parseSaveBtn" style="display:none!important;">
+                    <i class="bi bi-check-lg me-2"></i>Save to Ad Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
