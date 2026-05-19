@@ -50,11 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ---- Send RFP (consolidated per vendor) ----
     if ($action === 'send_rfp') {
-        $channelId = (int) ($_POST['channel_id'] ?? 0);
-        // Look up the vendor for this channel and send one email for ALL their channels
-        $vendorId = 0;
-        foreach ($channels as $ch) {
-            if ((int)$ch['id'] === $channelId) { $vendorId = (int)$ch['vendor_id']; break; }
+        // Accept vendor_id directly (new grouped UI) or resolve from channel_id (legacy)
+        $vendorId  = (int)($_POST['vendor_id']  ?? 0);
+        $channelId = (int)($_POST['channel_id'] ?? 0);
+        if ($vendorId === 0 && $channelId > 0) {
+            foreach ($channels as $ch) {
+                if ((int)$ch['id'] === $channelId) { $vendorId = (int)$ch['vendor_id']; break; }
+            }
         }
         if ($vendorId > 0) {
             $r = $campaignService->sendVendorRfp($id, $vendorId);
@@ -270,6 +272,14 @@ require_once __DIR__ . '/../includes/header.php';
                 </button>
             </div>
             <div class="card-body p-0">
+                <?php
+                // ── Group channels by vendor for display ──────────────────
+                $vendorGroups = [];
+                foreach ($channels as $ch) {
+                    $key = ($ch['vendor_id'] > 0) ? (int)$ch['vendor_id'] : 'none_' . $ch['id'];
+                    $vendorGroups[$key][] = $ch;
+                }
+                ?>
                 <?php if (empty($channels)): ?>
                 <div class="text-center py-5 text-muted">
                     <i class="bi bi-grid-3x2-gap fs-3 d-block mb-2 opacity-50"></i>
@@ -277,113 +287,105 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
+                    <table class="table align-middle mb-0" id="channelsTable">
+                        <thead class="table-dark">
                             <tr>
-                                <th>Category</th>
-                                <th>Vendor</th>
-                                <th>Budget</th>
-                                <th>Status</th>
-                                <th>RFP Sent</th>
+                                <th style="width:22%">Category</th>
+                                <th style="width:14%">Budget</th>
+                                <th style="width:14%">Status</th>
+                                <th style="width:16%">RFP Sent</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($channels as $ch): ?>
-                        <?php
-                            $chStatusInfo = $channelStatuses[$ch['status']] ?? ['label' => $ch['status'], 'class' => 'secondary'];
-                            $canRfp    = $ch['status'] === 'pending' && !empty($ch['vendor_email']);
-                            $canResend = $ch['status'] !== 'pending' && !empty($ch['vendor_email']);
-                            $canDelete = $ch['status'] === 'pending';
+                        <?php foreach ($vendorGroups as $vendorKey => $vChannels):
+                            $firstCh      = $vChannels[0];
+                            $vendorName   = $firstCh['vendor_name']  ?? '';
+                            $vendorEmail  = $firstCh['vendor_email'] ?? '';
+                            $vendorId     = (int)$firstCh['vendor_id'];
+                            $groupBudget  = array_sum(array_column($vChannels, 'budget_allocated'));
+                            $hasPending   = !empty(array_filter($vChannels, fn($c) => $c['status'] === 'pending'));
+                            $allStatuses  = array_unique(array_column($vChannels, 'status'));
+                            $hasResponse  = in_array('response_received', $allStatuses, true);
+                            $rfpDates     = array_filter(array_column($vChannels, 'rfp_sent_at'));
+                            $latestRfp    = $rfpDates ? max($rfpDates) : null;
+                            $canRfp       = $hasPending && !empty($vendorEmail);
+                            $canResend    = !$hasPending && !empty($vendorEmail);
+                            $chCount      = count($vChannels);
+
+                            // Collect all replies across this vendor's channels (deduplicated by replied_at)
+                            $allReplies = [];
+                            foreach ($vChannels as $vc) {
+                                foreach ($vc['vendor_replies'] as $r) {
+                                    $allReplies[$r['replied_at']] = $r;
+                                }
+                            }
+                            krsort($allReplies);
+                            $allReplies = array_values($allReplies);
+
+                            // Vendor-level status summary badge
+                            if ($hasResponse) {
+                                $groupBadge = '<span class="badge bg-success">Response Received</span>';
+                            } elseif (count($allStatuses) === 1 && $allStatuses[0] === 'rfp_sent') {
+                                $groupBadge = '<span class="badge bg-info text-dark">RFP Sent</span>';
+                            } elseif (!$hasPending) {
+                                $groupBadge = '<span class="badge bg-info text-dark">RFP Sent</span>';
+                            } else {
+                                $groupBadge = '<span class="badge bg-secondary">Pending</span>';
+                            }
                         ?>
-                        <tr>
+                        <!-- ── Vendor group header row ── -->
+                        <tr class="table-light" style="border-top:2px solid #dee2e6;">
                             <td>
-                                <span class="fw-semibold"><?= h($ch['media_category']) ?></span>
-                            </td>
-                            <td>
-                                <?php if (!empty($ch['vendor_name'])): ?>
-                                    <?= h($ch['vendor_name']) ?>
-                                    <?php if (!empty($ch['vendor_email'])): ?>
-                                        <div class="small text-muted"><?= h($ch['vendor_email']) ?></div>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span class="text-muted">— No vendor —</span>
+                                <div class="fw-bold"><?= h($vendorName ?: '— No vendor —') ?></div>
+                                <?php if ($vendorEmail): ?>
+                                    <div class="small text-muted"><?= h($vendorEmail) ?></div>
                                 <?php endif; ?>
+                                <div class="small text-muted mt-1">
+                                    <?= $chCount ?> item<?= $chCount !== 1 ? 's' : '' ?>
+                                </div>
                             </td>
-                            <td class="text-nowrap">$<?= number_format((float)$ch['budget_allocated'], 0) ?></td>
-                            <td>
-                                <span class="badge bg-<?= $chStatusInfo['class'] ?>">
-                                    <?= h($chStatusInfo['label']) ?>
-                                </span>
-                            </td>
+                            <td class="fw-bold text-nowrap">$<?= number_format($groupBudget, 0) ?></td>
+                            <td><?= $groupBadge ?></td>
                             <td class="small text-muted">
-                                <?= $ch['rfp_sent_at'] ? date('M j, Y g:ia', strtotime($ch['rfp_sent_at'])) : '—' ?>
+                                <?= $latestRfp ? date('M j, Y g:ia', strtotime($latestRfp)) : '—' ?>
                             </td>
                             <td class="text-end">
-                                <div class="btn-group btn-group-sm">
-                                    <button type="button" class="btn btn-outline-primary"
-                                            onclick="openChannelComms(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch['media_category'] . ' — ' . ($ch['vendor_name'] ?? 'Vendor')), ENT_QUOTES) ?>)">
-                                        <i class="bi bi-chat-text me-1"></i>Messages
-                                        <?php if ($ch['status'] === 'response_received'): ?>
-                                            <span class="badge bg-success ms-1">New</span>
-                                        <?php endif; ?>
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary"
-                                            onclick="editChannel(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch), ENT_QUOTES) ?>)"
-                                            data-bs-toggle="modal" data-bs-target="#channelModal"
-                                            title="Edit channel">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <?php
-                                    // Count how many channels this vendor has (for confirm msg)
-                                    $vendorChannelCount = count(array_filter($channels, fn($c) => (int)$c['vendor_id'] === (int)$ch['vendor_id']));
-                                    $confirmMsg = $vendorChannelCount > 1
-                                        ? 'Send one RFP email to ' . addslashes($ch['vendor_name'] ?? 'vendor') . ' covering all ' . $vendorChannelCount . ' of their channels?'
-                                        : 'Send RFP to ' . addslashes($ch['vendor_name'] ?? 'vendor') . '?';
-                                    ?>
-                                    <?php if ($canRfp): ?>
-                                    <form method="post" class="d-inline"
-                                          onsubmit="return confirm('<?= h($confirmMsg) ?>')">
-                                        <input type="hidden" name="action"     value="send_rfp">
-                                        <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
+                                <div class="d-flex gap-2 justify-content-end flex-wrap">
+                                <?php if ($canRfp && $vendorId > 0): ?>
+                                    <form method="post"
+                                          onsubmit="return confirm('Send one RFP email to <?= h(addslashes($vendorName)) ?> covering all <?= $chCount ?> item<?= $chCount !== 1 ? 's' : '' ?>?')">
+                                        <input type="hidden" name="action"    value="send_rfp">
+                                        <input type="hidden" name="vendor_id" value="<?= $vendorId ?>">
                                         <button type="submit" class="btn btn-info btn-sm text-dark">
-                                            <i class="bi bi-send me-1"></i>Send RFP
+                                            <i class="bi bi-send-fill me-1"></i>Send RFP
                                         </button>
                                     </form>
-                                    <?php elseif ($canResend): ?>
-                                    <form method="post" class="d-inline"
-                                          onsubmit="return confirm('<?= h($confirmMsg) ?>')">
-                                        <input type="hidden" name="action"     value="send_rfp">
-                                        <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
+                                <?php elseif ($canResend && $vendorId > 0): ?>
+                                    <form method="post"
+                                          onsubmit="return confirm('Resend RFP email to <?= h(addslashes($vendorName)) ?>?')">
+                                        <input type="hidden" name="action"    value="send_rfp">
+                                        <input type="hidden" name="vendor_id" value="<?= $vendorId ?>">
                                         <button type="submit" class="btn btn-outline-info btn-sm">
                                             <i class="bi bi-arrow-clockwise me-1"></i>Resend RFP
                                         </button>
                                     </form>
-                                    <?php endif; ?>
-                                    <?php if (!empty($ch['vendor_replies'])): ?>
+                                <?php endif; ?>
+                                <?php if (!empty($allReplies)): ?>
                                     <button class="btn btn-sm btn-success" type="button"
                                             data-bs-toggle="collapse"
-                                            data-bs-target="#replies_<?= (int)$ch['id'] ?>">
-                                        <i class="bi bi-paperclip me-1"></i>View Proposal (<?= count($ch['vendor_replies']) ?>)
+                                            data-bs-target="#vendor_replies_<?= h($vendorKey) ?>">
+                                        <i class="bi bi-paperclip me-1"></i>View Proposal (<?= count($allReplies) ?>)
                                     </button>
-                                    <?php endif; ?>
-                                    <?php if ($canDelete): ?>
-                                    <form method="post" class="d-inline"
-                                          onsubmit="return confirm('Remove this channel?')">
-                                        <input type="hidden" name="action"     value="delete_channel">
-                                        <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
-                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Remove">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                    <?php endif; ?>
+                                <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
-                        <?php if (!empty($ch['vendor_replies'])): ?>
-                        <tr class="collapse" id="replies_<?= (int)$ch['id'] ?>">
-                            <td colspan="6" class="bg-light p-3">
-                                <?php foreach ($ch['vendor_replies'] as $ri => $reply): ?>
+
+                        <?php if (!empty($allReplies)): ?>
+                        <tr class="collapse" id="vendor_replies_<?= h($vendorKey) ?>">
+                            <td colspan="5" class="bg-light p-3">
+                                <?php foreach ($allReplies as $ri => $reply): ?>
                                 <div class="<?= $ri > 0 ? 'mt-3 pt-3 border-top' : '' ?>">
                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                         <strong class="text-primary"><?= h($reply['vendor_name'] ?? '') ?></strong>
@@ -409,8 +411,8 @@ require_once __DIR__ . '/../includes/header.php';
                                             elseif (str_contains($type, 'word')) $icon = 'bi-file-earmark-word text-primary';
                                             else $icon = 'bi-file-earmark-image text-secondary';
                                             ?>
-                                            <a href="/campaigns/download.php?f=<?= urlencode($att['path']) ?>" target="_blank"
-                                               class="btn btn-sm btn-outline-secondary">
+                                            <a href="/campaigns/download.php?f=<?= urlencode($att['path']) ?>"
+                                               target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi <?= $icon ?> me-1"></i><?= h($att['name']) ?>
                                             </a>
                                         <?php endforeach; ?>
@@ -423,23 +425,68 @@ require_once __DIR__ . '/../includes/header.php';
                             </td>
                         </tr>
                         <?php endif; ?>
-                        <?php endforeach; ?>
+
+                        <!-- ── Individual channel rows ── -->
+                        <?php foreach ($vChannels as $ch):
+                            $chStatusInfo = $channelStatuses[$ch['status']] ?? ['label' => $ch['status'], 'class' => 'secondary'];
+                            $canChDelete  = $ch['status'] === 'pending';
+                        ?>
+                        <tr>
+                            <td class="ps-4">
+                                <i class="bi bi-arrow-return-right text-muted me-1 small"></i>
+                                <span class="fw-semibold"><?= h($ch['media_category']) ?></span>
+                            </td>
+                            <td class="text-nowrap text-muted">$<?= number_format((float)$ch['budget_allocated'], 0) ?></td>
+                            <td>
+                                <span class="badge bg-<?= $chStatusInfo['class'] ?>">
+                                    <?= h($chStatusInfo['label']) ?>
+                                </span>
+                            </td>
+                            <td class="small text-muted">
+                                <?= $ch['rfp_sent_at'] ? date('M j, Y g:ia', strtotime($ch['rfp_sent_at'])) : '—' ?>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            onclick="openChannelComms(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch['media_category'] . ' — ' . ($ch['vendor_name'] ?? 'Vendor')), ENT_QUOTES) ?>)">
+                                        <i class="bi bi-chat-text me-1"></i>Messages
+                                        <?php if ($ch['status'] === 'response_received'): ?>
+                                            <span class="badge bg-success ms-1">New</span>
+                                        <?php endif; ?>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            onclick="editChannel(<?= (int)$ch['id'] ?>, <?= htmlspecialchars(json_encode($ch), ENT_QUOTES) ?>)"
+                                            data-bs-toggle="modal" data-bs-target="#channelModal"
+                                            title="Edit channel">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <?php if ($canChDelete): ?>
+                                    <form method="post" class="d-inline"
+                                          onsubmit="return confirm('Remove this channel?')">
+                                        <input type="hidden" name="action"     value="delete_channel">
+                                        <input type="hidden" name="channel_id" value="<?= (int)$ch['id'] ?>">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Remove">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; // vChannels ?>
+                        <?php endforeach; // vendorGroups ?>
                         </tbody>
                         <?php if ($allocatedSum > 0): ?>
                         <tfoot class="table-light">
-                            <tr>
-                                <td colspan="2" class="text-end fw-semibold pe-3">Allocated Total:</td>
+                            <tr style="border-top:2px solid #dee2e6;">
+                                <td class="text-end fw-semibold pe-3">Allocated Total:</td>
                                 <td class="fw-bold text-nowrap">$<?= number_format($allocatedSum, 0) ?></td>
                                 <td colspan="3">
                                     <?php $remaining = (float)$campaign['total_budget'] - $allocatedSum; ?>
                                     <?php if ($remaining >= 0): ?>
-                                        <span class="text-success small">
-                                            $<?= number_format($remaining, 0) ?> remaining
-                                        </span>
+                                        <span class="text-success small">$<?= number_format($remaining, 0) ?> remaining</span>
                                     <?php else: ?>
-                                        <span class="text-danger small">
-                                            $<?= number_format(abs($remaining), 0) ?> over budget
-                                        </span>
+                                        <span class="text-danger small">$<?= number_format(abs($remaining), 0) ?> over budget</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
