@@ -13,7 +13,7 @@ ALTER TABLE press_release_recipients
     DROP FOREIGN KEY IF EXISTS press_release_recipients_ibfk_2;
 
 ALTER TABLE press_release_recipients
-    MODIFY COLUMN vendor_id INT NULL DEFAULT NULL;
+    MODIFY COLUMN vendor_id INT UNSIGNED NULL DEFAULT NULL;
 
 ALTER TABLE press_release_recipients
     ADD COLUMN IF NOT EXISTS recipient_type ENUM('vendor','client') NOT NULL DEFAULT 'vendor' AFTER vendor_email;
