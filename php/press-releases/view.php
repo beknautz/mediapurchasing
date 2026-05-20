@@ -87,14 +87,21 @@ $flash = flash('success');
     <div class="col-lg-7">
 
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white py-3 d-flex justify-content-between">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-start">
                 <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i>Message</h5>
-                <div class="small text-muted">
-                    <?php if (!empty($pr['sent_at'])): ?>
-                        Sent <?= h(date('M j, Y g:ia', strtotime($pr['sent_at']))) ?>
-                        <?= !empty($pr['created_by_name']) ? ' by ' . h($pr['created_by_name']) : '' ?>
-                    <?php else: ?>
-                        Created <?= h(date('M j, Y', strtotime($pr['created_at']))) ?>
+                <div class="text-end">
+                    <div class="small text-muted">
+                        <?php if (!empty($pr['sent_at'])): ?>
+                            Sent <?= h(date('M j, Y g:ia', strtotime($pr['sent_at']))) ?>
+                            <?= !empty($pr['created_by_name']) ? ' by ' . h($pr['created_by_name']) : '' ?>
+                        <?php else: ?>
+                            Created <?= h(date('M j, Y', strtotime($pr['created_at']))) ?>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($pr['client_name'])): ?>
+                    <div class="mt-1">
+                        <span class="badge bg-primary"><i class="bi bi-building me-1"></i><?= h($pr['client_name']) ?></span>
+                    </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -143,19 +150,25 @@ $flash = flash('success');
                 <table class="table table-sm mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Vendor</th>
-                            <th>Category</th>
+                            <th>Recipient</th>
+                            <th>Type</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($recipients as $r): ?>
+                    <?php foreach ($recipients as $r):
+                        $isClient   = ($r['recipient_type'] ?? 'vendor') === 'client';
+                        $name       = $isClient ? ($r['client_company'] ?? '—') : ($r['vendor_name'] ?? '—');
+                        $typeLabel  = $isClient
+                            ? '<span class="badge bg-primary">Client</span>'
+                            : '<span class="badge bg-secondary">' . h($r['media_category'] ?? 'Vendor') . '</span>';
+                    ?>
                     <tr>
                         <td>
-                            <div class="fw-semibold small"><?= h($r['company_name'] ?? '—') ?></div>
+                            <div class="fw-semibold small"><?= h($name) ?></div>
                             <div class="text-muted" style="font-size:.72rem;"><?= h($r['vendor_email']) ?></div>
                         </td>
-                        <td class="small text-muted"><?= h($r['media_category'] ?? '—') ?></td>
+                        <td class="small"><?= $typeLabel ?></td>
                         <td>
                             <?php if ($r['status'] === 'sent'): ?>
                                 <span class="badge bg-success">Sent</span>

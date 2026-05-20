@@ -83,9 +83,11 @@ class PressReleaseService extends BaseService
     public function getPressReleases(int $page = 1, int $pageSize = 25): array
     {
         $sql = 'SELECT pr.id, pr.subject, pr.status, pr.recipient_count, pr.sent_at, pr.created_at,
-                       u.name AS created_by_name
+                       u.name AS created_by_name,
+                       c.company_name AS client_name
                   FROM press_releases pr
-             LEFT JOIN users u ON u.id = pr.created_by
+             LEFT JOIN users   u ON u.id  = pr.created_by
+             LEFT JOIN clients c ON c.id  = pr.client_id
               ORDER BY pr.created_at DESC';
         return $this->paginate($sql, [], $page, $pageSize);
     }
@@ -93,9 +95,11 @@ class PressReleaseService extends BaseService
     public function getPressRelease(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT pr.*, u.name AS created_by_name
+            'SELECT pr.*, u.name AS created_by_name,
+                    c.company_name AS client_name
                FROM press_releases pr
-          LEFT JOIN users u ON u.id = pr.created_by
+          LEFT JOIN users   u ON u.id = pr.created_by
+          LEFT JOIN clients c ON c.id = pr.client_id
               WHERE pr.id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $id]);
@@ -103,11 +107,15 @@ class PressReleaseService extends BaseService
         if (!$pr) return null;
 
         $rStmt = $this->db->prepare(
-            'SELECT prr.*, v.company_name, v.media_category
+            'SELECT prr.*,
+                    v.company_name AS vendor_name, v.media_category,
+                    c.company_name AS client_company
                FROM press_release_recipients prr
           LEFT JOIN vendors v ON v.id = prr.vendor_id
+          LEFT JOIN clients c ON c.id = prr.client_id
               WHERE prr.press_release_id = :id
-           ORDER BY prr.status ASC, v.company_name ASC'
+           ORDER BY prr.recipient_type DESC, prr.status ASC,
+                    COALESCE(v.company_name, c.company_name) ASC'
         );
         $rStmt->execute([':id' => $id]);
 
@@ -117,20 +125,28 @@ class PressReleaseService extends BaseService
         ];
     }
 
-    public function create(string $subject, string $bodyHtml, string $bodyText, array $savedFiles): int
-    {
+    public function create(
+        string $subject,
+        string $bodyHtml,
+        string $bodyText,
+        array  $savedFiles,
+        int    $clientId = 0
+    ): int {
         $userId = (int) ($_SESSION['user']['id'] ?? 0);
         $stmt   = $this->db->prepare(
             'INSERT INTO press_releases
-                 (subject, body_html, body_text, attachments, status, recipient_count, created_by, created_at, updated_at)
+                 (subject, body_html, body_text, attachments, status, recipient_count,
+                  client_id, created_by, created_at, updated_at)
              VALUES
-                 (:subject, :body_html, :body_text, :attachments, "draft", 0, :created_by, NOW(), NOW())'
+                 (:subject, :body_html, :body_text, :attachments, "draft", 0,
+                  :client_id, :created_by, NOW(), NOW())'
         );
         $stmt->execute([
             ':subject'     => $subject,
             ':body_html'   => $bodyHtml,
             ':body_text'   => $bodyText,
             ':attachments' => json_encode($savedFiles),
+            ':client_id'   => $clientId > 0 ? $clientId : null,
             ':created_by'  => $userId ?: null,
         ]);
         return (int) $this->db->lastInsertId();
@@ -156,22 +172,28 @@ class PressReleaseService extends BaseService
         int    $vendorId,
         string $vendorEmail,
         string $status,
-        string $error  = '',
-        int    $logId  = 0
+        string $error         = '',
+        int    $logId         = 0,
+        string $recipientType = 'vendor',
+        int    $clientId      = 0
     ): void {
         $this->db->prepare(
             'INSERT INTO press_release_recipients
-                 (press_release_id, vendor_id, vendor_email, status, error_message, log_id, sent_at)
+                 (press_release_id, vendor_id, vendor_email, recipient_type, client_id,
+                  status, error_message, log_id, sent_at)
              VALUES
-                 (:pr_id, :v_id, :v_email, :status, :error, :log_id, :sent_at)'
+                 (:pr_id, :v_id, :v_email, :rtype, :client_id,
+                  :status, :error, :log_id, :sent_at)'
         )->execute([
-            ':pr_id'   => $pressReleaseId,
-            ':v_id'    => $vendorId,
-            ':v_email' => $vendorEmail,
-            ':status'  => $status,
-            ':error'   => $error,
-            ':log_id'  => $logId ?: null,
-            ':sent_at' => date('Y-m-d H:i:s'),
+            ':pr_id'     => $pressReleaseId,
+            ':v_id'      => $vendorId > 0 ? $vendorId : null,
+            ':v_email'   => $vendorEmail,
+            ':rtype'     => $recipientType,
+            ':client_id' => $clientId > 0 ? $clientId : null,
+            ':status'    => $status,
+            ':error'     => $error,
+            ':log_id'    => $logId ?: null,
+            ':sent_at'   => date('Y-m-d H:i:s'),
         ]);
     }
 

@@ -3,21 +3,24 @@ require_once __DIR__ . '/../bootstrap.php';
 requireRole(['admin', 'buyer']);
 
 $prService    = new PressReleaseService();
+$crmService   = new CRMService();
 $emailService = new EmailService();
 
 $errors       = [];
 $vendorGroups = $prService->getVendorsByCategory();
 $templates    = $prService->getTemplates();
+$clients      = $crmService->getClients();
 $UPLOAD_DIR   = __DIR__ . '/../uploads/press-releases/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $subject   = trim($_POST['subject']   ?? '');
-    $bodyHtml  = trim($_POST['body_html'] ?? '');   // Summernote posts HTML
+    $subject   = trim($_POST['subject']    ?? '');
+    $bodyHtml  = trim($_POST['body_html']  ?? '');   // Summernote posts HTML
     $vendorIds = array_map('intval', (array) ($_POST['vendor_ids'] ?? []));
+    $clientId  = (int) ($_POST['client_id'] ?? 0);
 
     if ($subject === '') $errors[] = 'Subject is required.';
     if (trim(strip_tags($bodyHtml)) === '') $errors[] = 'Message body is required.';
-    if (empty($vendorIds)) $errors[] = 'Select at least one vendor.';
+    if (empty($vendorIds) && $clientId === 0) $errors[] = 'Select at least one recipient (vendor or client).';
 
     if (empty($errors)) {
         $bodyText = strip_tags($bodyHtml);
@@ -26,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   . '</div>';
 
         // Save the press release record first (files saved into its folder)
-        $prId = $prService->create($subject, $bodyHtml, $bodyText, []);
+        $prId = $prService->create($subject, $bodyHtml, $bodyText, [], $clientId);
 
         // Save uploaded files
         $savedFiles = [];
@@ -44,7 +47,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'type' => $f['type'],
         ], $savedFiles);
 
-        // Collect selected vendor rows
+        $sentCount = 0;
+
+        // ── Send to client (primary + secondary email) if selected ───────────
+        if ($clientId > 0) {
+            $clientRecord = null;
+            foreach ($clients as $c) {
+                if ((int)$c['id'] === $clientId) { $clientRecord = $c; break; }
+            }
+            if ($clientRecord) {
+                $clientEmails = array_filter([
+                    $clientRecord['email']           ?? '',
+                    $clientRecord['secondary_email'] ?? '',
+                ]);
+                foreach ($clientEmails as $cEmail) {
+                    $result = $emailService->send(
+                        toEmail:     $cEmail,
+                        toName:      $clientRecord['company_name'],
+                        subject:     $subject,
+                        bodyHtml:    $bodyHtml,
+                        bodyText:    $bodyText,
+                        attachments: $emailAttachments
+                    );
+                    $prService->addRecipient(
+                        $prId, 0, $cEmail,
+                        $result['success'] ? 'sent' : 'failed',
+                        $result['success'] ? '' : ($result['message'] ?? ''),
+                        $result['logId'] ?? 0,
+                        'client', $clientId
+                    );
+                    if ($result['success']) $sentCount++;
+                }
+            }
+        }
+
+        // ── Send to selected vendors ─────────────────────────────────────────
         $allVendors = [];
         foreach ($vendorGroups as $group) {
             foreach ($group as $v) {
@@ -52,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $sentCount = 0;
         foreach ($vendorIds as $vid) {
             $vendor = $allVendors[$vid] ?? null;
             if (!$vendor) continue;
@@ -73,18 +109,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
             $prService->addRecipient(
-                $prId,
-                $vid,
-                $email,
+                $prId, $vid, $email,
                 $result['success'] ? 'sent' : 'failed',
-                $result['success'] ? '' : $result['message'],
+                $result['success'] ? '' : ($result['message'] ?? ''),
                 $result['logId'] ?? 0
             );
             if ($result['success']) $sentCount++;
         }
 
+        $totalRecipients = count($vendorIds) + (isset($clientEmails) ? count($clientEmails) : 0);
         $prService->markSent($prId, $sentCount);
-        flash('success', "Press release sent to {$sentCount} of " . count($vendorIds) . " vendors.");
+        flash('success', "Press release sent to {$sentCount} of {$totalRecipients} recipients.");
         redirect('/press-releases/view.php?id=' . $prId);
     }
 }
@@ -151,6 +186,30 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <?php endif; ?>
+
+        <!-- Client selector -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Client</h5>
+            </div>
+            <div class="card-body">
+                <label for="client_id" class="form-label fw-semibold">Send to Client <span class="text-muted fw-normal">(optional)</span></label>
+                <select name="client_id" id="client_id" class="form-select" onchange="updateClientPreview()">
+                    <option value="0">— No client —</option>
+                    <?php foreach ($clients as $c):
+                        $selected = ((int)($_POST['client_id'] ?? 0) === (int)$c['id']) ? 'selected' : '';
+                    ?>
+                    <option value="<?= (int)$c['id'] ?>" <?= $selected ?>
+                            data-email="<?= h($c['email'] ?? '') ?>"
+                            data-secondary="<?= h($c['secondary_email'] ?? '') ?>">
+                        <?= h($c['company_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <div id="clientEmailPreview" class="mt-2"></div>
+                <div class="form-text">When selected, the press release is also sent to the client's primary and secondary email addresses.</div>
+            </div>
+        </div>
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white py-3">
@@ -262,6 +321,21 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
+function updateClientPreview() {
+    var sel     = document.getElementById('client_id');
+    var opt     = sel.options[sel.selectedIndex];
+    var preview = document.getElementById('clientEmailPreview');
+    var email   = opt.dataset.email     || '';
+    var sec     = opt.dataset.secondary || '';
+    if (!email && !sec) { preview.innerHTML = ''; return; }
+    var badges = '';
+    if (email) badges += '<span class="badge bg-success me-1"><i class="bi bi-envelope me-1"></i>' + escHtml(email) + '</span>';
+    if (sec)   badges += '<span class="badge bg-info text-dark me-1"><i class="bi bi-envelope me-1"></i>' + escHtml(sec) + ' <span class="opacity-75">(secondary)</span></span>';
+    preview.innerHTML = '<div class="d-flex flex-wrap gap-1 align-items-center"><span class="text-muted small me-1">Will receive:</span>' + badges + '</div>';
+}
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function updateCount() {
     const n = document.querySelectorAll('.vendor-cb:checked').length;
     document.getElementById('selectedCount').textContent = n + ' selected';
@@ -304,6 +378,7 @@ document.getElementById('attachments').addEventListener('change', function () {
 });
 
 updateCount();
+updateClientPreview();
 </script>
 
 <?php
