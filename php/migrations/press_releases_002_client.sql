@@ -22,7 +22,6 @@ ALTER TABLE press_release_recipients
     ADD COLUMN IF NOT EXISTS client_id INT NULL DEFAULT NULL AFTER recipient_type;
 
 -- Re-add FK with nullable vendor_id (vendor delete now sets NULL instead of blocking)
--- IF NOT EXISTS prevents error if FK was already re-added.
 ALTER TABLE press_release_recipients
-    ADD CONSTRAINT IF NOT EXISTS press_release_recipients_ibfk_2
+    ADD CONSTRAINT press_release_recipients_ibfk_2
         FOREIGN KEY (vendor_id) REFERENCES vendors (id) ON DELETE SET NULL;
