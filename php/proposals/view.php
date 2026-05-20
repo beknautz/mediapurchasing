@@ -21,6 +21,9 @@ $blocks   = $data['blocks'];
 $flashMsg = flash('success');
 $errorMsg = flash('error');
 
+$agSvc    = new AgencyAgreementService();
+$branding = $agSvc->getBranding();
+
 // Handle status change POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status'])) {
     $newStatus = trim($_POST['new_status'] ?? '');
@@ -53,8 +56,8 @@ function renderViewItemTable(array $items): void {
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-0">
             <table class="table mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
+                <thead>
+                    <tr style="background:#0f172a;color:#fff;">
                         <th>Description</th>
                         <th class="text-center" style="width:80px;">Qty</th>
                         <th class="text-end" style="width:130px;">Unit Price</th>
@@ -102,26 +105,78 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
-    <div>
-        <h1 class="h3 mb-1 fw-bold"><?= h($proposal['title']) ?></h1>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0 small">
-                <li class="breadcrumb-item"><a href="/dashboard.php">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="/proposals/index.php">Proposals</a></li>
-                <li class="breadcrumb-item active"><?= h($proposal['title']) ?></li>
-            </ol>
-        </nav>
+<!-- Proposal Cover Header -->
+<div class="card border-0 shadow-sm mb-4 overflow-hidden">
+    <!-- Dark top bar with logos -->
+    <div style="background:#0f172a;padding:24px 32px;">
+        <table style="width:100%;border-collapse:collapse;">
+        <tr>
+            <td style="vertical-align:middle;">
+                <?php if (!empty($branding['logo_url'])): ?>
+                <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
+                     style="max-height:50px;max-width:180px;object-fit:contain;">
+                <?php else: ?>
+                <span style="color:#fff;font-size:1.25rem;font-weight:700;"><?= h($branding['name']) ?></span>
+                <?php endif; ?>
+            </td>
+            <td style="text-align:right;vertical-align:middle;">
+                <span style="color:#fff;font-size:2rem;font-weight:800;letter-spacing:.12em;opacity:.9;">PROPOSAL</span>
+            </td>
+        </tr>
+        </table>
     </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="/proposals/create.php?id=<?= $id ?>" class="btn btn-outline-secondary">
-            <i class="bi bi-pencil me-1"></i>Edit
-        </a>
-        <button type="button" class="btn btn-outline-danger" onclick="confirmDelete()">
-            <i class="bi bi-trash me-1"></i>Delete
-        </button>
+    <!-- Prepared for / by row -->
+    <div class="row g-0 border-bottom">
+        <div class="col-md-6 p-4 border-end">
+            <div class="text-uppercase small fw-bold text-muted mb-2" style="letter-spacing:.08em;font-size:.7rem;">Prepared For</div>
+            <?php if (!empty($proposal['client_logo_url'])): ?>
+            <img src="<?= h($proposal['client_logo_url']) ?>" alt="Client Logo"
+                 style="max-height:48px;max-width:160px;object-fit:contain;margin-bottom:10px;display:block;">
+            <?php endif; ?>
+            <div class="fw-bold fs-5"><?= h($proposal['client_name'] ?? '—') ?></div>
+        </div>
+        <div class="col-md-6 p-4">
+            <div class="text-uppercase small fw-bold text-muted mb-2" style="letter-spacing:.08em;font-size:.7rem;">Prepared By</div>
+            <div class="fw-bold"><?= h($branding['name']) ?></div>
+            <div class="small text-muted"><?= h($branding['address']) ?>, <?= h($branding['city_state_zip']) ?></div>
+            <div class="small text-muted"><?= h($branding['phone']) ?></div>
+        </div>
+    </div>
+    <!-- Meta bar -->
+    <div class="px-4 py-3 bg-light d-flex flex-wrap gap-4 align-items-center justify-content-between">
+        <div>
+            <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;">Proposal</div>
+            <div class="fw-bold"><?= h($proposal['title']) ?></div>
+        </div>
+        <div class="d-flex gap-4 flex-wrap">
+            <?php if ($proposal['valid_until']): ?>
+            <div class="text-end">
+                <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;">Valid Until</div>
+                <div class="fw-semibold <?= (strtotime($proposal['valid_until']) < time()) ? 'text-danger' : '' ?>">
+                    <?= h(date('M j, Y', strtotime($proposal['valid_until']))) ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <div class="text-end">
+                <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;">Date</div>
+                <div class="fw-semibold"><?= h(date('M j, Y', strtotime($proposal['created_at']))) ?></div>
+            </div>
+            <div class="text-end">
+                <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;">Status</div>
+                <div><span class="badge bg-<?= $statusColor ?> fs-6"><?= h($statusLabel) ?></span></div>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Breadcrumb (below header) -->
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="/dashboard.php">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="/proposals/index.php">Proposals</a></li>
+        <li class="breadcrumb-item active"><?= h($proposal['title']) ?></li>
+    </ol>
+</nav>
 
 <div class="row g-4">
 
@@ -140,10 +195,8 @@ require_once __DIR__ . '/../includes/header.php';
                 }
                 if ($b['block_type'] === 'text'):
         ?>
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body" style="line-height:1.75;">
-                <?= $b['content'] /* Summernote HTML — rendered raw */ ?>
-            </div>
+        <div class="mb-4" style="line-height:1.8;">
+            <?= $b['content'] /* Summernote HTML — rendered raw */ ?>
         </div>
         <?php       elseif ($b['block_type'] === 'signature'): ?>
         <div class="mb-5 pt-3">
@@ -178,13 +231,8 @@ require_once __DIR__ . '/../includes/header.php';
 
         <!-- Grand total -->
         <?php if ((float)$proposal['total_amount'] > 0): ?>
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-end align-items-center gap-3">
-                    <span class="fw-semibold text-muted fs-6">Grand Total</span>
-                    <span class="fs-4 fw-bold">$<?= number_format((float)$proposal['total_amount'], 2) ?></span>
-                </div>
-            </div>
+        <div class="text-end py-3 px-4 rounded mb-4" style="background:#0f172a;color:#fff;">
+            Grand Total <span class="fs-3 fw-bold ms-3">$<?= number_format((float)$proposal['total_amount'], 2) ?></span>
         </div>
         <?php endif; ?>
 
@@ -193,50 +241,23 @@ require_once __DIR__ . '/../includes/header.php';
     <!-- ── Sidebar ───────────────────────────────────────────────────────────── -->
     <div class="col-lg-4">
 
-        <!-- Details -->
+        <!-- Actions -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white py-3">
                 <h5 class="mb-0 fw-semibold">
-                    <i class="bi bi-info-circle me-2 text-primary"></i>Details
+                    <i class="bi bi-lightning me-2 text-primary"></i>Actions
                 </h5>
             </div>
-            <div class="card-body">
-                <dl class="row mb-0 small">
-                    <dt class="col-5 text-muted">Status</dt>
-                    <dd class="col-7">
-                        <span class="badge bg-<?= $statusColor ?>"><?= h($statusLabel) ?></span>
-                    </dd>
-                    <dt class="col-5 text-muted">Client</dt>
-                    <dd class="col-7"><?= h($proposal['client_name'] ?? '—') ?></dd>
-                    <dt class="col-5 text-muted">Total</dt>
-                    <dd class="col-7 fw-bold">$<?= number_format((float)$proposal['total_amount'], 2) ?></dd>
-                    <dt class="col-5 text-muted">Valid Until</dt>
-                    <dd class="col-7">
-                        <?php if ($proposal['valid_until']): ?>
-                            <?php $isExpired = strtotime($proposal['valid_until']) < strtotime('today'); ?>
-                            <span class="<?= $isExpired ? 'text-danger fw-semibold' : '' ?>">
-                                <?= h(date('M j, Y', strtotime($proposal['valid_until']))) ?>
-                            </span>
-                            <?php if ($isExpired): ?>
-                                <span class="badge bg-danger ms-1">Expired</span>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
-                    </dd>
-                    <dt class="col-5 text-muted">Created By</dt>
-                    <dd class="col-7"><?= h($proposal['created_by_name'] ?? '—') ?></dd>
-                    <dt class="col-5 text-muted">Created</dt>
-                    <dd class="col-7"><?= h(date('M j, Y', strtotime($proposal['created_at']))) ?></dd>
-                    <?php if ($proposal['sent_at']): ?>
-                    <dt class="col-5 text-muted">Sent</dt>
-                    <dd class="col-7"><?= h(date('M j, Y', strtotime($proposal['sent_at']))) ?></dd>
-                    <?php endif; ?>
-                    <?php if ($proposal['accepted_at']): ?>
-                    <dt class="col-5 text-muted">Accepted</dt>
-                    <dd class="col-7"><?= h(date('M j, Y', strtotime($proposal['accepted_at']))) ?></dd>
-                    <?php endif; ?>
-                </dl>
+            <div class="card-body d-grid gap-2">
+                <a href="/proposals/proposal-pdf.php?id=<?= $id ?>" class="btn btn-outline-dark" target="_blank">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                </a>
+                <a href="/proposals/create.php?id=<?= $id ?>" class="btn btn-outline-secondary">
+                    <i class="bi bi-pencil me-1"></i>Edit Proposal
+                </a>
+                <button type="button" class="btn btn-outline-danger" onclick="confirmDelete()">
+                    <i class="bi bi-trash me-1"></i>Delete Proposal
+                </button>
             </div>
         </div>
 

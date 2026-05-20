@@ -41,7 +41,8 @@ class ProposalService extends BaseService
     public function getProposal(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT p.*, c.company_name AS client_name, u.name AS created_by_name
+            'SELECT p.*, c.company_name AS client_name, c.logo_url AS client_logo_url,
+                    u.name AS created_by_name
                FROM proposals p
           LEFT JOIN clients c ON c.id = p.client_id
           LEFT JOIN users u   ON u.id = p.created_by
@@ -314,7 +315,7 @@ class ProposalService extends BaseService
     public function getClients(): array
     {
         return $this->db->query(
-            'SELECT id, company_name FROM clients WHERE is_active = 1 ORDER BY company_name ASC'
+            'SELECT id, company_name, logo_url FROM clients WHERE is_active = 1 ORDER BY company_name ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 }
