@@ -157,11 +157,19 @@ $flash = flash('success');
                     </thead>
                     <tbody>
                     <?php foreach ($recipients as $r):
-                        $isClient   = ($r['recipient_type'] ?? 'vendor') === 'client';
-                        $name       = $isClient ? ($r['client_company'] ?? '—') : ($r['vendor_name'] ?? '—');
-                        $typeLabel  = $isClient
-                            ? '<span class="badge bg-primary">Client</span>'
-                            : '<span class="badge bg-secondary">' . h($r['media_category'] ?? 'Vendor') . '</span>';
+                        $rtype = $r['recipient_type'] ?? 'vendor';
+                        if ($rtype === 'client') {
+                            $name      = $r['client_company'] ?? '—';
+                            $typeLabel = '<span class="badge bg-primary">Client</span>';
+                        } elseif ($rtype === 'media_contact') {
+                            $name      = ($r['outlet_name'] ?? '—');
+                            if (!empty($r['contact_name'])) $name .= ' / ' . $r['contact_name'];
+                            $market    = $r['outlet_market'] ?? '';
+                            $typeLabel = '<span class="badge bg-info text-dark">' . h($market ?: 'Media') . '</span>';
+                        } else {
+                            $name      = $r['vendor_name'] ?? '—';
+                            $typeLabel = '<span class="badge bg-secondary">' . h($r['media_category'] ?? 'Vendor') . '</span>';
+                        }
                     ?>
                     <tr>
                         <td>

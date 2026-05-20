@@ -113,13 +113,17 @@ class PressReleaseService extends BaseService
         $rStmt = $this->db->prepare(
             'SELECT prr.*,
                     v.company_name AS vendor_name, v.media_category,
-                    c.company_name AS client_company
+                    c.company_name AS client_company,
+                    mc.name AS contact_name, mc.email AS contact_email,
+                    mo.name AS outlet_name, mo.market AS outlet_market, mo.category AS outlet_category
                FROM press_release_recipients prr
-          LEFT JOIN vendors v ON v.id = prr.vendor_id
-          LEFT JOIN clients c ON c.id = prr.client_id
+          LEFT JOIN vendors v         ON v.id  = prr.vendor_id
+          LEFT JOIN clients c         ON c.id  = prr.client_id
+          LEFT JOIN media_contacts mc ON mc.id = prr.media_contact_id
+          LEFT JOIN media_outlets  mo ON mo.id = mc.outlet_id
               WHERE prr.press_release_id = :id
            ORDER BY prr.recipient_type DESC, prr.status ASC,
-                    COALESCE(v.company_name, c.company_name) ASC'
+                    COALESCE(v.company_name, c.company_name, mo.name) ASC'
         );
         $rStmt->execute([':id' => $id]);
 
@@ -176,17 +180,18 @@ class PressReleaseService extends BaseService
         int    $vendorId,
         string $vendorEmail,
         string $status,
-        string $error         = '',
-        int    $logId         = 0,
-        string $recipientType = 'vendor',
-        int    $clientId      = 0
+        string $error          = '',
+        int    $logId          = 0,
+        string $recipientType  = 'vendor',
+        int    $clientId       = 0,
+        int    $mediaContactId = 0
     ): void {
         $this->db->prepare(
             'INSERT INTO press_release_recipients
-                 (press_release_id, vendor_id, vendor_email, recipient_type, client_id,
+                 (press_release_id, vendor_id, vendor_email, recipient_type, client_id, media_contact_id,
                   status, error_message, log_id, sent_at)
              VALUES
-                 (:pr_id, :v_id, :v_email, :rtype, :client_id,
+                 (:pr_id, :v_id, :v_email, :rtype, :client_id, :mc_id,
                   :status, :error, :log_id, :sent_at)'
         )->execute([
             ':pr_id'     => $pressReleaseId,
@@ -194,6 +199,7 @@ class PressReleaseService extends BaseService
             ':v_email'   => $vendorEmail,
             ':rtype'     => $recipientType,
             ':client_id' => $clientId > 0 ? $clientId : null,
+            ':mc_id'     => $mediaContactId > 0 ? $mediaContactId : null,
             ':status'    => $status,
             ':error'     => $error,
             ':log_id'    => $logId ?: null,
@@ -215,6 +221,41 @@ class PressReleaseService extends BaseService
             $grouped[$cat][] = $v;
         }
         return $grouped;
+    }
+
+    public function getMediaContactsByMarket(): array
+    {
+        $stmt = $this->db->query(
+            'SELECT mc.id, mc.name AS contact_name, mc.email, mc.phone, mc.is_primary,
+                    mo.id AS outlet_id, mo.name AS outlet_name, mo.market, mo.category
+               FROM media_contacts mc
+               JOIN media_outlets mo ON mo.id = mc.outlet_id
+              WHERE mc.is_active = 1 AND mo.is_active = 1
+              ORDER BY mo.market ASC, mo.name ASC, mc.is_primary DESC, mc.name ASC'
+        );
+        $grouped = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $market = $row['market'] ?: 'General';
+            $outlet = $row['outlet_name'];
+            $grouped[$market][$outlet][] = $row;
+        }
+        return $grouped;
+    }
+
+    public function getMediaContactsFlat(): array
+    {
+        $stmt = $this->db->query(
+            'SELECT mc.id, mc.name AS contact_name, mc.email,
+                    mo.name AS outlet_name, mo.market, mo.category
+               FROM media_contacts mc
+               JOIN media_outlets mo ON mo.id = mc.outlet_id
+              WHERE mc.is_active = 1 AND mo.is_active = 1'
+        );
+        $map = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $map[$row['id']] = $row;
+        }
+        return $map;
     }
 
     public function saveUploadedFiles(int $pressReleaseId, array $phpFiles, string $baseUploadDir): array

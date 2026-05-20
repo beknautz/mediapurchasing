@@ -6,21 +6,23 @@ $prService    = new PressReleaseService();
 $crmService   = new CRMService();
 $emailService = new EmailService();
 
-$errors       = [];
-$vendorGroups = $prService->getVendorsByCategory();
-$templates    = $prService->getTemplates();
+$errors              = [];
+$vendorGroups        = $prService->getVendorsByCategory();
+$mediaContactsByMarket = $prService->getMediaContactsByMarket();
+$templates           = $prService->getTemplates();
 $clients      = $crmService->getClients();
 $UPLOAD_DIR   = __DIR__ . '/../uploads/press-releases/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $subject   = trim($_POST['subject']    ?? '');
-    $bodyHtml  = trim($_POST['body_html']  ?? '');   // Summernote posts HTML
-    $vendorIds = array_map('intval', (array) ($_POST['vendor_ids'] ?? []));
-    $clientId  = (int) ($_POST['client_id'] ?? 0);
+    $subject         = trim($_POST['subject']    ?? '');
+    $bodyHtml        = trim($_POST['body_html']  ?? '');   // Summernote posts HTML
+    $vendorIds       = array_map('intval', (array) ($_POST['vendor_ids'] ?? []));
+    $clientId        = (int) ($_POST['client_id'] ?? 0);
+    $mediaContactIds = array_map('intval', (array) ($_POST['media_contact_ids'] ?? []));
 
     if ($subject === '') $errors[] = 'Subject is required.';
     if (trim(strip_tags($bodyHtml)) === '') $errors[] = 'Message body is required.';
-    if (empty($vendorIds) && $clientId === 0) $errors[] = 'Select at least one recipient (vendor or client).';
+    if (empty($vendorIds) && $clientId === 0 && empty($mediaContactIds)) $errors[] = 'Select at least one recipient.';
 
     if (empty($errors)) {
         $bodyText = strip_tags($bodyHtml);
@@ -117,7 +119,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result['success']) $sentCount++;
         }
 
-        $totalRecipients = count($vendorIds) + (isset($clientEmails) ? count($clientEmails) : 0);
+        // ── Send to media contacts ────────────────────────────────────────────────
+        $allMediaContacts = $prService->getMediaContactsFlat();
+        foreach ($mediaContactIds as $mcId) {
+            $mc = $allMediaContacts[$mcId] ?? null;
+            if (!$mc || !$mc['email']) continue;
+
+            $result = $emailService->send(
+                toEmail:     $mc['email'],
+                toName:      $mc['contact_name'] ?: $mc['outlet_name'],
+                subject:     $subject,
+                bodyHtml:    $bodyHtml,
+                bodyText:    $bodyText,
+                attachments: $emailAttachments
+            );
+
+            $prService->addRecipient(
+                $prId, 0, $mc['email'],
+                $result['success'] ? 'sent' : 'failed',
+                $result['success'] ? '' : ($result['message'] ?? ''),
+                $result['logId'] ?? 0,
+                'media_contact', 0, $mcId
+            );
+            if ($result['success']) $sentCount++;
+        }
+
+        $totalRecipients = count($vendorIds)
+            + (isset($clientEmails) ? count($clientEmails) : 0)
+            + count($mediaContactIds);
         $prService->markSent($prId, $sentCount);
         flash('success', "Press release sent to {$sentCount} of {$totalRecipients} recipients.");
         redirect('/press-releases/view.php?id=' . $prId);
@@ -254,66 +283,140 @@ require_once __DIR__ . '/../includes/header.php';
 
     </div>
 
-    <!-- Right: Vendor Selection -->
+    <!-- Right: Recipients -->
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm sticky-top" style="top:1rem;">
-            <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Recipients</h5>
-                <div class="d-flex gap-2 align-items-center">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Recipients</h5>
                     <span class="badge bg-primary" id="selectedCount">0 selected</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(true)">All</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(false)">None</button>
                 </div>
-            </div>
-            <div class="card-body p-0" style="max-height:60vh;overflow-y:auto;">
-
-                <?php if (empty($vendorGroups)): ?>
-                <div class="text-center text-muted py-4 small">No active vendors found.</div>
-                <?php endif; ?>
-
-                <?php foreach ($vendorGroups as $category => $vendors): ?>
-                <div class="border-bottom">
-                    <div class="px-3 py-2 bg-light d-flex align-items-center justify-content-between">
-                        <span class="fw-semibold small"><?= h($category) ?></span>
-                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small"
-                                onclick="toggleCategory('cat-<?= h(preg_replace('/[^a-z0-9]/i','-', $category)) ?>', this)">
-                            Select all
+                <!-- Tab nav -->
+                <ul class="nav nav-tabs card-header-tabs" id="recipientTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-vendors" data-bs-toggle="tab"
+                                data-bs-target="#pane-vendors" type="button" role="tab">
+                            Vendors
+                            <span class="badge bg-secondary ms-1" id="vendorTabCount">0</span>
                         </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-media" data-bs-toggle="tab"
+                                data-bs-target="#pane-media" type="button" role="tab">
+                            Media Contacts
+                            <span class="badge bg-secondary ms-1" id="mediaTabCount">0</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="tab-content" style="max-height:58vh;overflow-y:auto;">
+
+                <!-- Vendors pane -->
+                <div class="tab-pane fade show active" id="pane-vendors" role="tabpanel">
+                    <div class="px-2 py-2 border-bottom bg-light d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="toggleAll(true)">All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="toggleAll(false)">None</button>
                     </div>
-                    <div class="px-3 py-1" id="cat-<?= h(preg_replace('/[^a-z0-9]/i','-', $category)) ?>">
-                        <?php foreach ($vendors as $v):
-                            $email = $v['email'] ?: $v['billing_email'];
-                            $hasEmail = !empty($email);
-                            $prevChecked = isset($_POST['vendor_ids']) && in_array($v['id'], array_map('intval', $_POST['vendor_ids']));
-                        ?>
-                        <div class="py-1 <?= !$hasEmail ? 'opacity-50' : '' ?>">
-                            <div class="form-check">
-                                <input class="form-check-input vendor-cb" type="checkbox"
-                                       name="vendor_ids[]"
-                                       value="<?= (int)$v['id'] ?>"
-                                       id="v<?= (int)$v['id'] ?>"
-                                       <?= $prevChecked ? 'checked' : '' ?>
-                                       <?= !$hasEmail ? 'disabled title="No email address"' : '' ?>
-                                       onchange="updateCount()">
-                                <label class="form-check-label small" for="v<?= (int)$v['id'] ?>">
-                                    <span class="fw-semibold"><?= h($v['company_name']) ?></span>
-                                    <?php if ($v['contact_name']): ?>
-                                        <span class="text-muted"> — <?= h($v['contact_name']) ?></span>
-                                    <?php endif; ?>
-                                    <br>
-                                    <span class="text-muted" style="font-size:.75rem;">
-                                        <?= $hasEmail ? h($email) : '<em>No email on file</em>' ?>
-                                    </span>
-                                </label>
+                    <?php if (empty($vendorGroups)): ?>
+                    <div class="text-center text-muted py-4 small">No active vendors found.</div>
+                    <?php endif; ?>
+                    <?php foreach ($vendorGroups as $category => $vendors): ?>
+                    <div class="border-bottom">
+                        <div class="px-3 py-2 bg-light d-flex align-items-center justify-content-between">
+                            <span class="fw-semibold small"><?= h($category) ?></span>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small"
+                                    onclick="toggleCategory('cat-<?= h(preg_replace('/[^a-z0-9]/i','-', $category)) ?>', this)">
+                                Select all
+                            </button>
+                        </div>
+                        <div class="px-3 py-1" id="cat-<?= h(preg_replace('/[^a-z0-9]/i','-', $category)) ?>">
+                            <?php foreach ($vendors as $v):
+                                $email = $v['email'] ?: $v['billing_email'];
+                                $hasEmail = !empty($email);
+                                $prevChecked = isset($_POST['vendor_ids']) && in_array($v['id'], array_map('intval', $_POST['vendor_ids']));
+                            ?>
+                            <div class="py-1 <?= !$hasEmail ? 'opacity-50' : '' ?>">
+                                <div class="form-check">
+                                    <input class="form-check-input vendor-cb" type="checkbox"
+                                           name="vendor_ids[]" value="<?= (int)$v['id'] ?>"
+                                           id="v<?= (int)$v['id'] ?>"
+                                           <?= $prevChecked ? 'checked' : '' ?>
+                                           <?= !$hasEmail ? 'disabled title="No email address"' : '' ?>
+                                           onchange="updateCount()">
+                                    <label class="form-check-label small" for="v<?= (int)$v['id'] ?>">
+                                        <span class="fw-semibold"><?= h($v['company_name']) ?></span>
+                                        <?php if ($v['contact_name']): ?>
+                                            <span class="text-muted"> — <?= h($v['contact_name']) ?></span>
+                                        <?php endif; ?>
+                                        <br>
+                                        <span class="text-muted" style="font-size:.75rem;">
+                                            <?= $hasEmail ? h($email) : '<em>No email on file</em>' ?>
+                                        </span>
+                                    </label>
+                                </div>
                             </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div><!-- /vendors pane -->
+
+                <!-- Media Contacts pane -->
+                <div class="tab-pane fade" id="pane-media" role="tabpanel">
+                    <div class="px-2 py-2 border-bottom bg-light d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="toggleAllMedia(true)">All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="toggleAllMedia(false)">None</button>
+                    </div>
+                    <?php if (empty($mediaContactsByMarket)): ?>
+                    <div class="text-center text-muted py-4 small">
+                        No media contacts yet. <a href="/press-releases/import-media-contacts.php">Import media list</a>
+                    </div>
+                    <?php else: ?>
+                    <?php foreach ($mediaContactsByMarket as $market => $outlets): ?>
+                    <div class="border-bottom">
+                        <div class="px-3 py-2 bg-light d-flex align-items-center justify-content-between">
+                            <span class="fw-semibold small"><?= h($market) ?></span>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small"
+                                    onclick="toggleMarket('mkt-<?= h(preg_replace('/[^a-z0-9]/i','-', $market)) ?>', this)">
+                                Select all
+                            </button>
+                        </div>
+                        <div id="mkt-<?= h(preg_replace('/[^a-z0-9]/i','-', $market)) ?>">
+                        <?php foreach ($outlets as $outletName => $contacts): ?>
+                        <div class="px-3 pt-2 pb-1">
+                            <div class="fw-semibold small text-secondary mb-1"><?= h($outletName) ?></div>
+                            <?php foreach ($contacts as $mc): ?>
+                            <div class="py-0 ps-2">
+                                <div class="form-check">
+                                    <input class="form-check-input media-cb" type="checkbox"
+                                           name="media_contact_ids[]" value="<?= (int)$mc['id'] ?>"
+                                           id="mc<?= (int)$mc['id'] ?>"
+                                           onchange="updateCount()">
+                                    <label class="form-check-label small" for="mc<?= (int)$mc['id'] ?>">
+                                        <?php if ($mc['contact_name']): ?>
+                                            <span class="fw-semibold"><?= h($mc['contact_name']) ?></span>
+                                        <?php else: ?>
+                                            <em class="text-muted">No name</em>
+                                        <?php endif; ?>
+                                        <br>
+                                        <span class="text-muted" style="font-size:.75rem;"><?= h($mc['email']) ?></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
                         </div>
                         <?php endforeach; ?>
+                        </div>
                     </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
+                    <?php endforeach; ?>
+                    <?php endif; ?>
+                </div><!-- /media contacts pane -->
+
+            </div><!-- /tab-content -->
+
             <div class="card-footer bg-white">
-                <button type="submit" class="btn btn-primary w-100" id="sendBtn">
+                <button type="submit" class="btn btn-primary w-100" id="sendBtn" disabled>
                     <i class="bi bi-send-fill me-2"></i>Send Press Release
                 </button>
                 <div class="text-center mt-2">
@@ -352,16 +455,26 @@ function updateClientPreview() {
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-// ── Vendor count / send button ───────────────────────────────────────────────
+// ── Recipient count / send button ────────────────────────────────────────────
 function updateCount() {
-    const n         = document.querySelectorAll('.vendor-cb:checked').length;
+    const vn        = document.querySelectorAll('.vendor-cb:checked').length;
+    const mn        = document.querySelectorAll('.media-cb:checked').length;
     const hasClient = document.getElementById('client_id').value !== '0';
-    document.getElementById('selectedCount').textContent = n + ' selected';
-    document.getElementById('sendBtn').disabled = (n === 0 && !hasClient);
+    const total     = vn + mn + (hasClient ? 1 : 0);
+
+    document.getElementById('selectedCount').textContent = total + ' selected';
+    document.getElementById('vendorTabCount').textContent = vn;
+    document.getElementById('mediaTabCount').textContent  = mn;
+    document.getElementById('sendBtn').disabled = (total === 0);
 }
 
 function toggleAll(checked) {
     document.querySelectorAll('.vendor-cb:not([disabled])').forEach(cb => cb.checked = checked);
+    updateCount();
+}
+
+function toggleAllMedia(checked) {
+    document.querySelectorAll('.media-cb').forEach(cb => cb.checked = checked);
     updateCount();
 }
 
@@ -374,7 +487,15 @@ function toggleCategory(catId, btn) {
     updateCount();
 }
 
-// Also re-evaluate send button when client changes
+function toggleMarket(mktId, btn) {
+    const group = document.getElementById(mktId);
+    const cbs   = group.querySelectorAll('.media-cb');
+    const allOn = [...cbs].every(cb => cb.checked);
+    cbs.forEach(cb => cb.checked = !allOn);
+    btn.textContent = allOn ? 'Select all' : 'Deselect all';
+    updateCount();
+}
+
 document.getElementById('client_id').addEventListener('change', updateCount);
 
 // ── File attachment accumulation ─────────────────────────────────────────────
@@ -457,8 +578,9 @@ document.querySelector('form').addEventListener('submit', function (e) {
     syncFilesToInput();
 
     const vendorCount  = document.querySelectorAll('.vendor-cb:checked').length;
+    const mediaCount   = document.querySelectorAll('.media-cb:checked').length;
     const hasClient    = document.getElementById('client_id').value !== '0';
-    const totalRecip   = vendorCount + (hasClient ? 1 : 0);
+    const totalRecip   = vendorCount + mediaCount + (hasClient ? 1 : 0);
     const fileCount    = attachedFiles.length;
 
     const detail = [];
