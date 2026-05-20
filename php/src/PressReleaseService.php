@@ -14,9 +14,13 @@ class PressReleaseService extends BaseService
         'avi'  => 'video/x-msvideo',
         'wmv'  => 'video/x-ms-wmv',
         'mkv'  => 'video/x-matroska',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png'  => 'image/png',
+        'eps'  => 'application/postscript',
     ];
 
-    const ALLOWED_EXTS = ['pdf', 'doc', 'docx', 'mp4', 'mov', 'avi', 'wmv', 'mkv'];
+    const ALLOWED_EXTS = ['pdf', 'doc', 'docx', 'mp4', 'mov', 'avi', 'wmv', 'mkv', 'jpg', 'jpeg', 'png', 'eps'];
 
     // -----------------------------------------------------------------------
     // Template methods

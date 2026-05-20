@@ -235,9 +235,9 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="card-body">
                 <input type="file" class="form-control" id="attachments" name="attachments[]"
-                       multiple accept=".pdf,.doc,.docx,.mp4,.mov,.avi,.wmv,.mkv">
+                       multiple accept=".pdf,.doc,.docx,.mp4,.mov,.avi,.wmv,.mkv,.jpg,.jpeg,.png,.eps">
                 <div class="form-text mt-1">
-                    Accepted: PDF, Word (.doc/.docx), Video (.mp4, .mov, .avi, .wmv, .mkv).<br>
+                    Accepted: PDF, Word (.doc/.docx), Video (.mp4, .mov, .avi, .wmv, .mkv), Images (.jpg, .jpeg, .png, .eps).<br>
                     <strong>Note:</strong> SendGrid limits total message size to ~25 MB. Large video files may fail — consider providing an external link instead.
                 </div>
                 <div id="fileList" class="mt-2 d-flex flex-wrap gap-2"></div>
@@ -365,7 +365,8 @@ document.getElementById('attachments').addEventListener('change', function () {
         const warn = mb > 20;
         const ext  = f.name.split('.').pop().toLowerCase();
         const icons = {pdf:'file-earmark-pdf', doc:'file-earmark-word', docx:'file-earmark-word',
-                       mp4:'film', mov:'film', avi:'film', wmv:'film', mkv:'film'};
+                       mp4:'film', mov:'film', avi:'film', wmv:'film', mkv:'film',
+                       jpg:'file-earmark-image', jpeg:'file-earmark-image', png:'file-earmark-image', eps:'file-earmark-image'};
         const icon = icons[ext] || 'file-earmark';
         list.insertAdjacentHTML('beforeend',
             `<span class="badge ${warn ? 'bg-warning text-dark' : 'bg-light text-dark'} border small">
