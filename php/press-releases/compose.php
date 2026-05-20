@@ -234,13 +234,21 @@ require_once __DIR__ . '/../includes/header.php';
                 <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2 text-primary"></i>Attachments</h5>
             </div>
             <div class="card-body">
-                <input type="file" class="form-control" id="attachments" name="attachments[]"
-                       multiple accept=".pdf,.doc,.docx,.mp4,.mov,.avi,.wmv,.mkv,.jpg,.jpeg,.png,.eps">
-                <div class="form-text mt-1">
+                <!-- Hidden real input; JS accumulates files into it via DataTransfer -->
+                <input type="file" id="attachmentPicker" name="attachments[]"
+                       multiple accept=".pdf,.doc,.docx,.mp4,.mov,.avi,.wmv,.mkv,.jpg,.jpeg,.png,.eps"
+                       style="display:none;">
+                <div class="d-flex gap-2 align-items-center mb-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('attachmentPicker').click()">
+                        <i class="bi bi-plus-circle me-1"></i>Add Files
+                    </button>
+                    <span id="attachTotalSize" class="text-muted small"></span>
+                </div>
+                <div class="form-text mb-2">
                     Accepted: PDF, Word (.doc/.docx), Video (.mp4, .mov, .avi, .wmv, .mkv), Images (.jpg, .jpeg, .png, .eps).<br>
                     <strong>Note:</strong> SendGrid limits total message size to ~25 MB. Large video files may fail — consider providing an external link instead.
                 </div>
-                <div id="fileList" class="mt-2 d-flex flex-wrap gap-2"></div>
+                <div id="fileList" class="d-flex flex-wrap gap-2"></div>
             </div>
         </div>
 
@@ -320,6 +328,14 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 </form>
 
+<!-- Submit progress overlay -->
+<div id="sendOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;
+     flex-direction:column;align-items:center;justify-content:center;gap:1rem;">
+    <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status"></div>
+    <div class="text-white fw-semibold fs-5">Sending press release…</div>
+    <div id="sendOverlayDetail" class="text-white-50 small">Uploading files and queuing emails, please wait.</div>
+</div>
+
 <script>
 function updateClientPreview() {
     var sel     = document.getElementById('client_id');
@@ -336,10 +352,12 @@ function updateClientPreview() {
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// ── Vendor count / send button ───────────────────────────────────────────────
 function updateCount() {
-    const n = document.querySelectorAll('.vendor-cb:checked').length;
+    const n         = document.querySelectorAll('.vendor-cb:checked').length;
+    const hasClient = document.getElementById('client_id').value !== '0';
     document.getElementById('selectedCount').textContent = n + ' selected';
-    document.getElementById('sendBtn').disabled = n === 0;
+    document.getElementById('sendBtn').disabled = (n === 0 && !hasClient);
 }
 
 function toggleAll(checked) {
@@ -356,26 +374,105 @@ function toggleCategory(catId, btn) {
     updateCount();
 }
 
-document.getElementById('attachments').addEventListener('change', function () {
-    const list = document.getElementById('fileList');
+// Also re-evaluate send button when client changes
+document.getElementById('client_id').addEventListener('change', updateCount);
+
+// ── File attachment accumulation ─────────────────────────────────────────────
+const FILE_ICONS = {
+    pdf:'file-earmark-pdf', doc:'file-earmark-word', docx:'file-earmark-word',
+    mp4:'film', mov:'film', avi:'film', wmv:'film', mkv:'film',
+    jpg:'file-earmark-image', jpeg:'file-earmark-image', png:'file-earmark-image', eps:'file-earmark-image'
+};
+
+// We keep our own File array and sync it to a hidden <input> via DataTransfer
+let attachedFiles = [];
+
+function renderFileList() {
+    const list    = document.getElementById('fileList');
+    const sizeEl  = document.getElementById('attachTotalSize');
     list.innerHTML = '';
-    [...this.files].forEach(f => {
+
+    let totalBytes = 0;
+    attachedFiles.forEach((f, idx) => {
+        totalBytes += f.size;
         const kb   = (f.size / 1024).toFixed(0);
         const mb   = f.size / (1024 * 1024);
         const warn = mb > 20;
         const ext  = f.name.split('.').pop().toLowerCase();
-        const icons = {pdf:'file-earmark-pdf', doc:'file-earmark-word', docx:'file-earmark-word',
-                       mp4:'film', mov:'film', avi:'film', wmv:'film', mkv:'film',
-                       jpg:'file-earmark-image', jpeg:'file-earmark-image', png:'file-earmark-image', eps:'file-earmark-image'};
-        const icon = icons[ext] || 'file-earmark';
+        const icon = FILE_ICONS[ext] || 'file-earmark';
         list.insertAdjacentHTML('beforeend',
-            `<span class="badge ${warn ? 'bg-warning text-dark' : 'bg-light text-dark'} border small">
-                <i class="bi bi-${icon} me-1"></i>${f.name}
-                <span class="ms-1 opacity-75">${kb > 1024 ? (mb.toFixed(1)+'MB') : kb+'KB'}</span>
-                ${warn ? '<i class="bi bi-exclamation-triangle ms-1 text-danger" title="Large file — may exceed SendGrid limit"></i>' : ''}
+            `<span class="badge ${warn ? 'bg-warning text-dark' : 'bg-light text-dark'} border d-inline-flex align-items-center gap-1" style="font-size:.8rem;padding:.35em .55em;">
+                <i class="bi bi-${escHtml(icon)}"></i>
+                ${escHtml(f.name)}
+                <span class="opacity-75">${mb >= 1 ? mb.toFixed(1)+'MB' : kb+'KB'}</span>
+                ${warn ? '<i class="bi bi-exclamation-triangle text-danger" title="Large file — may exceed SendGrid limit"></i>' : ''}
+                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.6rem;"
+                        aria-label="Remove" onclick="removeFile(${idx})"></button>
              </span>`
         );
     });
+
+    // Total size indicator
+    const totalMb = totalBytes / (1024 * 1024);
+    if (attachedFiles.length > 0) {
+        const overLimit = totalMb > 24;
+        sizeEl.innerHTML = `<span class="${overLimit ? 'text-danger fw-semibold' : ''}">
+            ${attachedFiles.length} file${attachedFiles.length > 1 ? 's' : ''} —
+            total ${totalMb.toFixed(1)} MB${overLimit ? ' ⚠ Exceeds 25 MB limit' : ''}
+        </span>`;
+    } else {
+        sizeEl.textContent = '';
+    }
+
+    // Sync to actual file input via DataTransfer
+    syncFilesToInput();
+}
+
+function syncFilesToInput() {
+    const dt = new DataTransfer();
+    attachedFiles.forEach(f => dt.items.add(f));
+    document.getElementById('attachmentPicker').files = dt.files;
+}
+
+function removeFile(idx) {
+    attachedFiles.splice(idx, 1);
+    renderFileList();
+}
+
+document.getElementById('attachmentPicker').addEventListener('change', function () {
+    const incoming = [...this.files];
+    incoming.forEach(f => {
+        // Skip duplicates (same name + size)
+        const dup = attachedFiles.some(e => e.name === f.name && e.size === f.size);
+        if (!dup) attachedFiles.push(f);
+    });
+    // Reset picker so same file can be re-added after removal
+    this.value = '';
+    renderFileList();
+});
+
+// ── Submit progress overlay ───────────────────────────────────────────────────
+document.querySelector('form').addEventListener('submit', function (e) {
+    // Re-sync files before submit (safety net)
+    syncFilesToInput();
+
+    const vendorCount  = document.querySelectorAll('.vendor-cb:checked').length;
+    const hasClient    = document.getElementById('client_id').value !== '0';
+    const totalRecip   = vendorCount + (hasClient ? 1 : 0);
+    const fileCount    = attachedFiles.length;
+
+    const detail = [];
+    if (totalRecip > 0) detail.push(`Sending to ${totalRecip} recipient${totalRecip !== 1 ? 's' : ''}`);
+    if (fileCount  > 0) detail.push(`${fileCount} attachment${fileCount !== 1 ? 's' : ''}`);
+
+    document.getElementById('sendOverlayDetail').textContent =
+        detail.length ? detail.join(' · ') + '…' : 'Uploading files and queuing emails, please wait.';
+
+    const overlay = document.getElementById('sendOverlay');
+    overlay.style.display = 'flex';
+
+    // Disable submit to prevent double-click
+    document.getElementById('sendBtn').disabled = true;
 });
 
 updateCount();
