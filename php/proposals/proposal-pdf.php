@@ -197,8 +197,9 @@ foreach ($blocks as $b) {
     } else {
         // Flush accumulated item blocks first
         if (!empty($itemBuffer)) {
-            // Render item table
+            // Render item table — wrapped in avoid-break div
             $subtotal = array_sum(array_map(fn($i) => (float) $i['total_price'], $itemBuffer));
+            $html .= '<div style="page-break-inside:avoid;">';
             $html .= '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">';
             $html .= '<tr style="background:#0f172a;">';
             $html .= '<th style="padding:7px 10px;text-align:left;color:#ffffff;font-size:9pt;">Description</th>';
@@ -223,16 +224,18 @@ foreach ($blocks as $b) {
                 $html .= '</tr>';
             }
             $html .= '</table>';
+            $html .= '</div>';
             $itemBuffer = [];
         }
 
         if ($b['block_type'] === 'text') {
             // Render Summernote HTML directly
-            $html .= '<div style="margin-bottom:16px;line-height:1.8;">';
+            $html .= '<div style="margin-bottom:16px;line-height:1.8;page-break-inside:avoid;">';
             $html .= $b['content'];
             $html .= '</div>';
         } elseif ($b['block_type'] === 'signature') {
             $label = $b['sig_label'] ?: 'Authorized Signature';
+            $html .= '<div style="page-break-inside:avoid;">';
             $html .= '<table style="width:100%;border-collapse:collapse;margin:16px 0 20px;">';
             $html .= '<tr>';
             $html .= '<td style="width:55%;vertical-align:top;padding-right:20px;">';
@@ -247,6 +250,7 @@ foreach ($blocks as $b) {
             $html .= '<td style="width:45%;"></td>';
             $html .= '</tr>';
             $html .= '</table>';
+            $html .= '</div>';
         }
     }
 }
@@ -254,6 +258,7 @@ foreach ($blocks as $b) {
 // Flush remaining item buffer
 if (!empty($itemBuffer)) {
     $subtotal = array_sum(array_map(fn($i) => (float) $i['total_price'], $itemBuffer));
+    $html .= '<div style="page-break-inside:avoid;">';
     $html .= '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">';
     $html .= '<tr style="background:#0f172a;">';
     $html .= '<th style="padding:7px 10px;text-align:left;color:#ffffff;font-size:9pt;">Description</th>';
@@ -278,6 +283,7 @@ if (!empty($itemBuffer)) {
         $html .= '</tr>';
     }
     $html .= '</table>';
+    $html .= '</div>';
 }
 
 // ── GRAND TOTAL ───────────────────────────────────────────────────────────────
