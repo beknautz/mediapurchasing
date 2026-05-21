@@ -65,13 +65,18 @@ try {
     exit;
 }
 
-// Return HTMX fragment: preview img + success message + hidden input carrying the new URL
-echo '<div class="d-flex align-items-center gap-3 mt-2" id="client-logo-preview-area">';
-echo '<img src="' . htmlspecialchars($logoUrl, ENT_QUOTES) . '" alt="Client Logo"'
+// Build base64 data URI for preview — works even if /uploads/ isn't a web-served directory
+$mimeMap  = ['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png',
+             'gif'=>'image/gif','webp'=>'image/webp','svg'=>'image/svg+xml'];
+$previewMime = $mimeMap[$ext] ?? 'image/png';
+$previewSrc  = 'data:' . $previewMime . ';base64,' . base64_encode(file_get_contents($destPath));
+
+// Return HTMX fragment: preview img + success message
+echo '<div class="d-flex align-items-center gap-3 mt-2">';
+echo '<img src="' . $previewSrc . '" alt="Client Logo"'
    . ' style="max-height:64px;max-width:200px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;">';
 echo '<div>';
 echo '<div class="small text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>Client logo uploaded &amp; saved</div>';
 echo '<div class="small text-muted font-monospace">' . htmlspecialchars($logoUrl, ENT_QUOTES) . '</div>';
 echo '</div>';
-echo '<input type="hidden" name="client_logo_url" value="' . htmlspecialchars($logoUrl, ENT_QUOTES) . '">';
 echo '</div>';

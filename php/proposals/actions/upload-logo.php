@@ -55,9 +55,15 @@ try {
     // Non-fatal — still return the URL
 }
 
+// Build base64 data URI for preview — works even if /uploads/ isn't a web-served directory
+$mimeMap  = ['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png',
+             'gif'=>'image/gif','webp'=>'image/webp','svg'=>'image/svg+xml'];
+$previewMime = $mimeMap[$ext] ?? 'image/png';
+$previewSrc  = 'data:' . $previewMime . ';base64,' . base64_encode(file_get_contents($destPath));
+
 // Return preview fragment for HTMX swap
-echo '<div class="d-flex align-items-center gap-3 mt-2" id="logo-preview-area">';
-echo '<img src="' . htmlspecialchars($logoUrl, ENT_QUOTES) . '" alt="Agency Logo"'
+echo '<div class="d-flex align-items-center gap-3 mt-2">';
+echo '<img src="' . $previewSrc . '" alt="Agency Logo"'
    . ' style="max-height:64px;max-width:200px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;">';
 echo '<div>';
 echo '<div class="small text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>Logo uploaded &amp; saved</div>';

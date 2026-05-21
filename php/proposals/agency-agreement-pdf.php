@@ -42,16 +42,27 @@ if (!class_exists('Dompdf\Dompdf')) {
 }
 
 // ── Build self-contained HTML ─────────────────────────────────────────────────
-// Dompdf needs inline CSS and absolute image paths.
+// Embed logo as base64 data URI — avoids Dompdf path resolution + svg-lib issues.
 $logoHtml = '';
 if (!empty($branding['logo_url'])) {
-    $logoSrc = $branding['logo_url'];
-    // Convert relative path to absolute filesystem path for Dompdf
-    if (str_starts_with($logoSrc, '/')) {
-        $logoSrc = rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__ . '/..', '/') . $logoSrc;
-        $logoHtml = '<img src="' . $h($logoSrc) . '" style="max-height:60px;max-width:200px;">';
+    $logoUrl = $branding['logo_url'];
+    if (str_starts_with($logoUrl, '/')) {
+        $webRoot  = rtrim($_SERVER['DOCUMENT_ROOT'] ?? realpath(__DIR__ . '/..'), '/\\');
+        $logoPath = $webRoot . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $logoUrl), DIRECTORY_SEPARATOR);
     } else {
-        $logoHtml = '<img src="' . $h($logoSrc) . '" style="max-height:60px;max-width:200px;">';
+        $logoPath = $logoUrl;
+    }
+    if (file_exists($logoPath) && is_readable($logoPath)) {
+        $ext  = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
+        $mime = match($ext) {
+            'jpg','jpeg' => 'image/jpeg',
+            'png'        => 'image/png',
+            'gif'        => 'image/gif',
+            'webp'       => 'image/webp',
+            default      => 'image/png',
+        };
+        $logoHtml = '<img src="data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoPath)) . '"'
+                  . ' style="max-height:60px;max-width:200px;">';
     }
 }
 

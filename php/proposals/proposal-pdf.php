@@ -42,32 +42,50 @@ $branding = $agSvc->getBranding();
 $h     = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $money = fn($v) => '$' . number_format((float) $v, 2);
 
-// ── Convert URL to absolute filesystem path for Dompdf ───────────────────────
-$webRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? realpath(__DIR__ . '/..'), '/');
+// ── Embed logos as base64 data URIs — avoids ALL Dompdf path/SVG issues ────────
+// Dompdf's file-path resolution and the optional svg-lib dependency both cause
+// crashes when images can't be located. Data URIs sidestep both problems.
 
-$resolveLogoPath = function (?string $url) use ($webRoot): string {
+$logoToDataUri = function (?string $url): string {
     if (empty($url)) return '';
+
+    // Resolve URL → absolute filesystem path
     if (str_starts_with($url, '/')) {
-        return $webRoot . $url;
+        $webRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? realpath(__DIR__ . '/..'), '/\\');
+        $path    = $webRoot . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $url), DIRECTORY_SEPARATOR);
+    } else {
+        $path = $url; // already absolute or relative local path
     }
-    return $url;
+
+    if (!file_exists($path) || !is_readable($path)) return '';
+
+    $raw  = file_get_contents($path);
+    if ($raw === false) return '';
+
+    // Detect MIME from extension (mime_content_type can misfire on some hosts)
+    $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    $mime = match($ext) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png'         => 'image/png',
+        'gif'         => 'image/gif',
+        'webp'        => 'image/webp',
+        'svg'         => 'image/svg+xml',
+        default       => (function_exists('mime_content_type') ? mime_content_type($path) : 'image/png'),
+    };
+
+    return 'data:' . $mime . ';base64,' . base64_encode($raw);
 };
 
-$agencyLogoPath = $resolveLogoPath($branding['logo_url'] ?? '');
-$clientLogoPath = $resolveLogoPath($proposal['client_logo_url'] ?? '');
+$agencyLogoUri = $logoToDataUri($branding['logo_url'] ?? '');
+$clientLogoUri = $logoToDataUri($proposal['client_logo_url'] ?? '');
 
-// Build img tags (Dompdf uses filesystem paths)
-$agencyLogoHtml = '';
-if ($agencyLogoPath && file_exists($agencyLogoPath)) {
-    $agencyLogoHtml = '<img src="' . htmlspecialchars($agencyLogoPath, ENT_QUOTES) . '"'
-        . ' style="max-height:48px;max-width:180px;object-fit:contain;">';
-}
+$agencyLogoHtml = $agencyLogoUri
+    ? '<img src="' . $agencyLogoUri . '" style="max-height:48px;max-width:180px;">'
+    : '';
 
-$clientLogoHtml = '';
-if ($clientLogoPath && file_exists($clientLogoPath)) {
-    $clientLogoHtml = '<img src="' . htmlspecialchars($clientLogoPath, ENT_QUOTES) . '"'
-        . ' style="max-height:44px;max-width:160px;object-fit:contain;display:block;margin-bottom:6px;">';
-}
+$clientLogoHtml = $clientLogoUri
+    ? '<img src="' . $clientLogoUri . '" style="max-height:44px;max-width:160px;display:block;margin-bottom:6px;">'
+    : '';
 
 // ── Compute grand total from item blocks ──────────────────────────────────────
 $grandTotal = 0;
