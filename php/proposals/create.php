@@ -326,8 +326,8 @@ require_once __DIR__ . '/../includes/header.php';
                     <button type="button" class="btn btn-sm btn-outline-info" onclick="addTextBlock()">
                         <i class="bi bi-text-paragraph me-1"></i>Add Text
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addLineItem()">
-                        <i class="bi bi-receipt me-1"></i>Add Line Item
+                    <button id="addPriceLineBtn" type="button" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-currency-dollar me-1"></i>Add Price Line
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-success" onclick="addSignature()">
                         <i class="bi bi-pen me-1"></i>Add Signature
@@ -445,7 +445,7 @@ $(function () {
     if (EXISTING_BLOCKS.length > 0) {
         EXISTING_BLOCKS.forEach(function (b) {
             if      (b.block_type === 'text')      addTextBlock(b.content || '');
-            else if (b.block_type === 'item')      addLineItem(b.description, b.quantity, b.unit_price);
+            else if (b.block_type === 'item')      addPriceLine(b.description, b.quantity, b.unit_price);
             else if (b.block_type === 'signature') addSignature(b.sig_label);
         });
     } else {
@@ -473,14 +473,18 @@ function updateSortOrders() {
 
 // ── Grand total (sum of all item blocks) ──────────────────────────────────────
 function updateGrandTotal() {
-    let grand = 0;
+    var grand = 0;
     document.querySelectorAll('#blocksContainer .block-row[data-type="item"]').forEach(function (el) {
-        grand += (parseFloat(el.querySelector('.item-qty')?.value)  || 0)
-               * (parseFloat(el.querySelector('.item-unit')?.value) || 0);
+        // support both old .item-qty/.item-unit and new .pl-qty/.pl-unit
+        var qty  = parseFloat((el.querySelector('.pl-qty')  || el.querySelector('.item-qty')  || {}).value)  || 0;
+        var unit = parseFloat((el.querySelector('.pl-unit') || el.querySelector('.item-unit') || {}).value) || 0;
+        grand += qty * unit;
     });
-    const fmt = '$' + grand.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-    document.getElementById('grandTotal').textContent = fmt;
+    var fmt = '$' + grand.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    var el = document.getElementById('grandTotal');
+    if (el) el.textContent = fmt;
 }
+function recalcGrandTotal() { updateGrandTotal(); }
 
 // ── Calc one item block ───────────────────────────────────────────────────────
 function calcItem(block) {
@@ -532,63 +536,141 @@ function addTextBlock(content) {
     updateSortOrders();
 }
 
-// ── Add LINE ITEM block ───────────────────────────────────────────────────────
-function addLineItem(description, quantity, unitPrice) {
-    const idx = blockCounter++;
-    const div = document.createElement('div');
-    div.className = 'block-row card border mb-3';
-    div.dataset.type = 'item';
-    div.innerHTML = `
-        <div class="block-handle card-header py-2 d-flex align-items-center gap-2"
-             style="cursor:grab;user-select:none;">
-            <i class="bi bi-grip-vertical text-muted fs-5"></i>
-            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                <i class="bi bi-receipt me-1"></i>Line Item
-            </span>
-            <span class="ms-auto fw-semibold small text-muted item-header-total">$0.00</span>
-            <button type="button" class="btn btn-sm btn-link text-danger p-0"
-                    onclick="removeBlock(this)" title="Remove block">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-        <div class="card-body">
-            <input type="hidden" name="blocks[${idx}][type]" value="item">
-            <input type="hidden" name="blocks[${idx}][sort_order]" class="sort-input" value="${idx}">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-6">
-                    <label class="form-label small fw-semibold mb-1">Description</label>
-                    <input type="text" name="blocks[${idx}][description]"
-                           class="form-control item-desc" placeholder="Service or item description" required>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Qty</label>
-                    <input type="number" name="blocks[${idx}][quantity]"
-                           class="form-control item-qty" value="1" min="0" step="0.01">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Unit Price</label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" name="blocks[${idx}][unit_price]"
-                               class="form-control item-unit" value="0.00" min="0" step="0.01">
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Total</label>
-                    <div class="form-control bg-light text-end fw-semibold item-total-disp">$0.00</div>
-                </div>
-            </div>
-        </div>`;
+// ── Add PRICE LINE block ──────────────────────────────────────────────────────
+function addPriceLine(description, quantity, unitPrice) {
+    var idx = blockCounter++;
+    var container = document.getElementById('blocksContainer');
 
-    // Set values programmatically (XSS-safe) — use class selectors, not name selectors
-    document.getElementById('blocksContainer').appendChild(div);
-    div.querySelector('.item-desc').value  = description || '';
-    div.querySelector('.item-qty').value   = parseFloat(quantity)  || 1;
-    div.querySelector('.item-unit').value  = parseFloat(unitPrice) || 0;
-    bindItemEvents(div);
-    calcItem(div);
+    var row = document.createElement('div');
+    row.className   = 'block-row card border mb-3';
+    row.dataset.type = 'item';
+
+    // Header
+    var hdr = document.createElement('div');
+    hdr.className = 'block-handle card-header py-2 d-flex align-items-center gap-2';
+    hdr.style.cssText = 'cursor:grab;user-select:none;';
+    hdr.innerHTML = '<i class="bi bi-grip-vertical text-muted fs-5"></i>'
+        + '<span class="fw-semibold small text-primary">Price Line</span>'
+        + '<span class="ms-auto fw-bold small pl-line-total text-dark">$0.00</span>';
+
+    var delBtn = document.createElement('button');
+    delBtn.type      = 'button';
+    delBtn.className = 'btn btn-sm btn-outline-danger ms-2';
+    delBtn.textContent = 'Remove';
+    delBtn.addEventListener('click', function () {
+        container.removeChild(row);
+        recalcGrandTotal();
+    });
+    hdr.appendChild(delBtn);
+    row.appendChild(hdr);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'card-body';
+
+    // Hidden type + sort
+    var typeInput = document.createElement('input');
+    typeInput.type  = 'hidden';
+    typeInput.name  = 'blocks[' + idx + '][type]';
+    typeInput.value = 'item';
+    body.appendChild(typeInput);
+
+    var sortInput = document.createElement('input');
+    sortInput.type      = 'hidden';
+    sortInput.name      = 'blocks[' + idx + '][sort_order]';
+    sortInput.className = 'sort-input';
+    sortInput.value     = idx;
+    body.appendChild(sortInput);
+
+    // Description
+    var descWrap = document.createElement('div');
+    descWrap.className = 'mb-2';
+    var descLabel = document.createElement('label');
+    descLabel.className   = 'form-label small fw-semibold mb-1';
+    descLabel.textContent = 'Description';
+    var descInput = document.createElement('input');
+    descInput.type        = 'text';
+    descInput.name        = 'blocks[' + idx + '][description]';
+    descInput.className   = 'form-control';
+    descInput.placeholder = 'Service or item description';
+    descInput.value       = description || '';
+    descWrap.appendChild(descLabel);
+    descWrap.appendChild(descInput);
+    body.appendChild(descWrap);
+
+    // Qty / Unit / Total row
+    var numRow = document.createElement('div');
+    numRow.className = 'row g-2 align-items-end';
+
+    // Qty
+    var qtyCol = document.createElement('div');
+    qtyCol.className = 'col-md-3';
+    var qtyLabel = document.createElement('label');
+    qtyLabel.className   = 'form-label small fw-semibold mb-1';
+    qtyLabel.textContent = 'Qty';
+    var qtyInput = document.createElement('input');
+    qtyInput.type      = 'number';
+    qtyInput.name      = 'blocks[' + idx + '][quantity]';
+    qtyInput.className = 'form-control pl-qty';
+    qtyInput.value     = parseFloat(quantity) > 0 ? parseFloat(quantity) : 1;
+    qtyInput.min       = '0';
+    qtyInput.step      = '0.01';
+    qtyCol.appendChild(qtyLabel);
+    qtyCol.appendChild(qtyInput);
+    numRow.appendChild(qtyCol);
+
+    // Unit price
+    var unitCol = document.createElement('div');
+    unitCol.className = 'col-md-4';
+    var unitLabel = document.createElement('label');
+    unitLabel.className   = 'form-label small fw-semibold mb-1';
+    unitLabel.textContent = 'Unit Price ($)';
+    var unitInput = document.createElement('input');
+    unitInput.type      = 'number';
+    unitInput.name      = 'blocks[' + idx + '][unit_price]';
+    unitInput.className = 'form-control pl-unit';
+    unitInput.value     = parseFloat(unitPrice) >= 0 ? parseFloat(unitPrice) : 0;
+    unitInput.min       = '0';
+    unitInput.step      = '0.01';
+    unitCol.appendChild(unitLabel);
+    unitCol.appendChild(unitInput);
+    numRow.appendChild(unitCol);
+
+    // Line total (display only)
+    var totCol = document.createElement('div');
+    totCol.className = 'col-md-5';
+    var totLabel = document.createElement('label');
+    totLabel.className   = 'form-label small fw-semibold mb-1';
+    totLabel.textContent = 'Line Total';
+    var totDisp = document.createElement('div');
+    totDisp.className = 'form-control bg-light text-end fw-semibold pl-line-disp';
+    totDisp.textContent = '$0.00';
+    totCol.appendChild(totLabel);
+    totCol.appendChild(totDisp);
+    numRow.appendChild(totCol);
+
+    body.appendChild(numRow);
+    row.appendChild(body);
+    container.appendChild(row);
+
+    // Recalc on qty/unit change
+    function recalcLine() {
+        var q = parseFloat(qtyInput.value)  || 0;
+        var u = parseFloat(unitInput.value) || 0;
+        var t = q * u;
+        var s = '$' + t.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        totDisp.textContent                             = s;
+        hdr.querySelector('.pl-line-total').textContent = s;
+        recalcGrandTotal();
+    }
+    qtyInput.addEventListener('input',  recalcLine);
+    unitInput.addEventListener('input', recalcLine);
+    recalcLine();
     updateSortOrders();
 }
+
+// keep old name as alias so template-load code still works
+function addLineItem(desc, qty, unit) { addPriceLine(desc, qty, unit); }
 
 // ── Add SIGNATURE block ───────────────────────────────────────────────────────
 function addSignature(label) {
@@ -672,7 +754,7 @@ function loadTemplate() {
     if (t.blocks && t.blocks.length) {
         t.blocks.forEach(function (b) {
             if (b.block_type === 'text')      addTextBlock(b.content);
-            else if (b.block_type === 'item') addLineItem(b.description, b.quantity, b.unit_price);
+            else if (b.block_type === 'item') addPriceLine(b.description, b.quantity, b.unit_price);
             else if (b.block_type === 'signature') addSignature(b.sig_label);
         });
     }
@@ -726,7 +808,14 @@ function uploadClientLogo() {
         .catch(function () { alert('Upload failed. Please try again.'); });
 }
 
+// ── Wire Add Price Line button via addEventListener (no onclick) ───────────────
+var addPriceLineBtn = document.getElementById('addPriceLineBtn');
+if (addPriceLineBtn) {
+    addPriceLineBtn.addEventListener('click', function () { addPriceLine(); });
+}
+
 // ── Expose all functions globally (required for inline onclick handlers) ──────
+window.addPriceLine     = addPriceLine;
 window.addLineItem      = addLineItem;
 window.addTextBlock     = addTextBlock;
 window.addSignature     = addSignature;
