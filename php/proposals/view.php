@@ -24,6 +24,28 @@ $errorMsg = flash('error');
 $agSvc    = new AgencyAgreementService();
 $branding = $agSvc->getBranding();
 
+// Convert a stored logo URL (/uploads/logos/...) to a base64 data URI for display.
+// /uploads/ may not be a mapped web directory on this server, so we read from disk.
+$logoDataUri = function(?string $url): string {
+    if (empty($url)) return '';
+    $root = rtrim($_SERVER['DOCUMENT_ROOT'] ?? realpath(__DIR__ . '/..'), '/\\');
+    $path = $root . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $url), DIRECTORY_SEPARATOR);
+    if (!file_exists($path) || !is_readable($path)) return '';
+    $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    $mime = match($ext) {
+        'jpg','jpeg' => 'image/jpeg',
+        'png'        => 'image/png',
+        'gif'        => 'image/gif',
+        'webp'       => 'image/webp',
+        'svg'        => 'image/svg+xml',
+        default      => 'image/png',
+    };
+    return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+};
+
+$agencyLogoSrc = $logoDataUri($branding['logo_url'] ?? '');
+$clientLogoSrc = $logoDataUri($proposal['client_logo_url'] ?? '');
+
 // Handle status change POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_status'])) {
     $newStatus = trim($_POST['new_status'] ?? '');
@@ -112,8 +134,8 @@ require_once __DIR__ . '/../includes/header.php';
         <table style="width:100%;border-collapse:collapse;">
         <tr>
             <td style="vertical-align:middle;">
-                <?php if (!empty($branding['logo_url'])): ?>
-                <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
+                <?php if ($agencyLogoSrc): ?>
+                <img src="<?= $agencyLogoSrc ?>" alt="Agency Logo"
                      style="max-height:50px;max-width:180px;object-fit:contain;">
                 <?php else: ?>
                 <span style="color:#fff;font-size:1.25rem;font-weight:700;"><?= h($branding['name']) ?></span>
@@ -129,8 +151,8 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="row g-0 border-bottom">
         <div class="col-md-6 p-4 border-end">
             <div class="text-uppercase small fw-bold text-muted mb-2" style="letter-spacing:.08em;font-size:.7rem;">Prepared For</div>
-            <?php if (!empty($proposal['client_logo_url'])): ?>
-            <img src="<?= h($proposal['client_logo_url']) ?>" alt="Client Logo"
+            <?php if ($clientLogoSrc): ?>
+            <img src="<?= $clientLogoSrc ?>" alt="Client Logo"
                  style="max-height:48px;max-width:160px;object-fit:contain;margin-bottom:10px;display:block;">
             <?php endif; ?>
             <div class="fw-bold fs-5"><?= h($proposal['client_name'] ?? '—') ?></div>

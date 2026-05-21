@@ -27,6 +27,19 @@ $clients   = $proposalService->getClients();
 $templates = $proposalService->getTemplatesWithBlocks();
 $agSvc     = new AgencyAgreementService();
 $branding  = $agSvc->getBranding();
+
+// Convert stored logo URL to base64 data URI — /uploads/ may not be web-accessible on this server
+$logoDataUri = function(?string $url): string {
+    if (empty($url)) return '';
+    $root = rtrim($_SERVER['DOCUMENT_ROOT'] ?? realpath(__DIR__ . '/..'), '/\\');
+    $path = $root . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $url), DIRECTORY_SEPARATOR);
+    if (!file_exists($path) || !is_readable($path)) return '';
+    $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    $mime = match($ext) { 'jpg','jpeg'=>'image/jpeg','png'=>'image/png','gif'=>'image/gif','webp'=>'image/webp','svg'=>'image/svg+xml',default=>'image/png' };
+    return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+};
+$agencyLogoSrc = $logoDataUri($branding['logo_url'] ?? '');
+$clientLogoSrc = $logoDataUri($proposal['client_logo_url'] ?? '');
 $errors    = [];
 
 // ── POST handler ───────────────────────────────────────────────────────────────
@@ -175,8 +188,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-6">
                 <div class="fw-semibold small mb-2">Agency Logo</div>
                 <div id="agency-logo-preview" class="mb-2">
-                    <?php if (!empty($branding['logo_url'])): ?>
-                    <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
+                    <?php if ($agencyLogoSrc): ?>
+                    <img src="<?= $agencyLogoSrc ?>" alt="Agency Logo"
                          style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
                     <?php endif; ?>
                 </div>
@@ -197,8 +210,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-6">
                 <div class="fw-semibold small mb-2">Client Logo</div>
                 <div id="client-logo-preview" class="mb-2">
-                    <?php if (!empty($proposal['client_logo_url'])): ?>
-                    <img src="<?= h($proposal['client_logo_url']) ?>" alt="Client Logo"
+                    <?php if ($clientLogoSrc): ?>
+                    <img src="<?= $clientLogoSrc ?>" alt="Client Logo"
                          style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
                     <?php endif; ?>
                 </div>
