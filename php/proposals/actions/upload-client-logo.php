@@ -54,11 +54,10 @@ if (!move_uploaded_file($file['tmp_name'], $destPath)) {
 
 $logoUrl = '/uploads/logos/' . $filename;
 
-// Save to clients table
+// Save to clients table via ProposalService (avoids calling Database::getInstance() directly)
 try {
-    $db   = Database::getInstance();
-    $stmt = $db->prepare('UPDATE clients SET logo_url = :url WHERE id = :id');
-    $stmt->execute([':url' => $logoUrl, ':id' => $clientId]);
+    $svc = new ProposalService();
+    $svc->updateClientLogoUrl($clientId, $logoUrl);
 } catch (Exception $e) {
     echo '<div class="alert alert-warning py-2 mb-0">Logo saved to disk but could not update database: '
         . htmlspecialchars($e->getMessage(), ENT_QUOTES) . '</div>';

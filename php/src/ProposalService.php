@@ -318,4 +318,10 @@ class ProposalService extends BaseService
             'SELECT id, company_name, logo_url FROM clients WHERE is_active = 1 ORDER BY company_name ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function updateClientLogoUrl(int $clientId, string $logoUrl): void
+    {
+        $this->db->prepare('UPDATE clients SET logo_url = :url WHERE id = :id')
+                 ->execute([':url' => $logoUrl, ':id' => $clientId]);
+    }
 }

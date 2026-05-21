@@ -204,7 +204,7 @@ function letterhead(string $logoHtml, array $b): string {
 $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>' . $h($ag['title']) . ' — Agency Agreement</title>
 <style>
-  body { font-family: Georgia, "Times New Roman", serif; font-size:10.5pt; color:#111; line-height:1.6; margin:0; padding:0; }
+  body { font-family: helvetica, Arial, sans-serif; font-size:10.5pt; color:#111; line-height:1.6; margin:0; padding:0; }
   p  { margin:0 0 7px; }
   ol, ul { margin:0 0 7px; padding-left:22px; }
   li { margin-bottom:3px; }
@@ -391,26 +391,14 @@ $html .= '</body></html>';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-// Bundled fonts directory (DejaVu, Helvetica AFM files pre-packaged in the zip)
-$dompdfFontDir = realpath(__DIR__ . '/../lib/dompdf/lib/fonts');
-
+// Use helvetica — PDF core font, zero file dependencies on any server.
+// DejaVu/custom fonts need .ufm metric files that may not exist in this install.
+// Logos are now base64-embedded so remote access is not needed either.
 $options = new Options();
-$options->setIsRemoteEnabled(true);          // allow logo img from URL
-$options->setIsHtml5ParserEnabled(false);    // use DOMDocument — avoids Masterminds dependency
-$options->setDefaultFont('dejavu serif');    // built-in TTF font from bundled lib/fonts/
+$options->setIsRemoteEnabled(false);
+$options->setIsHtml5ParserEnabled(false);
+$options->setDefaultFont('helvetica');
 $options->setDpi(96);
-
-// Tell Dompdf where bundled fonts live so it finds the .ufm metric files
-if ($dompdfFontDir && is_dir($dompdfFontDir)) {
-    $options->setFontDir($dompdfFontDir);
-    $options->setFontCache($dompdfFontDir);
-}
-
-// Allow Dompdf to read local logo files (e.g. /uploads/logos/...)
-$webRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? __DIR__ . '/..');
-if ($webRoot) {
-    $options->setChroot($webRoot);
-}
 
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html, 'UTF-8');

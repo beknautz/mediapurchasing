@@ -103,7 +103,7 @@ $statusLabel = ProposalService::STATUS_LABELS[$proposal['status']] ?? $proposal[
 $html  = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
 $html .= '<title>' . $h($proposal['title']) . '</title>';
 $html .= '<style>';
-$html .= 'body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10pt; color: #1e293b; line-height: 1.6; margin: 0; padding: 0; }';
+$html .= 'body { font-family: helvetica, Arial, sans-serif; font-size: 10pt; color: #1e293b; line-height: 1.6; margin: 0; padding: 0; }';
 $html .= 'p { margin: 0 0 7px; }';
 $html .= 'table { border-spacing: 0; }';
 $html .= 'strong { color: #0f172a; }';
@@ -299,23 +299,15 @@ $html .= '</body></html>';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-$dompdfFontDir = realpath(__DIR__ . '/../lib/dompdf/lib/fonts');
-
+// Use 'helvetica' — a PDF core font built into every PDF viewer.
+// Requires NO font files on disk, so it works on any server regardless of
+// what's in lib/dompdf/lib/fonts/. Custom fonts (DejaVu etc.) need .ufm
+// metric files that may not be present in this bundled install.
 $options = new Options();
-$options->setIsRemoteEnabled(true);
-$options->setIsHtml5ParserEnabled(false);
-$options->setDefaultFont('dejavu serif');
+$options->setIsRemoteEnabled(false);       // not needed — logos are base64
+$options->setIsHtml5ParserEnabled(false);  // use DOMDocument parser
+$options->setDefaultFont('helvetica');     // PDF core font — zero file deps
 $options->setDpi(96);
-
-if ($dompdfFontDir && is_dir($dompdfFontDir)) {
-    $options->setFontDir($dompdfFontDir);
-    $options->setFontCache($dompdfFontDir);
-}
-
-$webRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? __DIR__ . '/..');
-if ($webRoot) {
-    $options->setChroot($webRoot);
-}
 
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html, 'UTF-8');
