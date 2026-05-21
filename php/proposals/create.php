@@ -555,7 +555,7 @@ function addLineItem(description, quantity, unitPrice) {
                 <div class="col-md-6">
                     <label class="form-label small fw-semibold mb-1">Description</label>
                     <input type="text" name="blocks[${idx}][description]"
-                           class="form-control" placeholder="Service or item description" required>
+                           class="form-control item-desc" placeholder="Service or item description" required>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small fw-semibold mb-1">Qty</label>
@@ -577,12 +577,11 @@ function addLineItem(description, quantity, unitPrice) {
             </div>
         </div>`;
 
-    // Set values programmatically (XSS-safe)
-    div.querySelector('[name$="[description]"]').value = description || '';
-    div.querySelector('.item-qty').value  = parseFloat(quantity)  || 1;
-    div.querySelector('.item-unit').value = parseFloat(unitPrice) || 0;
-
+    // Set values programmatically (XSS-safe) — use class selectors, not name selectors
     document.getElementById('blocksContainer').appendChild(div);
+    div.querySelector('.item-desc').value  = description || '';
+    div.querySelector('.item-qty').value   = parseFloat(quantity)  || 1;
+    div.querySelector('.item-unit').value  = parseFloat(unitPrice) || 0;
     bindItemEvents(div);
     calcItem(div);
     updateSortOrders();
