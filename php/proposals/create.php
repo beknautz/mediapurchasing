@@ -423,19 +423,22 @@ const SNOTE_OPTS = {
 const TEMPLATE_MAP = <?= json_encode(array_values($templates)) ?>.reduce((m, t) => { m[t.id] = t; return m; }, {});
 
 // ── Existing blocks from server (JS renders these, same path as template load) ─
-const EXISTING_BLOCKS = <?= $blockJson ?>;
+const EXISTING_BLOCKS = <?= $blockJson ?: '[]' ?>;
 
 // ── Block counter ─────────────────────────────────────────────────────────────
 let blockCounter = 0;
 
 // ── SortableJS ────────────────────────────────────────────────────────────────
-const sortable = Sortable.create(document.getElementById('blocksContainer'), {
-    handle:     '.block-handle',
-    animation:  150,
-    ghostClass: 'border-primary',
-    onStart: syncEditorsToTextareas,
-    onEnd:   updateSortOrders,
-});
+const _blocksEl = document.getElementById('blocksContainer');
+const sortable = (typeof Sortable !== 'undefined' && _blocksEl)
+    ? Sortable.create(_blocksEl, {
+        handle:     '.block-handle',
+        animation:  150,
+        ghostClass: 'border-primary',
+        onStart: syncEditorsToTextareas,
+        onEnd:   updateSortOrders,
+      })
+    : null;
 
 // ── Render blocks on load ─────────────────────────────────────────────────────
 $(function () {
@@ -624,14 +627,15 @@ function addSignature(label) {
             </div>
         </div>`;
 
-    div.querySelector('.sig-label-input').value = label || '';
-    // Live preview of label
-    div.querySelector('.sig-label-input').addEventListener('input', function () {
-        const preview = div.querySelector('.sig-preview-label');
-        if (preview) preview.textContent = this.value || 'Signature';
-    });
-
     document.getElementById('blocksContainer').appendChild(div);
+    const sigInput = div.querySelector('.sig-label-input');
+    if (sigInput) {
+        sigInput.value = label || '';
+        sigInput.addEventListener('input', function () {
+            const preview = div.querySelector('.sig-preview-label');
+            if (preview) preview.textContent = this.value || 'Signature';
+        });
+    }
     updateSortOrders();
 }
 
@@ -721,6 +725,15 @@ function uploadClientLogo() {
         })
         .catch(function () { alert('Upload failed. Please try again.'); });
 }
+
+// ── Expose all functions globally (required for inline onclick handlers) ──────
+window.addLineItem      = addLineItem;
+window.addTextBlock     = addTextBlock;
+window.addSignature     = addSignature;
+window.removeBlock      = removeBlock;
+window.loadTemplate     = loadTemplate;
+window.uploadAgencyLogo = uploadAgencyLogo;
+window.uploadClientLogo = uploadClientLogo;
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
