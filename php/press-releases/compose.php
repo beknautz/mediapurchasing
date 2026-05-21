@@ -14,6 +14,9 @@ $clients      = $crmService->getClients();
 $UPLOAD_DIR   = __DIR__ . '/../uploads/press-releases/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Remove PHP execution time limit for this request — we may send many emails
+    set_time_limit(0);
+    ini_set('max_execution_time', '0');
     $subject         = trim($_POST['subject']    ?? '');
     $bodyHtml        = trim($_POST['body_html']  ?? '');   // Summernote posts HTML
     $vendorIds       = array_map('intval', (array) ($_POST['vendor_ids'] ?? []));
