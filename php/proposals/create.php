@@ -161,6 +161,69 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<!-- ── Branding card — OUTSIDE the form to avoid nested-form issues ─────────── -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold">
+            <i class="bi bi-image me-2 text-primary"></i>Branding
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+
+            <!-- Agency Logo -->
+            <div class="col-md-6">
+                <div class="fw-semibold small mb-2">Agency Logo</div>
+                <div id="agency-logo-preview" class="mb-2">
+                    <?php if (!empty($branding['logo_url'])): ?>
+                    <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
+                         style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
+                    <?php endif; ?>
+                </div>
+                <form hx-post="/proposals/actions/upload-logo.php"
+                      hx-target="#agency-logo-preview"
+                      hx-swap="innerHTML"
+                      hx-encoding="multipart/form-data"
+                      class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="file" name="logo_file" accept="image/*"
+                           class="form-control form-control-sm" style="max-width:220px;">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-upload me-1"></i>Upload
+                    </button>
+                </form>
+            </div>
+
+            <!-- Client Logo -->
+            <div class="col-md-6">
+                <div class="fw-semibold small mb-2">Client Logo</div>
+                <div id="client-logo-preview" class="mb-2">
+                    <?php if (!empty($proposal['client_logo_url'])): ?>
+                    <img src="<?= h($proposal['client_logo_url']) ?>" alt="Client Logo"
+                         style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
+                    <?php endif; ?>
+                </div>
+                <form hx-post="/proposals/actions/upload-client-logo.php"
+                      hx-target="#client-logo-preview"
+                      hx-swap="innerHTML"
+                      hx-encoding="multipart/form-data"
+                      class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="hidden" name="client_id" id="clientLogoClientId"
+                           value="<?= (int)($proposal['client_id'] ?? 0) ?>">
+                    <input type="file" name="logo_file" accept="image/*"
+                           class="form-control form-control-sm" style="max-width:220px;">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-upload me-1"></i>Upload
+                    </button>
+                </form>
+                <div class="form-text text-muted mt-1">
+                    <i class="bi bi-info-circle me-1"></i>Select a client above first.
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
 <form method="POST" action="/proposals/create.php" id="proposalForm">
 <input type="hidden" name="id" value="<?= (int)($proposal['id'] ?? 0) ?>">
 <?php if ($isEdit): ?>
@@ -206,70 +269,6 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endforeach; ?>
                         </select>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Branding — logos -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0 fw-semibold">
-                    <i class="bi bi-image me-2 text-primary"></i>Branding
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-4">
-
-                    <!-- Agency Logo -->
-                    <div class="col-md-6">
-                        <div class="fw-semibold small mb-2">Agency Logo</div>
-                        <div id="agency-logo-preview">
-                            <?php if (!empty($branding['logo_url'])): ?>
-                            <img src="<?= h($branding['logo_url']) ?>" alt="Agency Logo"
-                                 style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;margin-bottom:8px;">
-                            <?php endif; ?>
-                        </div>
-                        <form hx-post="/proposals/actions/upload-logo.php"
-                              hx-target="#agency-logo-preview"
-                              hx-swap="innerHTML"
-                              hx-encoding="multipart/form-data"
-                              class="d-flex gap-2 align-items-center flex-wrap">
-                            <input type="file" name="logo_file" accept="image/*"
-                                   class="form-control form-control-sm" style="max-width:220px;">
-                            <button type="submit" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-upload me-1"></i>Upload
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Client Logo -->
-                    <div class="col-md-6">
-                        <div class="fw-semibold small mb-2">Client Logo</div>
-                        <div id="client-logo-preview">
-                            <?php if (!empty($proposal['client_logo_url'])): ?>
-                            <img src="<?= h($proposal['client_logo_url']) ?>" alt="Client Logo"
-                                 style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;margin-bottom:8px;">
-                            <?php endif; ?>
-                        </div>
-                        <form hx-post="/proposals/actions/upload-client-logo.php"
-                              hx-target="#client-logo-preview"
-                              hx-swap="innerHTML"
-                              hx-encoding="multipart/form-data"
-                              class="d-flex gap-2 align-items-center flex-wrap">
-                            <input type="hidden" name="client_id"
-                                   class="client-logo-client-id"
-                                   value="<?= (int)($proposal['client_id'] ?? 0) ?>">
-                            <input type="file" name="logo_file" accept="image/*"
-                                   class="form-control form-control-sm" style="max-width:220px;">
-                            <button type="submit" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-upload me-1"></i>Upload
-                            </button>
-                        </form>
-                        <div class="form-text text-muted mt-1">
-                            <i class="bi bi-info-circle me-1"></i>Select a client above before uploading their logo.
-                        </div>
-                    </div>
-
                 </div>
             </div>
         </div>
@@ -688,11 +687,10 @@ document.getElementById('proposalForm').addEventListener('submit', function () {
     updateSortOrders();
 });
 
-// ── Update client_id in logo upload form when client dropdown changes ─────────
+// ── Sync client_id into the client logo upload form when dropdown changes ─────
 document.getElementById('client_id').addEventListener('change', function () {
-    document.querySelectorAll('.client-logo-client-id').forEach(function (el) {
-        el.value = this.value;
-    }, this);
+    const f = document.getElementById('clientLogoClientId');
+    if (f) f.value = this.value;
 });
 </script>
 
