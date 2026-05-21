@@ -139,8 +139,7 @@ foreach ($blocks as $b) {
 // Serialize existing blocks for JS rendering
 $blockJson = json_encode(array_values($blocks));
 
-$extraHead = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.css">'
-           . '<script src="https://unpkg.com/htmx.org@1.9.10"></script>';
+$extraHead = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.9.0/dist/summernote-bs5.min.css">';
 $pageTitle  = ($isEdit ? 'Edit Proposal' : 'New Proposal') . ' — MediaBuy';
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -193,17 +192,14 @@ require_once __DIR__ . '/../includes/header.php';
                          style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
                     <?php endif; ?>
                 </div>
-                <form hx-post="/proposals/actions/upload-logo.php"
-                      hx-target="#agency-logo-preview"
-                      hx-swap="innerHTML"
-                      hx-encoding="multipart/form-data"
-                      class="d-flex gap-2 align-items-center flex-wrap">
-                    <input type="file" name="logo_file" accept="image/*"
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="file" id="agencyLogoFile" accept="image/*"
                            class="form-control form-control-sm" style="max-width:220px;">
-                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            onclick="uploadAgencyLogo()">
                         <i class="bi bi-upload me-1"></i>Upload
                     </button>
-                </form>
+                </div>
             </div>
 
             <!-- Client Logo -->
@@ -215,19 +211,14 @@ require_once __DIR__ . '/../includes/header.php';
                          style="max-height:60px;max-width:180px;object-fit:contain;border:1px solid #dee2e6;border-radius:4px;padding:4px;display:block;">
                     <?php endif; ?>
                 </div>
-                <form hx-post="/proposals/actions/upload-client-logo.php"
-                      hx-target="#client-logo-preview"
-                      hx-swap="innerHTML"
-                      hx-encoding="multipart/form-data"
-                      class="d-flex gap-2 align-items-center flex-wrap">
-                    <input type="hidden" name="client_id" id="clientLogoClientId"
-                           value="<?= (int)($proposal['client_id'] ?? 0) ?>">
-                    <input type="file" name="logo_file" accept="image/*"
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="file" id="clientLogoFile" accept="image/*"
                            class="form-control form-control-sm" style="max-width:220px;">
-                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            onclick="uploadClientLogo()">
                         <i class="bi bi-upload me-1"></i>Upload
                     </button>
-                </form>
+                </div>
                 <div class="form-text text-muted mt-1">
                     <i class="bi bi-info-circle me-1"></i>Select a client above first.
                 </div>
@@ -700,11 +691,37 @@ document.getElementById('proposalForm').addEventListener('submit', function () {
     updateSortOrders();
 });
 
-// ── Sync client_id into the client logo upload form when dropdown changes ─────
-document.getElementById('client_id').addEventListener('change', function () {
-    const f = document.getElementById('clientLogoClientId');
-    if (f) f.value = this.value;
-});
+// ── Logo upload helpers (plain fetch — no HTMX) ───────────────────────────────
+function uploadAgencyLogo() {
+    const input = document.getElementById('agencyLogoFile');
+    if (!input || !input.files.length) { alert('Please select a file first.'); return; }
+    const fd = new FormData();
+    fd.append('logo_file', input.files[0]);
+    fetch('/proposals/actions/upload-logo.php', { method: 'POST', body: fd })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+            document.getElementById('agency-logo-preview').innerHTML = html;
+            input.value = '';
+        })
+        .catch(function () { alert('Upload failed. Please try again.'); });
+}
+
+function uploadClientLogo() {
+    const clientId = document.getElementById('client_id').value;
+    if (!clientId) { alert('Please select a client first.'); return; }
+    const input = document.getElementById('clientLogoFile');
+    if (!input || !input.files.length) { alert('Please select a file first.'); return; }
+    const fd = new FormData();
+    fd.append('logo_file', input.files[0]);
+    fd.append('client_id', clientId);
+    fetch('/proposals/actions/upload-client-logo.php', { method: 'POST', body: fd })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+            document.getElementById('client-logo-preview').innerHTML = html;
+            input.value = '';
+        })
+        .catch(function () { alert('Upload failed. Please try again.'); });
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
